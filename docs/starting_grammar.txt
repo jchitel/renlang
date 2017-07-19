@@ -1,0 +1,222 @@
+# A program is an optional sequence of import declarations,
+# followed by either function declarations, type declarations, or exports
+Program ::= ImportDeclaration* (FunctionDeclaration | TypeDeclaration | ExportDeclaration)*
+
+# You can either import a default export of another module into an identifier,
+# or import a set of named exports into identifiers of the same names, or different names
+ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON IDENT
+                      IMPORT FROM STRING_LITERAL LBRACE ImportComponent (COMMA ImportComponent)* RBRACE
+
+# You can import a named export as its original name or a new name
+ImportComponent ::= IDENT
+                    IDENT AS IDENT
+
+# Exports:
+# - Default export (nameless, associated with module name)
+# - Named expression export (export a value)
+# - Named type export (export a type by name)
+ExportDeclaration ::= EXPORT DEFAULT Expression           -- default export
+                    | EXPORT IDENT EQUALS Expression -- named inline export
+                    | EXPORT IDENT EQUALS Type -- named inline export
+                    | EXPORT IDENT                   -- named export of already declared name
+
+# Functions have a return type, name, parameter list, and body
+FunctionDeclaration ::= FUNC Type IDENT ParameterList FAT_ARROW (Expression | Block)
+
+# Param list can be 0 or more params separated by commas. A param has a type and identifier
+ParameterList ::= LPAREN (Param (COMMA Param)*)? RPAREN
+Param ::= Type IDENT
+
+# Type declarations have an identifier and a "type expression",
+# so they are effectively just type aliases
+TypeDeclaration ::= TYPE INDENT EQUALS Type
+
+# Types:
+# - integers
+# - floating point numbers
+# - strings
+# - characters
+# - boolean values
+# - void (alias for empty tuple)
+# - array types (homogeneous, unbounded structure)
+# - struct types (key-value pairs)
+# - tuples (heterogeneous, bounded structure)
+# - functions
+# - can use parentheses to enforce precedence or improve clarity
+Type ::= U8 | I8 | BYTE |       # 8-bit integers:  unsigned, signed, unsigned
+         U16 | I16 | SHORT |    # 16-bit integers: unsigned, signed, unsigned
+         U32 | I32 | INTEGER |  # 32-bit integers: unsigned, signed, signed
+         U64 | I64 | LONG |     # 64-bit integers: unsigned, signed, signed
+         INT |                  # Unbounded integers
+         F32 | FLOAT |          # 32-bit floating point numbers
+         F64 | DOUBLE |         # 64-bit floating point numbers
+         STRING |               # Array of characters
+         CHAR |                 # UTF-8 Character
+         BOOL |                 # Boolean value
+         VOID |                 # No type (alias of ())
+         (Type LBRACK RBRACK) | # Array types
+         StructType |           # Structured type
+         TupleType |            # Tuple type
+         FunctionType |         # Function type
+         (LPAREN Type RPAREN)   # Explicitly bounded type
+
+StructType ::= LBRACE (Type IDENT)* RBRACE
+TupleType ::= LPAREN (Type (COMMA Type)*)? RPAREN
+FunctionType ::= LPAREN (Type (COMMA Type)*)? RPAREN FAT_ARROW Type
+
+# Block, a non-idempotent instruction or sequence of instructions
+Block ::= LBRACE Statement* RBRACE |
+          Statement
+
+# Statement, a single non-idempotent instruction
+Statement ::= Expression |
+              ForStatement |
+              ForEachStatement |
+              WhileStatement |
+              DoWhileStatement |
+              TryCatchStatement |
+              ReturnStatement |
+              ThrowStatement |
+              BreakStatement
+
+# Loops:
+# - for (manual loop control)
+# - foreach (iterating iterables)
+# - while (check-first simple loop)
+# - do-while (check-after simple loop)
+ForStatement ::= FOR LPAREN (VarDeclaration (COMMA VarDeclaration)*)? SEMI (Expression (COMMA Expression)*)? SEMI (Expression (COMMA Expression)*)? RPAREN Block
+ForEachStatement ::= FOREACH LPAREN IDENT IN Expression RPAREN Block
+WhileStatement ::= WHILE LPAREN Expression RPAREN Block
+DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
+# Other statements:
+# - try-catch (catch exceptions)
+# - return (return value from function)
+# - throw (throw exception)
+# - break (break out of loop, with optional depth specifier
+TryCatchStatement ::= TRY Block (CATCH LPAREN Paren RPAREN Block)+ (FINALLY Block)?
+ReturnStatement ::= RETURN Expression?
+ThrowStatement ::= THROW Expression
+BreakStatement ::= BREAK INTEGER_LITERAL?
+
+# Expressions:
+# - integer literals
+# - floating point literals
+# - string literals
+# - character literals
+# - array literals
+# - struct literals
+# - tuple literals
+# - identifiers
+# - function applications
+# - unary operations (prefix, postfix)
+# - binary operations (infix)
+# - var declarations (declare identifier with value)
+# - field access (access field of struct)
+Expression ::= INTEGER_LITERAL |
+               FLOATING_POINT_LITERAL |
+               STRING_LITERAL |
+               CHARACTER_LITERAL |
+               ArrayLiteral |
+               StructLiteral |
+               TupleLiteral |
+               Identifier |
+               FunctionApplication |
+               UnaryOperation |
+               BinaryOperation |
+               VarDeclaration |
+               FieldAccess |
+               ArrayAccess |
+               LambdaExpression |
+               IfElseExpression |
+               LPAREN Expression RPAREN
+
+Identifier ::= IDENT | LPAREN OPERATOR RPAREN
+
+# literals for arrays, structs, and tuples
+ArrayLiteral ::= LBRACK (Expression (COMMA Expression)*)? RBRACK
+StructLiteral ::= LBRACE (IDENT COLON Expression)* RBRACE
+TupleLiteral ::= LPAREN (Expression (COMMA Expression)*)? RPAREN
+
+# calling a function
+FunctionApplication ::= Expression LPAREN (Expression (COMMA Expression)*)? RPAREN
+
+UnaryOperation ::= OPERATOR Expression
+                 | Expression BACKTICK Expression
+                 | Expression OPERATOR
+                 | Expression BACKTICK Expression
+BinaryOperation ::= Expression OPERATOR Expression |
+                    Expression BACKTICK Expression BACKTICK Expression
+
+VarDeclaration ::= IDENT EQUALS Expression
+
+FieldAccess ::= Expression DOT IDENT
+ArrayAccess ::= Expression LBRACK Expression RBRACK
+
+IfElseExpression :: IF LPAREN Expression RPAREN Expression ELSE Expression
+
+# Lexical Grammar
+
+IMPORT ::= /import/
+FROM ::= /from/
+AS ::= /as/
+EXPORT ::= /export/
+DEFAULT ::= /default/
+FUNC ::= /func/
+TYPE ::= /type/
+BYTE ::= /byte/
+SHORT ::= /short/
+INTEGER ::= /integer/
+LONG ::= /long/
+INT ::= /int/
+U8 ::= /u8/
+I8 ::= /i8/
+U16 ::= /u16/
+I16 ::= /i16/
+U32 ::= /u32/
+I32 ::= /i32/
+U64 ::= /u64/
+I64 ::= /i64/
+FLOAT ::= /float/
+DOUBLE ::= /double/
+F32 ::= /f32/
+F64 ::= /f64/
+STRING ::= /string/
+CHAR ::= /char/
+BOOL ::= /bool/
+VOID ::= /void/
+FOR ::= /for/
+FOREACH ::= /foreach/
+WHILE ::= /while/
+DO ::= /do/
+TRY ::= /try/
+CATCH ::= /catch/
+FINALLY ::= /finally/
+RETURN ::= /return/
+THROW ::= /throw/
+BREAK ::= /break/
+IF ::= /if/
+ELSE ::= /else/
+
+COLON ::= /:/
+LBRACE ::= /\{/
+RBRACE ::= /\}/
+LPAREN ::= /\(/
+RPAREN ::= /\)/
+LBRACK ::= /\[/
+RBRACK ::= /\]/
+COMMA ::= /,/
+EQUALS ::= /=/
+SEMI ::= /;/
+FAT_ARROW ::= /=>/
+BACKTICK ::= /`/
+DOT ::= /\./
+
+STRING_LITERAL ::= /"([^"]|\\")*"/
+IDENT ::= /[A-Za-z_][A-Za-z0-9_]*/
+OPERATOR ::= /[~!$%^&*+-=|<>?/]+/
+INTEGER_LITERAL ::= /0/ |              # Zero
+                    /-?[1-9][0-9]*/ |  # Decimal
+                    /0b[01]+/ |        # Binary
+                    /0x[0-9a-fA-F]+/ | # Hexadecimal
+FLOATING_POINT_LITERAL ::= /-?[0-9]+(\.[0-9]+)?(e[0-9]+)?/ # Optional negative, ones+ place, tenths- place, optional sci notation
+CHARACTER_LITERAL ::= /'([^']|\\')/
