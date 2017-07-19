@@ -15,151 +15,287 @@ const code = str => str.codePointAt(0);
 export default class Tokenizer {
     static EOF = Symbol('EOF');
 
-    static LOW_A = code('a');
-    static LOW_F = code('f');
-    static LOW_Z = code('z');
-    static ZERO = code('0');
-    static NINE = code('9');
-
+    // set of characters allowed for semantic operators (note that equals by itself or followed by a greater-than are both reserved)
     static OPER_CHARS = ['~', '!', '$', '%', '^', '&', '*', '+', '-', '=', '|', '<', '>', '?', '/'];
-    static WHITESPACE_CHARS = [' ', '\t', '\n', '\r', ';']; // semicolon counts as explicit new line
 
+    // reserved language keywords, any identifier that matches one of these is registered as a keyword instead
     static KEYWORD_TOKENS = [
-        'as',
-        'bool',
-        'break',
-        'byte',
-        'catch',
-        'char',
-        'default',
-        'do',
-        'double',
-        'else',
-        'export',
-        'f32',
-        'f64',
-        'finally',
-        'float',
-        'for',
-        'foreach',
-        'from',
-        'func',
-        'i16',
-        'i32',
-        'i64',
-        'i8',
-        'if',
-        'import',
-        'int',
-        'integer',
-        'long',
-        'return',
-        'short',
-        'string',
-        'throw',
-        'try',
-        'type',
-        'u16',
-        'u32',
-        'u64',
-        'u8',
-        'void',
-        'while',
+        'as',      // used for renaming imports
+        'bool',    // boolean type name
+        'break',   // statement to break from a loop
+        'byte',    // byte type name (alias of u8)
+        'catch',   // denotes a catch block in a try-catch block
+        'char',    // character type name
+        'default', // used to declare a default export, also for a default case in a pattern match block
+        'do',      // denotes the start of a do-while loop
+        'double',  // double type name (alias for f64)
+        'else',    // denotes the start of an else clause
+        'export',  // declares a module export
+        'f32',     // 32-bit floating point type (equivalent to 'float')
+        'f64',     // 64-bit floating point type (equivalent to 'double')
+        'finally', // denotes a finally block in a try-catch-finally block
+        'float',   // float type name (alias for f32)
+        'for',     // denotes the start of a classic for loop
+        'foreach', // denotes the start of an iterator loop
+        'from',    // used in import and export declarations to specify the name of another module
+        'func',    // denotes a named function declaration
+        'i16',     // 16 bit signed integer type
+        'i32',     // 32 bit signed integer type (equivalent to 'int')
+        'i64',     // 64 bit signed integer type (equivalent to 'long')
+        'i8',      // 8 bit signed integer type
+        'if',      // denotes the start of an if block
+        'import',  // declares a module import
+        'int',     // int type name (alias for i32)
+        'integer', // integer type name (true integer, infinite capacity)
+        'long',    // long type name (alias for i64)
+        'return',  // denotes a return statement to return a value from a function
+        'short',   // short type name (alias for u16)
+        'string',  // string type name
+        'throw',   // denotes a throw statement to throw an exception from a function
+        'try',     // denotes the start of a try-catch block
+        'type',    // denotes the start of a type declaration
+        'u16',     // 16 bit unsigned integer type (equivalent to 'short')
+        'u32',     // 32 bit unsigned integer type
+        'u64',     // 64 bit unsigned integer type
+        'u8',      // 8 bit unsigned integer type (equivalent to 'byte')
+        'void',    // return type of functions, indicates no value is returned (alias for '()')
+        'while',   // denotes the start of a while loop
     ];
 
-    static SYMBOL_TOKENS = {
-        COLON: ':',
-        LBRACE: '{',
-        RBRACE: '}',
-        LPAREN: '(',
-        RPAREN: ')',
-        LBRACK: '[',
-        RBRACK: ']',
-        COMMA: ',',
-        EQUALS: '=',
-        SEMI: ';',
-        FAT_ARROW: '=>',
-        BACKTICK: '`',
-        DOT: '.',
+    // reserved syntactic symbols, no operator can contain these (except =)
+    static SYMBOL_MAP = {
+        ':': 'COLON',      // used in a default import (as in 'import from "module": identifier'), also to separate keys from values in an object literal
+        '{': 'LBRACE',     // used with RBRACE to delimit a block, used in several places, most notably function bodies
+        '}': 'RBRACE',
+        '(': 'LPAREN',     // used with RPAREN to delimit an explicitly bounded expression or type expression, also used as delimiter in several other places
+        ')': 'RPAREN',
+        '[': 'LBRACK',     // used with RBRACK to delimit an array literal, also in array index expressions
+        ']': 'RBRACK',
+        ',': 'COMMA',      // used as a delimiter in several places: function params, arrays, object literals, imports, exports, etc.
+        '=': 'EQUALS',     // used to bind a value to an identifier, also used in a few other places
+        '=>': 'FAT_ARROW', // used to separate a function's parameter list from its body
+        '`': 'BACKTICK',   // used to allow certain functions to be used akin to an operator, either prefix, postfix, or infix
+        '.': 'DOT',        // used in field access expressions
     };
 
     constructor(string) {
         this.source = string;
-        this.iterator = new LookaheadIterator(string, 7);
+        this.iterator = new LookaheadIterator(string, 1);
         this.offset = 0;
     }
 
     /**
-     * These are the rules for the first character:
-     * - lowercase letter: keyword
-     *   - following characters should exactly match a keyword, followed by any non-identifier character to bound the token.
-     *   - any failure to match the above specification should fall back to identifier
-     * - letter or underscore: identifier
-     *   - continue to match valid identifier characters until a non-identifier character to bound the token.
-     * - dash: numeric literal
-     *   - if followed by number, follow numeric rules below
-     *   - otherwise, take as operator
-     * - 0: zero, non-decimal integer, or floating point
-     *   - if the following is not [XxEeBb.0-9], then it is 0.
-     *   - if it is [Xx], it is a hexadecimal literal. consume [a-fA-F0-9]+ as the remainder of the token.
-     *   - if it is [Bb], it is a binary literal. consume [01]+ as the remainder of the token.
-     *   - if it is [0-9], it is a decimal (integer or floating) literal. consume [0-9]+
-     *     - if next is [.], it is a floating literal. consume [0-9]+
-     *       - if next is [Ee], consume [0-9]+ as the remainder of the token.
-     *       - anything else, and the token is done.
-     *   - if it is [.], it is a floating literal. consume [0-9]+
-     *     - if next is [Ee], consume [0-9]+ as the remainder of the token.
-     *     - anything else, and the token is done.
-     *   - if next is [Ee], floating point. consume [0-9]+ as the remainder of the token.
-     *   - anything else, token is just 0.
-     * - [1-9]: numeric literal
-     *   - consume [0-9]*
-     *     - if next is [.], it is floating point. consume [0-9]+
-     *       - if next is [Ee], consume [0-9]+ as the remainder of the token.
-     *       - anything else, token is done.
-     *     - if next is [Ee], it is floating point. consume [0-9]+ as the remainder of the token.
-     *     - anything else, decimal integer literal
-     * - ": string literal
-     *   - consume anything but a " and a \.
-     *   - if \, then consume escape sequence.
-     *     - if [nrtvfb], insert these special escape characters.
-     *     - if [Xx], insert ascii code
-     *       - get [0-9A-Fa-f]{2}, parse code to character
-     *     - if [Uu], insert unicode
-     *       - if '{', check next 5 or 6 characters, should be [0-9A-Fa-f], followed by '}', parse code to character
-     *       - otherwise, should be [0-9A-Fa-f]{4}, parse code to character
-     *     - anything else, just take the character as it is
-     *   - stop immediately at next ".
-     * - ': character literal
-     *   - consume JUST 1 of anything but a ' and a \.
-     *   - if \, follow same rules as string above.
-     *   - next character must be a '.
-     * - [:{}()[],;`.=]: symbol
-     *   - all are single characters except =.
-     *   - if =
-     *     - if >, take as fat_arrow
-     *     - any other operator character, take as operator.
-     * - [~!$%^&*+-|<>?/']: operator
-     *   - consume any combination of operator characters, including =. (operators starting with = are handled above)
-     * - (\r\n|\n|;): new line
-     *   - any of these register as a new line character, which is a special class of whitespace (some expansions require being ended by a new line)
-     *   - \r not followed by \n is regular whitespace
-     * - [ \r\t]: whitespace
-     *   - any combination of these characters registers as whitespace
-     * - anything else is an invalid character (for now)
-     *
-     * So these are the lookahead requirements:
-     * - keyword: 1
-     * - identifier: 1
-     * - integer literal: 3 (extra for -, 0x, 0b)
-     * - floating point literal: 2 (extra for ., e)
-     * - string literal: 10 (extra for \, \x, \u, \u{......})
-     * - character literal: 10 (see above)
-     * - symbol: 3 (extra for =>)
-     * - operator: 1
-     * - new line: 2 (extra for \r)
-     * - whitespace: 1
+     * Fully iterate the entire source string, extracting tokens according to the language's grammar rules and yielding each one.
      */
+    *[Symbol.iterator]() {
+        // these allow us to output useful line/column information (column is this.iterator.offset - currentLineOffset)
+        let lineNumber = 1;
+        let currentLineOffset = 0;
+
+        // iterate the lookahead iterator
+        for (const [c, c1] of this.iterator) {
+            // "kind" is either "uppercase", "lowercase", "number", or the character
+            const kind = this.kind(c);
+            const kind1 = this.kind(c1);
+
+            // This logic follows a specific order for attempting to extract tokens:
+            // 1. Identifiers (also checks keywords that match an identifier string)
+            // 2. Negative numbers (via minus, fall back to operator if there is no number)
+            // 3. Numbers (includes 0, hex, binary, float, and decimal integers)
+            // 4. String literals
+            // 5. Char literals
+            // 6. Special syntactic symbols (reserved symbols that have syntactic meaning, ignoring =)
+            // 7. Symbols starting with = (just '=' and '=>', fall back to operator if neither matches)
+            // 8. Operators (tokens made from a specific list of allowed operator characters)
+            // 9. New lines (\n and ;, semi is for separating a line in two without an actual new line)
+            // 10. CRLF new lines (\r is treated as normal whitespace if not followed by a \n)
+            // 11. Whitespace (space and tab)
+            // 12. Everything else (throws an error for now)
+
+            // check to see if the character is a valid identifier start
+            if (kind === 'uppercase' || kind === 'lowercase' || c === '_') {
+                // consume an identifier
+                yield this.consumeIdentifier(c, c1);
+            } else if (c === '-') {
+                // if it is followed by a number, consume it as a number
+                if (kind1 === 'number') yield this.consumeNumber(c, c1);
+                // otherwise, consume it as an operator
+                else yield this.consumeOperator(c, c1);
+            } else if (kind === 'number') {
+                // consume the number
+                yield this.consumeNumber(c, c1);
+            } else if (c === '"') {
+                // consume a string literal
+                yield this.consumeStringLiteral(c);
+            } else if (c === "'") {
+                // consume a character literal
+                yield this.consumeCharacterLiteral(c);
+            } else if (Tokenizer.SYMBOL_MAP[c] && c !== '=') {
+                // consume a symbol
+                yield new Token(Tokenizer.SYMBOL_MAP[c], this.iterator.offset - 1, c);
+            } else if (c === '=') {
+                // consume an equals, a fat arrow, or an operator starting with equals
+                if (c1 === '>') {
+                    // fat arrow (NOTE: this will ignore any other operator characters that come immediately after, fat arrow takes precedence)
+                    this.iterator.next();
+                    yield new Token(Tokenizer.SYMBOL_MAP['=>'], this.iterator.offset - 2, '=>');
+                } else if (Tokenizer.OPER_CHARS.includes(c1)) {
+                    // other non-greater-than operator character, consume as operator
+                    yield this.consumeOperator(c, c1);
+                } else {
+                    // otherwise it's a lone equals symbol
+                    yield new Token(Tokenizer.SYMBOL_MAP[c], this.iterator.offset - 1, c);
+                }
+            } else if (Tokenizer.OPER_CHARS.includes(c)) {
+                // consume as operator
+                yield this.consumeOperator(c, c1);
+            } else if (c === '\n' || c === ';') {
+                // new line character
+                yield new Token('NEWLINE', this.iterator.offset - 1, c);
+                if (c === '\n') {
+                    // increment line number
+                    lineNumber++;
+                    currentLineOffset = this.iterator.offset;
+                }
+            } else if (c === '\r') {
+                if (c1 === '\n') {
+                    // treat the whole thing as a new line
+                    this.iterator.next();
+                    yield new Token('NEWLINE', this.iterator.offset - 2, '\r\n');
+                    // increment line number
+                    lineNumber++;
+                    currentLineOffset = this.iterator.offset;
+                } else {
+                    // otherwise treat it as normal whitespace
+                    yield this.consumeWhitespace(c, c1);
+                }
+            } else if (c === ' ' || c === '\t') {
+                // consume whitespace
+                yield this.consumeWhitespace(c, c1);
+            } else {
+                // otherwise it is not a valid character (for now)
+                throw new Error(`Invalid character '${c}' at line ${lineNumber}, column ${this.iterator.offset - 1 - currentLineOffset}.`);
+            }
+        }
+    }
+
+    consumeIdentifier(image, next) {
+        const kind = this.kind(next);
+        // if the next character is a valid identifier character, loop to get all the remaining ones
+        if (kind === 'uppercase' || kind === 'lowercase' || kind === 'number' || next === '_') while (true) {
+            const { value: [c, c1], done } = this.iterator.next();
+            // if the iterator is done, break out of the loop, this will be the last iteration
+            if (done) break;
+            image += c;
+            const kind1 = this.kind(c1);
+            // if the next character will not be a valid identifier character, then break
+            if (kind1 !== 'uppercase' && kind1 !== 'lowercase' && kind1 !== 'number' && kind1 !== '_') break;
+        }
+        // if the identifier we captured matches a keyword, return the keyword
+        if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.iterator.offset - image.length, image);
+        // otherwise, return an identifier
+        else return new Token('IDENT', this.iterator.offset - image.length, image);
+    }
+
+    consumeNumber(image, next) {
+        let negative = false;
+        if (image === '-') {
+            // number starts with minus, save that information and shift forward
+            negative = true;
+            [image, next] = this.iterator.next().value;
+            // it may be that next was the last character in the source. handle that here.
+            if (!next) return new Token('INTEGER_LITERAL', this.iterator.offset - 2, `-${image}`, -parseInt(image, 10));
+        }
+        if (image === '0') {
+            // handle all the nasty crap that comes with a number that starts with 0.
+            if (next.toLowerCase() === 'x') {
+                image += next;
+                this.iterator.next();
+                image += this.consumeHexLiteral();
+                const value = parseInt(image.substring(2), 16);
+                return new Token('INTEGER_LITERAL', this.iterator.offset - image.length, image, negative ? -value : value);
+            } else if (next.toLowerCase() === 'b') {
+                image += next;
+                this.iterator.next();
+                image += this.consumeBinaryLiteral();
+                const value = parseInt(image.substring(2), 2);
+                return new Token('INTEGER_LITERAL', this.iterator.offset - image.length, image, negative ? -value : value);
+            } else if (next === '.' || next.toLowerCase() === 'e') {
+                image = this.consumeFloatLiteral(image, next);
+                const value = parseFloat(image);
+                return new Token('FLOAT_LITERAL', this.iterator.offset - image.length, image, negative ? -value : value);
+            } else {
+                return this.consumeInteger(image, next);
+            }
+        } else {
+            return this.consumeInteger(image, next);
+        }
+    }
+
+    /**
+     * Consume all hexadecimal digits starting from the next offset of the iterator
+     */
+    consumeHexLiteral() {
+        // TODO: handle the case where we have a 0x with no hex digits after
+    }
+
+    /**
+     * Consume all binary digits starting from the next offset of the iterator
+     */
+    consumeBinaryLiteral() {
+        // TODO: handle the case where we have a 0b with no binary digits after
+    }
+
+    /**
+     * Given a starting image and an initial next character, consume an entire floating point literal
+     */
+    consumeFloatLiteral(image, next) {
+        // TODO
+    }
+
+    /**
+     * Given a starting image and an initial next character, consume an entire integer literal (may encounter a floating point literal)
+     */
+    consumeIntegerLiteral(image, next) {
+        // TODO
+    }
+
+    /**
+     * Given a starting image (") and an initial next character, consume an entire string literal
+     */
+    consumeStringLiteral(image, next) {
+        // TODO
+    }
+
+    /**
+     * Given a starting image (') and an initial next character, consume an entire character literal
+     */
+    consumeCharacterLiteral(image, next) {
+        // TODO
+    }
+
+    consumeOperator(image, next) {
+        if (Tokenizer.OPER_CHARS.includes(next)) while (true) {
+            const { value: [c, c1], done } = this.iterator.next();
+            if (done) break;
+            image += c;
+            if (!Tokenizer.OPER_CHARS.includes(next)) break;
+        }
+        return new Token('OPER', this.iterator.offset - image.length, image);
+    }
+
+    consumeWhitespace(image, next) {
+        if (next === ' ' || next === '\t') while (true) {
+            const { value: [c, c1], done } = this.iterator.next();
+            if (done) break;
+            image += c;
+            if (next !== ' ' && next !== '\t') break;
+        }
+        return new Token('WHITESPACE', this.iterator.offset - image.length, image);
+    }
+
+    // EVERYTHING BELOW THIS IS OLD LOGIC
+
     *[Symbol.iterator]() {
         let image = '';       // progressive image of current token being analyzed
         let state = 'start';  // current state of tokenizer state machine
@@ -199,7 +335,7 @@ export default class Tokenizer {
                     if (this.matchIdent(image, c, c1)) yield tok('IDENT', c);
                     else cont(c, 'ident'); break;
                 case 'start_-':
-                    if (this.kind(c1) === 'number') cont(c, 'integer');
+                    if (this.kind(c1) === 'number') (c1 === '0') ? cont(c, 'zero') : cont(c, 'integer');
                     else if (this.matchOper(image, c, c1)) yield tok('OPER', c);
                     else cont(c, 'oper'); break;
                 case 'oper_-':
