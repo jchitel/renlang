@@ -89,7 +89,8 @@ export default class Tokenizer {
 
     constructor(string) {
         this.source = string;
-        this.iterator = new LookaheadIterator(string, 9); // max lookahead so far: unicode escape codes in strings/characters: '\u{......}'
+        const iter = new LookaheadIterator(string, 9); // max lookahead so far: unicode escape codes in strings/characters: '\u{......}'
+        this.iterator = iter[Symbol.iterator]();
     }
 
     /**
@@ -195,6 +196,8 @@ export default class Tokenizer {
                 throw new Error(`Invalid character '${c}' at line ${lineNumber}, column ${this.iterator.offset - 1 - currentLineOffset}.`);
             }
         }
+        // yield a EOF token
+        yield new Token('EOF', this.iterator.offset, null);
     }
 
     /**
@@ -215,16 +218,20 @@ export default class Tokenizer {
     consumeIdentifier(image, next) {
         const kind = this.kind(next);
         // if the next character is a valid identifier character, loop to get all the remaining ones
-        if (kind === 'uppercase' || kind === 'lowercase' || kind === 'number' || next === '_') while (true) {
-            const { value: [c, c1], done } = this.iterator.next();
-            // if the iterator is done, break out of the loop, this will be the last iteration
-            if (done) break;
-            image += c;
-            const kind1 = this.kind(c1);
-            // if the next character will not be a valid identifier character, then break
-            if (kind1 !== 'uppercase' && kind1 !== 'lowercase' && kind1 !== 'number' && kind1 !== '_') break;
+        if (kind === 'uppercase' || kind === 'lowercase' || kind === 'number' || next === '_') {
+            while (true) {
+                const { value: [c, c1], done } = this.iterator.next();
+                // if the iterator is done, break out of the loop, this will be the last iteration
+                if (done) break;
+                image += c;
+                const kind1 = this.kind(c1);
+                // if the next character will not be a valid identifier character, then break
+                if (kind1 !== 'uppercase' && kind1 !== 'lowercase' && kind1 !== 'number' && kind1 !== '_') break;
+            }
         }
         // if the identifier we captured matches a keyword, return the keyword
+        console.log(this.iterator.offset);
+        console.log(image.length);
         if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.iterator.offset - image.length, image);
         // otherwise, return an identifier
         else return new Token('IDENT', this.iterator.offset - image.length, image);
@@ -235,10 +242,8 @@ export default class Tokenizer {
      * Figure out what kind and return a token.
      */
     consumeNumber(image, next, next1) {
-        let negative = false;
         if (image === '-') {
             // number starts with minus, save that information and shift forward
-            negative = true;
             image += next;
             [next, next1] = this.iterator.next().value.shift();
             // it may be that next was the last character in the source. handle that here.
@@ -383,7 +388,7 @@ export default class Tokenizer {
 
         let value = '';
         if (next !== '"') {
-            let c, c1;
+            let c, c1, c2, c3, c4, c5, c6, c7, c8, c9;
             do {
                 [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
                 image += c;
@@ -458,7 +463,7 @@ export default class Tokenizer {
 
         let value;
         // get the next character and lookahead buffer
-        let [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
+        const [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
         image += c;
         if (c === '\\') {
             // escape sequence
@@ -527,11 +532,13 @@ export default class Tokenizer {
      * Consume a sequence of valid operator characters
      */
     consumeOperator(image, next) {
-        if (Tokenizer.OPER_CHARS.includes(next)) while (true) {
-            const { value: [c, c1], done } = this.iterator.next();
-            if (done) break;
-            image += c;
-            if (!Tokenizer.OPER_CHARS.includes(next)) break;
+        if (Tokenizer.OPER_CHARS.includes(next)) {
+            while (true) {
+                const { value: [c, c1], done } = this.iterator.next();
+                if (done) break;
+                image += c;
+                if (!Tokenizer.OPER_CHARS.includes(c1)) break;
+            }
         }
         return new Token('OPER', this.iterator.offset - image.length, image);
     }
@@ -540,11 +547,13 @@ export default class Tokenizer {
      * Consume any amount of spaces and tabs
      */
     consumeWhitespace(image, next) {
-        if (next === ' ' || next === '\t') while (true) {
-            const { value: [c, c1], done } = this.iterator.next();
-            if (done) break;
-            image += c;
-            if (next !== ' ' && next !== '\t') break;
+        if (next === ' ' || next === '\t') {
+            while (true) {
+                const { value: [c, c1], done } = this.iterator.next();
+                if (done) break;
+                image += c;
+                if (c1 !== ' ' && c1 !== '\t') break;
+            }
         }
         return new Token('WHITESPACE', this.iterator.offset - image.length, image);
     }
