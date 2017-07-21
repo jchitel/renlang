@@ -386,9 +386,10 @@ export default class Tokenizer {
 
         let value = '';
         if (next !== '"') {
-            let c, c1, c2, c3, c4, c5, c6, c7, c8, c9;
+            let c = null, c1 = null, c2 = null, c3 = null, c4 = null, c5 = null, c6 = null, c7 = null, c8 = null, c9 = null;
+            const shift = () => [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
             do {
-                [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
+                shift();
                 image += c;
                 if (c === '\\') {
                     if (c1 !== 'x' && c1 !== 'u') {
@@ -403,38 +404,38 @@ export default class Tokenizer {
                         }
                         // skip ahead for a basic escape sequence because there are only two characters
                         image += c1;
-                        this.iterator.next();
+                        shift();
                     } else if (c1 === 'x') {
                         // ascii escape code
                         if (this.isHexidecimalDigit(c2) && this.isHexidecimalDigit(c3)) {
                             image += (c1 + c2 + c3);
-                            for (let i = 0; i < 3; ++i) this.iterator.next();
                             value += String.fromCodePoint(parseInt(c2 + c3, 16));
+                            for (let i = 0; i < 3; ++i) shift();
                         } else {
                             // invalid escape code, treat it like \x
                             value += c1;
                             image += c1;
-                            this.iterator.next();
+                            shift();
                         }
                     } else {
                         // unicode escape code
                         if ([c2, c3, c4, c5].every(ch => this.isHexidecimalDigit(ch))) {
                             image += (c1 + c2 + c3 + c4 + c5);
-                            for (let i = 0; i < 5; ++i) this.iterator.next();
                             value += String.fromCodePoint(parseInt(c2 + c3 + c4 + c5, 16));
+                            for (let i = 0; i < 5; ++i) shift();
                         } else if (c2 === '{' && [c3, c4, c5, c6, c7].every(ch => this.isHexidecimalDigit(ch)) && c8 === '}') {
                             image += [c1, c2, c3, c4, c5, c6, c7, c8].join('');
-                            for (let i = 0; i < 8; ++i) this.iterator.next();
                             value += String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7, 16));
+                            for (let i = 0; i < 8; ++i) shift();
                         } else if (c2 === '{' && [c3, c4, c5, c6, c7, c8].every(ch => this.isHexidecimalDigit(ch)) && c9 === '}') {
                             image += [c1, c2, c3, c4, c5, c6, c7, c8, c9].join('');
-                            for (let i = 0; i < 9; ++i) this.iterator.next();
                             value += String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7 + c8, 16));
+                            for (let i = 0; i < 9; ++i) shift();
                         } else {
                             // invalid, treat it like \u
                             value += c1;
                             image += c1;
-                            this.iterator.next();
+                            shift();
                         }
                     }
                 } else {
@@ -460,8 +461,10 @@ export default class Tokenizer {
         if (next === "'") throw new Error('Empty character');
 
         let value;
+        let c = null, c1 = null, c2 = null, c3 = null, c4 = null, c5 = null, c6 = null, c7 = null, c8 = null, c9 = null;
+        const shift = () => [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
         // get the next character and lookahead buffer
-        const [c, c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.next().value;
+        shift();
         image += c;
         if (c === '\\') {
             // escape sequence
@@ -477,41 +480,41 @@ export default class Tokenizer {
                 }
                 // skip ahead for a basic escape sequence because there are only two characters
                 image += c1;
-                this.iterator.next();
+                shift();
             } else if (c1 === 'x') {
                 // ascii escape code
                 if (this.isHexidecimalDigit(c2) && this.isHexidecimalDigit(c3)) {
                     image += (c1 + c2 + c3);
-                    for (let i = 0; i < 3; ++i) this.iterator.next();
                     value = String.fromCodePoint(parseInt(c2 + c3, 16));
+                    for (let i = 0; i < 3; ++i) shift();
                 } else {
                     // invalid escape code, treat it like \x
                     value = c1;
                     image += c1;
-                    this.iterator.next();
+                    shift();
                 }
             } else {
                 // unicode escape code
                 if ([c2, c3, c4, c5].every(ch => this.isHexidecimalDigit(ch))) {
                     // 16 bit code
                     image += (c1 + c2 + c3 + c4 + c5);
-                    for (let i = 0; i < 5; ++i) this.iterator.next();
                     value = String.fromCodePoint(parseInt(c2 + c3 + c4 + c5, 16));
+                    for (let i = 0; i < 5; ++i) shift();
                 } else if (c2 === '{' && [c3, c4, c5, c6, c7].every(ch => this.isHexidecimalDigit(ch)) && c8 === '}') {
                     // 20 bit code
                     image += [c1, c2, c3, c4, c5, c6, c7, c8].join('');
-                    for (let i = 0; i < 8; ++i) this.iterator.next();
                     value = String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7, 16));
+                    for (let i = 0; i < 8; ++i) shift();
                 } else if (c2 === '{' && [c3, c4, c5, c6, c7, c8].every(ch => this.isHexidecimalDigit(ch)) && c9 === '}') {
                     // 24 bit code
                     image += [c1, c2, c3, c4, c5, c6, c7, c8, c9].join('');
-                    for (let i = 0; i < 9; ++i) this.iterator.next();
                     value = String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7 + c8, 16));
+                    for (let i = 0; i < 9; ++i) shift();
                 } else {
                     // invalid, treat it like \u
                     value = c1;
                     image += c1;
-                    this.iterator.next();
+                    shift();
                 }
             }
         } else {
@@ -532,7 +535,7 @@ export default class Tokenizer {
     consumeOperator(image, next) {
         if (Tokenizer.OPER_CHARS.includes(next)) {
             while (true) {
-                const { value: [c, c1], done } = this.iterator.next();
+                const [c, c1] = this.iterator.next().value;
                 image += c;
                 if (!Tokenizer.OPER_CHARS.includes(c1)) break;
             }
@@ -546,7 +549,7 @@ export default class Tokenizer {
     consumeWhitespace(image, next) {
         if (next === ' ' || next === '\t') {
             while (true) {
-                const { value: [c, c1], done } = this.iterator.next();
+                const [c, c1] = this.iterator.next().value;
                 image += c;
                 if (c1 !== ' ' && c1 !== '\t') break;
             }

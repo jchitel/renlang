@@ -38,7 +38,7 @@ describe('Tokenizer', () => {
             const [token] = getTokens(kw);
             expect(token).to.eql(new Token(kw.toUpperCase(), 0, kw));
         }
-    })
+    });
 
     it('should consume an integer', () => {
         let [token] = getTokens('1');
@@ -61,9 +61,9 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a hexadecimal literal', () => {
-        let [token] = getTokens('0x1f');
+        const [token] = getTokens('0x1f');
         expect(token).to.eql(new Token('INTEGER_LITERAL', 0, '0x1f', 31));
-    })
+    });
 
     it("should handle '0x' case", () => {
         const tokens = getTokens('0x ');
@@ -76,9 +76,9 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a binary literal', () => {
-        let [token] = getTokens('0b11011');
+        const [token] = getTokens('0b11011');
         expect(token).to.eql(new Token('INTEGER_LITERAL', 0, '0b11011', 27));
-    })
+    });
 
     it("should handle '0b' case", () => {
         const tokens = getTokens('0b ');
@@ -188,6 +188,9 @@ describe('Tokenizer', () => {
 
         [token] = getTokens('"\\b"');
         expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\b"', '\b'));
+
+        [token] = getTokens('"\\a"');
+        expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\a"', 'a'));
     });
 
     it('should handle ascii escape sequences in strings', () => {
@@ -196,6 +199,20 @@ describe('Tokenizer', () => {
 
         [token] = getTokens('"\\xn1"');
         expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\xn1"', 'xn1'));
+    });
+
+    it('should handle unicode escape sequences in strings', () => {
+        let [token] = getTokens('"\\u0061"');
+        expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\u0061"', 'a'));
+
+        [token] = getTokens('"\\u{00061}"');
+        expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\u{00061}"', 'a'));
+
+        [token] = getTokens('"\\u{000061}"');
+        expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\u{000061}"', 'a'));
+
+        [token] = getTokens('"\\u00n1"');
+        expect(token).to.eql(new Token('STRING_LITERAL', 0, '"\\u00n1"', 'u00n1'));
     });
 
     it('should throw an error for unterminated string', () => {
@@ -210,11 +227,62 @@ describe('Tokenizer', () => {
         } catch (err) {
             expect(err.message).to.eql('Unterminated string at line 1, column 5.');
         }
-    })
+    });
 
     it('should consume a character literal', () => {
-        let [token] = getTokens("'a'");
+        const [token] = getTokens("'a'");
         expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'a'", 'a'));
+    });
+
+    it('should handle simple escape characters in characters', () => {
+        let [token] = getTokens("'\\n'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\n'", '\n'));
+
+        [token] = getTokens("'\\r'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\r'", '\r'));
+
+        [token] = getTokens("'\\t'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\t'", '\t'));
+
+        [token] = getTokens("'\\v'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\v'", '\v'));
+
+        [token] = getTokens("'\\f'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\f'", '\f'));
+
+        [token] = getTokens("'\\b'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\b'", '\b'));
+
+        [token] = getTokens("'\\a'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\a'", 'a'));
+    });
+
+    it('should handle ascii escape sequences in characters', () => {
+        let [token] = getTokens("'\\x61'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\x61'", 'a'));
+
+        try {
+            getTokens("'\\xn1'");
+        } catch (err) {
+            expect(err.message).to.eql('Unterminated character at line 1, column 6.');
+        }
+    });
+
+    it('should handle unicode escape sequences in characters', () => {
+        let [token] = getTokens("'\\u0061'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\u0061'", 'a'));
+
+        [token] = getTokens("'\\u{00061}'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\u{00061}'", 'a'));
+
+        [token] = getTokens("'\\u{000061}'");
+        expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\u{000061}'", 'a'));
+
+        try {
+            getTokens("'\\u00n1'");
+        } catch (err) {
+            expect(err.message).to.eql('Unterminated character at line 1, column 8.');
+        }
     });
 
     it('should throw an error for invalid character literal', () => {
@@ -278,7 +346,7 @@ describe('Tokenizer', () => {
     });
 
     it('should consume an operator starting with equals', () => {
-        let [token] = getTokens('=+');
+        const [token] = getTokens('=+');
         expect(token).to.eql(new Token('OPER', 0, '=+'));
     });
 
@@ -288,7 +356,7 @@ describe('Tokenizer', () => {
             const [token] = getTokens(c);
             expect(token).to.eql(new Token('OPER', 0, c));
         }
-        let [token] = getTokens('~!$%^&+=-|</');
+        const [token] = getTokens('~!$%^&+=-|</');
         expect(token).to.eql(new Token('OPER', 0, '~!$%^&+=-|</'));
     });
 
