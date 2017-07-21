@@ -9,7 +9,7 @@ import LookaheadIterator from './LookaheadIterator';
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
 export class Token {
-    constructor(type, offset, image = type, value = null) {
+    constructor(type, offset, image, value = null) {
         this.type = type;
         this.offset = offset;
         this.image = image;
@@ -136,18 +136,18 @@ export default class Tokenizer {
             } else if (c === '"') {
                 // consume a string literal
                 try {
-                    yield this.consumeStringLiteral(c);
+                    yield this.consumeStringLiteral(c, c1);
                 } catch (err) {
                     // the string was unterminated
-                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - 1 - currentLineOffset}.`);
+                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
                 }
             } else if (c === "'") {
                 // consume a character literal
                 try {
-                    yield this.consumeCharacterLiteral(c);
+                    yield this.consumeCharacterLiteral(c, c1);
                 } catch (err) {
                     // the character was unterminated or empty
-                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - 1 - currentLineOffset}.`);
+                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
                 }
             } else if (Tokenizer.SYMBOL_MAP[c] && c !== '=') {
                 // consume a symbol
@@ -193,7 +193,7 @@ export default class Tokenizer {
                 yield this.consumeWhitespace(c, c1);
             } else {
                 // otherwise it is not a valid character (for now)
-                throw new Error(`Invalid character '${c}' at line ${lineNumber}, column ${this.iterator.offset - 1 - currentLineOffset}.`);
+                throw new Error(`Invalid character '${c}' at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
             }
         }
         // yield a EOF token
@@ -220,9 +220,7 @@ export default class Tokenizer {
         // if the next character is a valid identifier character, loop to get all the remaining ones
         if (kind === 'uppercase' || kind === 'lowercase' || kind === 'number' || next === '_') {
             while (true) {
-                const { value: [c, c1], done } = this.iterator.next();
-                // if the iterator is done, break out of the loop, this will be the last iteration
-                if (done) break;
+                const [c, c1] = this.iterator.next().value;
                 image += c;
                 const kind1 = this.kind(c1);
                 // if the next character will not be a valid identifier character, then break
@@ -230,8 +228,6 @@ export default class Tokenizer {
             }
         }
         // if the identifier we captured matches a keyword, return the keyword
-        console.log(this.iterator.offset);
-        console.log(image.length);
         if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.iterator.offset - image.length, image);
         // otherwise, return an identifier
         else return new Token('IDENT', this.iterator.offset - image.length, image);
@@ -245,11 +241,13 @@ export default class Tokenizer {
         if (image === '-') {
             // number starts with minus, save that information and shift forward
             image += next;
-            [next, next1] = this.iterator.next().value.shift();
+            const nv = this.iterator.next().value;
+            nv.shift();
+            [next, next1] = nv;
             // it may be that next was the last character in the source. handle that here.
             if (!next) return new Token('INTEGER_LITERAL', this.iterator.offset - 2, image, parseInt(image, 10));
         }
-        if (image.endsWith('0')) {
+        if (image.endsWith('0') && next && next1) {
             // literals that start with 0 are a special case, check for alternative bases.
             if (next.toLowerCase() === 'x') {
                 // in order for this to be a valid hex literal, the '0x' must be followed by at least 1 hex digit
@@ -331,7 +329,7 @@ export default class Tokenizer {
                 image += c;
             }
             // next character is e, handle exponent portion
-            if (c1.toLowerCase() === 'e') {
+            if (c1 && c1.toLowerCase() === 'e') {
                 // but only do it if there is a number after e
                 if (this.kind(c2) === 'number') {
                     // recurse, this will only happen once because the next character is an e
@@ -459,7 +457,7 @@ export default class Tokenizer {
     consumeCharacterLiteral(image, next) {
         // if there is no next character, throw an error
         if (!next) throw new Error('Unterminated character');
-        if (next === "'") throw new Error('Empty character literal');
+        if (next === "'") throw new Error('Empty character');
 
         let value;
         // get the next character and lookahead buffer
@@ -535,7 +533,6 @@ export default class Tokenizer {
         if (Tokenizer.OPER_CHARS.includes(next)) {
             while (true) {
                 const { value: [c, c1], done } = this.iterator.next();
-                if (done) break;
                 image += c;
                 if (!Tokenizer.OPER_CHARS.includes(c1)) break;
             }
@@ -550,7 +547,6 @@ export default class Tokenizer {
         if (next === ' ' || next === '\t') {
             while (true) {
                 const { value: [c, c1], done } = this.iterator.next();
-                if (done) break;
                 image += c;
                 if (c1 !== ' ' && c1 !== '\t') break;
             }
@@ -562,6 +558,7 @@ export default class Tokenizer {
      * Returns true if c is a hexadecimal character
      */
     isHexidecimalDigit(c) {
+        if (!c) return false;
         const low = c.toLowerCase();
         return (c >= '0' && c <= '9') || (low >= 'a' && low <= 'f');
     }

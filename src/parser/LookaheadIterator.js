@@ -1,31 +1,3 @@
-class Iterator {
-    constructor(li) {
-        this.li = li;
-        this.generator = this.li.generator();
-    }
-
-    /**
-     * forwards the offset from the lookahead iterator
-     */
-    get offset() {
-        return this.li.offset;
-    }
-
-    /**
-     * Iterator next() function
-     */
-    next() {
-        return this.generator.next();
-    }
-
-    /**
-     * If trying to get an iterator from the iterator, just return itself
-     */
-    [Symbol.iterator]() {
-        return this;
-    }
-}
-
 export default class LookaheadIterator {
     /**
      * Create a lookahead iterator around some iterable.
@@ -37,21 +9,27 @@ export default class LookaheadIterator {
         this.lookahead = lookahead;
         this.buffer = [];
         this.offset = 0;
-        this.iterator = new Iterator(this);
+        this.gen = this._generator();
     }
 
     /**
-     * The actual iterator will be one of these, so that we have an object to target
-     * @returns {Iterator}
+     * Set up the iterable interface to just return itself.
      */
     [Symbol.iterator]() {
-        return this.iterator;
+        return this;
     }
 
     /**
-     * Generator function, the actual iteration logic
+     * Iteration should defer to the generator.
      */
-    *generator() {
+    next() {
+        return this.gen.next();
+    }
+
+    /**
+     * This generator contains the actual iteration logic.
+     */
+    *_generator() {
         for (const item of this.baseIterator) {
             if (this.buffer.length < this.lookahead) {
                 // build the lookahead buffer
@@ -69,6 +47,7 @@ export default class LookaheadIterator {
         // once we've reached the end, we have to flush the lookahead buffer
         while (this.buffer.length) {
             // yield the current copy of the buffer
+            this.offset++;
             yield [...this.buffer];
             // remove the start item
             this.buffer.shift();
