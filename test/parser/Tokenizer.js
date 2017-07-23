@@ -10,7 +10,22 @@ function getTokens(str) {
 describe('Tokenizer', () => {
     it('should construct an iterator', () => {
         const tokenizer = new Tokenizer('hello');
-        expect(tokenizer.iterator[Symbol.iterator]().next().value).to.eql(['h', 'e', 'l', 'l', 'o']);
+        expect(tokenizer.iterator[Symbol.iterator]().next().value).to.eql('h');
+    });
+
+    it('should return the next non-whitespace token', () => {
+        const tokenizer = new Tokenizer('   hello\nworld  ');
+        expect(tokenizer.getNextToken().image).to.eql('hello');
+        expect(tokenizer.getNextToken().image).to.eql('world');
+        expect(tokenizer.getNextToken().type).to.eql('EOF');
+    });
+
+    it('should return the next non-whitespace token, but including new lines', () => {
+        const tokenizer = new Tokenizer('   hello\nworld  ');
+        expect(tokenizer.getNextToken(true).image).to.eql('hello');
+        expect(tokenizer.getNextToken(true).image).to.eql('\n');
+        expect(tokenizer.getNextToken(true).image).to.eql('world');
+        expect(tokenizer.getNextToken(true).type).to.eql('EOF');
     });
 
     it('should consume an identifier', () => {
@@ -258,7 +273,7 @@ describe('Tokenizer', () => {
     });
 
     it('should handle ascii escape sequences in characters', () => {
-        let [token] = getTokens("'\\x61'");
+        const [token] = getTokens("'\\x61'");
         expect(token).to.eql(new Token('CHARACTER_LITERAL', 0, "'\\x61'", 'a'));
 
         try {

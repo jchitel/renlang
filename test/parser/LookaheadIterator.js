@@ -4,37 +4,21 @@ import LookaheadIterator from '../../src/parser/LookaheadIterator';
 
 
 describe('LookaheadIterator', () => {
-    it('should yield lookahead buffers', () => {
-        const iterator = new LookaheadIterator('hello world', 4);
-        expect([...iterator]).to.eql([
-            ['h', 'e', 'l', 'l', 'o'],
-            ['e', 'l', 'l', 'o', ' '],
-            ['l', 'l', 'o', ' ', 'w'],
-            ['l', 'o', ' ', 'w', 'o'],
-            ['o', ' ', 'w', 'o', 'r'],
-            [' ', 'w', 'o', 'r', 'l'],
-            ['w', 'o', 'r', 'l', 'd'],
-            ['o', 'r', 'l', 'd'],
-            ['r', 'l', 'd'],
-            ['l', 'd'],
-            ['d'],
-        ]);
+    it('should behave like a standard iterator', () => {
+        const iterator = new LookaheadIterator('hello world');
+        expect([...iterator]).to.eql(['h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd']);
     });
 
-    it('should default to 1 item of lookahead', () => {
+    it('should allow peeking ahead to subsequent items', () => {
         const iterator = new LookaheadIterator('hello world');
-        expect([...iterator]).to.eql([
-            ['h', 'e'],
-            ['e', 'l'],
-            ['l', 'l'],
-            ['l', 'o'],
-            ['o', ' '],
-            [' ', 'w'],
-            ['w', 'o'],
-            ['o', 'r'],
-            ['r', 'l'],
-            ['l', 'd'],
-            ['d'],
-        ]);
+        expect(iterator.peek()).to.eql('h');
+        expect(iterator.next().value).to.eql('h');
+        expect(iterator.peek()).to.eql('e');
+        expect(iterator.peek(1)).to.eql('l');
+        expect(iterator.peek(1, 3)).to.eql(['l', 'l']);
+        expect(iterator.peek(1, 20)).to.eql(['l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd']);
+        expect([...iterator]).to.eql(['e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd']);
+        expect(iterator.peek()).to.eql(undefined);
+        expect(iterator.peek(0, 2)).to.eql([]);
     });
 });
