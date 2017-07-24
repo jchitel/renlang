@@ -1,4 +1,5 @@
 import LookaheadIterator from './LookaheadIterator';
+import ParserError from './ParserError';
 
 
 /**
@@ -9,9 +10,10 @@ import LookaheadIterator from './LookaheadIterator';
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
 export class Token {
-    constructor(type, offset, image, value = null) {
+    constructor(type, line, column, image, value = null) {
         this.type = type;
-        this.offset = offset;
+        this.line = line;
+        this.column = column;
         this.image = image;
         this.value = value;
     }
@@ -22,8 +24,6 @@ export class Token {
  * This class implements the Iterable interface, so it must be iterated, which yields each token in the source string.
  */
 export default class Tokenizer {
-    static EOF = Symbol('EOF');
-
     // set of characters allowed for semantic operators (note that equals by itself or followed by a greater-than are both reserved)
     static OPER_CHARS = ['~', '!', '$', '%', '^', '&', '*', '+', '-', '=', '|', '<', '>', '?', '/'];
 
@@ -87,10 +87,57 @@ export default class Tokenizer {
         '.': 'DOT',        // used in field access expressions
     };
 
+    /**
+     * - source: a reference to the original source string
+     * - iterator: the lookahead iterator providing characters from the source string
+     * - gen: generator that yields tokens, logic contained in _generator()
+     * - lineNumber: the current line number
+     * - currentLineOffset: the offset in the source string off the current line, used to determine column numbers of tokens and errors
+     * - ignoreMode: if true, all comments, whitespace, and semicolons are ignored from the yielded token output; if false, all tokens are yielded
+     */
     constructor(string) {
         this.source = string;
-        this.iterator = new LookaheadIterator(string); // max lookahead so far: unicode escape codes in strings/characters: '\u{......}'
+        this.iterator = new LookaheadIterator(string);
         this.gen = this._generator();
+        this.lineNumber = 1;
+        this.currentLineOffset = 0;
+        this.ignoreMode = true;
+    }
+
+    /**
+     * Computes the 1-based column number of the *previously consumed* character.
+     * Ex: in the source code string "\nabcde", these are the columns:
+     * Character | Offset | Line # | Column #
+     * --------------------------------------
+     * SOF       | 0      | 1      | 0        (SOF is not a character, it just represents the initial state, a.k.a. no characters yet consumed)
+     * \n        | 1      | 1      | 1        (once \n is consumed, the iterator offset is 1, the character itself is still on line 1, column 1)
+     * a         | 2      | 2      | 1        (we are now on a new line, 1st character of the line)
+     * b         | 3      | 2      | 2
+     * c         | 4      | 2      | 3
+     * d         | 5      | 2      | 4
+     * e         | 6      | 2      | 5
+     * EOF       | 7      | 2      | 6
+     * We can compute the column of a character by subtracting the offset of the start of the line from the iterator offset.
+     * = this.iterator.offset - this.currentLineOffset
+     * We can compute the column of the start of the token by subtracting the length of the token from the column of the last character and adding 1.
+     * = this.iterator.offset - this.currentLineOffset - token.length + 1
+     *
+     * For example: using the token 'abcde' above:
+     * - this.iterator.offset = 6
+     * - this.currentLineOffset = 1
+     * - token.length = 5
+     * - token.column = 6 - 1 - 5 + 1 = 1
+     */
+    get columnNumber() {
+        return this.iterator.offset - this.currentLineOffset;
+    }
+
+    /**
+     * Given a token length (should be equal to the distance between the start of the token and the current offset, whatever that may be),
+     * compute the column number of that token.
+     */
+    getColumnNumber(tokenLength) {
+        return (this.columnNumber - tokenLength) + 1;
     }
 
     [Symbol.iterator]() {
@@ -101,23 +148,10 @@ export default class Tokenizer {
         return this.gen.next();
     }
 
-    getNextToken(newline = false) {
-        for (const token of this) {
-            if (token.type !== 'WHITESPACE' && (newline || token.type !== 'NEWLINE')) {
-                return token;
-            }
-        }
-        throw new Error('No more tokens');
-    }
-
     /**
      * Fully iterate the entire source string, extracting tokens according to the language's grammar rules and yielding each one.
      */
     *_generator() {
-        // these allow us to output useful line/column information (column is this.iterator.offset - currentLineOffset)
-        let lineNumber = 1;
-        let currentLineOffset = 0;
-
         // iterate the lookahead iterator
         for (const c of this.iterator) {
             // "kind" is either "uppercase", "lowercase", "number", or the character
@@ -152,69 +186,76 @@ export default class Tokenizer {
                 yield this.consumeNumber(c);
             } else if (c === '"') {
                 // consume a string literal
-                try {
-                    yield this.consumeStringLiteral(c);
-                } catch (err) {
-                    // the string was unterminated
-                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
-                }
+                yield this.consumeStringLiteral(c);
             } else if (c === "'") {
                 // consume a character literal
-                try {
-                    yield this.consumeCharacterLiteral(c);
-                } catch (err) {
-                    // the character was unterminated or empty
-                    throw new Error(`${err.message} at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
-                }
+                yield this.consumeCharacterLiteral(c);
             } else if (Tokenizer.SYMBOL_MAP[c] && c !== '=') {
                 // consume a symbol
-                yield new Token(Tokenizer.SYMBOL_MAP[c], this.iterator.offset - 1, c);
+                yield new Token(Tokenizer.SYMBOL_MAP[c], this.lineNumber, this.columnNumber, c);
             } else if (c === '=') {
                 // consume an equals, a fat arrow, or an operator starting with equals
                 if (c1 === '>') {
                     // fat arrow (NOTE: this will ignore any other operator characters that come immediately after, fat arrow takes precedence)
                     this.iterator.next();
-                    yield new Token(Tokenizer.SYMBOL_MAP['=>'], this.iterator.offset - 2, '=>');
+                    yield new Token(Tokenizer.SYMBOL_MAP['=>'], this.lineNumber, this.columnNumber - 1, '=>');
                 } else if (Tokenizer.OPER_CHARS.includes(c1)) {
                     // other non-greater-than operator character, consume as operator
                     yield this.consumeOperator(c);
                 } else {
                     // otherwise it's a lone equals symbol
-                    yield new Token(Tokenizer.SYMBOL_MAP[c], this.iterator.offset - 1, c);
+                    yield new Token(Tokenizer.SYMBOL_MAP[c], this.lineNumber, this.columnNumber, c);
                 }
             } else if (Tokenizer.OPER_CHARS.includes(c)) {
                 // consume as operator
                 yield this.consumeOperator(c);
             } else if (c === '\n' || c === ';') {
                 // new line character
-                yield new Token('NEWLINE', this.iterator.offset - 1, c);
+                if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
                 if (c === '\n') {
                     // increment line number
-                    lineNumber++;
-                    currentLineOffset = this.iterator.offset;
+                    this.lineNumber++;
+                    this.currentLineOffset = this.iterator.offset;
                 }
             } else if (c === '\r') {
                 if (c1 === '\n') {
                     // treat the whole thing as a new line
                     this.iterator.next();
-                    yield new Token('NEWLINE', this.iterator.offset - 2, '\r\n');
+                    if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
                     // increment line number
-                    lineNumber++;
-                    currentLineOffset = this.iterator.offset;
+                    this.lineNumber++;
+                    this.currentLineOffset = this.iterator.offset;
                 } else {
                     // otherwise treat it as normal whitespace
-                    yield this.consumeWhitespace(c);
+                    if (!this.ignoreMode) yield this.consumeWhitespace(c);
                 }
             } else if (c === ' ' || c === '\t') {
                 // consume whitespace
-                yield this.consumeWhitespace(c);
+                if (!this.ignoreMode) yield this.consumeWhitespace(c);
             } else {
                 // otherwise it is not a valid character (for now)
-                throw new Error(`Invalid character '${c}' at line ${lineNumber}, column ${this.iterator.offset - currentLineOffset}.`);
+                throw new ParserError(`Invalid character '${c}'`, this.lineNumber, this.columnNumber);
             }
         }
         // yield a EOF token
-        yield new Token('EOF', this.iterator.offset, null);
+        yield new Token('EOF', this.lineNumber, this.getColumnNumber(0), null);
+    }
+
+    /**
+     * Consume whitespace until we reach a new line token, then return that token.
+     * If we reach a non-whitespace token before seeing a new line, throw an error.
+     */
+    getNewLine() {
+        this.ignoreMode = false;
+        for (const tok of this) {
+            if (tok.type === 'NEWLINE') {
+                this.ignoreMode = true;
+                return tok;
+            } else if (tok.type !== 'WHITESPACE') {
+                this.ignoreModel = true;
+                throw new ParserError(`Expected new line or semicolon, got ${tok.image}`, tok.startLine, tok.startColumn);
+            }
+        }
     }
 
     /**
@@ -245,9 +286,9 @@ export default class Tokenizer {
             }
         }
         // if the identifier we captured matches a keyword, return the keyword
-        if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.iterator.offset - image.length, image);
+        if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.lineNumber, this.getColumnNumber(image.length), image);
         // otherwise, return an identifier
-        else return new Token('IDENT', this.iterator.offset - image.length, image);
+        else return new Token('IDENT', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     /**
@@ -259,7 +300,7 @@ export default class Tokenizer {
             // number starts with minus, save that information and shift forward
             image += this.iterator.next().value;
             // it may be that next was the last character in the source. handle that here.
-            if (!this.iterator.peek()) return new Token('INTEGER_LITERAL', this.iterator.offset - 2, image, parseInt(image, 10));
+            if (!this.iterator.peek()) return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
         }
         const [c, c1] = this.iterator.peek(0, 2);
         if (image.endsWith('0') && c && c1) {
@@ -298,7 +339,7 @@ export default class Tokenizer {
         image += this.iterator.next().value;
         // while the next character is a hex digit, add it to the image
         while (this.isHexidecimalDigit(this.iterator.peek())) image += this.iterator.next().value;
-        return new Token('INTEGER_LITERAL', this.iterator.offset - image.length, image, parseInt(image, 16));
+        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 16));
     }
 
     /**
@@ -313,7 +354,7 @@ export default class Tokenizer {
         // while the next character is a binary digit, add it to the image
         while (this.isBinaryDigit(this.iterator.peek())) image += this.iterator.next().value;
         // JS doesn't have binary literals, so we need to remove the prefix when parsing
-        return new Token('INTEGER_LITERAL', this.iterator.offset - image.length, image, parseInt(image.replace(/0b/i, ''), 2));
+        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image.replace(/0b/i, ''), 2));
     }
 
     isBinaryDigit = c => c === '0' || c === '1';
@@ -345,7 +386,7 @@ export default class Tokenizer {
             while (this.kind(this.iterator.peek()) === 'number') image += this.iterator.next().value;
         }
         // we arrive here when we've consumed as much floating point characters as we can
-        return new Token('FLOAT_LITERAL', this.iterator.offset - image.length, image, parseFloat(image));
+        return new Token('FLOAT_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseFloat(image));
     }
 
     /**
@@ -375,7 +416,7 @@ export default class Tokenizer {
             }
         }
         // otherwise take the numbers we have enumerated so far and parse them as an int
-        return new Token('INTEGER_LITERAL', this.iterator.offset - image.length, image, parseInt(image, 10));
+        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
     }
 
     /**
@@ -383,7 +424,7 @@ export default class Tokenizer {
      */
     consumeStringLiteral(image) {
         // if there is no next character, throw an error
-        if (!this.iterator.peek()) throw new Error('Unterminated string');
+        if (!this.iterator.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
 
         let value = '';
         if (this.iterator.peek() !== '"') {
@@ -445,12 +486,12 @@ export default class Tokenizer {
                 }
             } while (this.iterator.peek() && (this.iterator.peek() !== '"' || image.endsWith('\\')));
             // no next character, throw an error
-            if (!this.iterator.peek()) throw new Error('Unterminated string');
+            if (!this.iterator.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
         }
         // next character is double quote
         this.iterator.next();
         image += '"';
-        return new Token('STRING_LITERAL', this.iterator.offset - image.length, image, value);
+        return new Token('STRING_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
 
     /**
@@ -458,8 +499,8 @@ export default class Tokenizer {
      */
     consumeCharacterLiteral(image) {
         // if there is no next character, throw an error
-        if (!this.iterator.peek()) throw new Error('Unterminated character');
-        if (this.iterator.peek() === "'") throw new Error('Empty character');
+        if (!this.iterator.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
+        if (this.iterator.peek() === "'") throw new ParserError('Empty character', this.lineNumber, this.columnNumber + 1);
 
         let value;
         const c = this.iterator.next().value;
@@ -519,11 +560,11 @@ export default class Tokenizer {
             value = c;
         }
         // no next character, throw an error
-        if (!this.iterator.peek()) throw new Error('Unterminated character');
+        if (!this.iterator.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
         // next character is single quote
         this.iterator.next();
         image += "'";
-        return new Token('CHARACTER_LITERAL', this.iterator.offset - image.length, image, value);
+        return new Token('CHARACTER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
 
     /**
@@ -531,7 +572,7 @@ export default class Tokenizer {
      */
     consumeOperator(image) {
         while (Tokenizer.OPER_CHARS.includes(this.iterator.peek())) image += this.iterator.next().value;
-        return new Token('OPER', this.iterator.offset - image.length, image);
+        return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     /**
@@ -539,7 +580,7 @@ export default class Tokenizer {
      */
     consumeWhitespace(image) {
         while (this.isWhitespace(this.iterator.peek())) image += this.iterator.next().value;
-        return new Token('WHITESPACE', this.iterator.offset - image.length, image);
+        return new Token('WHITESPACE', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     isWhitespace = c => c === ' ' || c === '\t';

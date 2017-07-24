@@ -1,2 +1,2 @@
 export Program from './Program';
-export ImportDeclaration from './ImportDeclaration';
+export ImportDeclaration, { ImportComponent } from './ImportDeclaration';
