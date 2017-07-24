@@ -1,5 +1,5 @@
 export default class ImportDeclaration {
-    constructor(importNameMappings) {
+    constructor(moduleName) {
         this.mappings = importNameMappings;
     }
 }
