@@ -23,8 +23,8 @@ export default class Parser {
             if (node = this.acceptImportDeclaration(c)) {
                 if (functions.length || types.length) throw new ParserError(mess.IMPORT_AFTER_DECL, node.line, node.column);
                 imports.push(node);
-            //} else if (node = this.acceptFunctionDeclaration(c)) {
-            //    functions.push(node);
+            } else if (node = this.acceptFunctionDeclaration(c)) {
+                functions.push(node);
             //} else if (node = this.acceptTypeDeclaration(c)) {
             //    types.push(node);
             //} else if (node = this.acceptExportDeclaration(c)) {
@@ -115,5 +115,18 @@ export default class Parser {
                 importNameToken: tok,
             });
         }
+    }
+
+    acceptFunctionDeclaration(tok) {
+        // functions must start with 'func'
+        if (tok.type !== 'FUNC') return false;
+        // parse return type
+        const retTypeStartToken = this.tokenizer.next().value;
+        const returnType = this.acceptType(retTypeStartToken);
+        // return type invalid
+        if (!returnType) throw new ParserError(mess.INVALID_RETURN_TYPE, retTypeStartToken.startLine, retTypeStartToken.startColumn);
+        const functionNameToken = this.tokenizer.next().value;
+        if (functionNameToken.type !== 'IDENT') throw new ParserError(mess.INVALID_FUNCTION_NAME(functionNameToken), functionNameToken.startLine, functionNameToken.startColumn);
+        // TODO: you were here
     }
 }
