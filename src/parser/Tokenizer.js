@@ -10,12 +10,13 @@ import ParserError from './ParserError';
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
 export class Token {
-    constructor(type, line, column, image, value = null) {
+    constructor(type, line, column, image, value = null, hasNewLine = false) {
         this.type = type;
         this.line = line;
         this.column = column;
         this.image = image;
         this.value = value;
+        this.hasNewLine = hasNewLine;
     }
 }
 
@@ -211,7 +212,7 @@ export default class Tokenizer {
                 yield this.consumeOperator(c);
             } else if (c === '\n' || c === ';') {
                 // new line character
-                if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
+                yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
                 if (c === '\n') {
                     // increment line number
                     this.lineNumber++;
@@ -221,7 +222,7 @@ export default class Tokenizer {
                 if (c1 === '\n') {
                     // treat the whole thing as a new line
                     this.iterator.next();
-                    if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
+                    yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
                     // increment line number
                     this.lineNumber++;
                     this.currentLineOffset = this.iterator.offset;
@@ -239,23 +240,6 @@ export default class Tokenizer {
         }
         // yield a EOF token
         yield new Token('EOF', this.lineNumber, this.getColumnNumber(0), null);
-    }
-
-    /**
-     * Consume whitespace until we reach a new line token, then return that token.
-     * If we reach a non-whitespace token before seeing a new line, throw an error.
-     */
-    getNewLine() {
-        this.ignoreMode = false;
-        for (const tok of this) {
-            if (tok.type === 'NEWLINE') {
-                this.ignoreMode = true;
-                return tok;
-            } else if (tok.type !== 'WHITESPACE') {
-                this.ignoreModel = true;
-                throw new ParserError(`Expected new line or semicolon, got ${tok.image}`, tok.startLine, tok.startColumn);
-            }
-        }
     }
 
     /**

@@ -1,5 +1,6 @@
 import Tokenizer from './Tokenizer';
 import LookaheadIterator from './LookaheadIterator';
+import NewLineCheckIterator from './NewLineCheckIterator';
 import * as AST from '../ast';
 import ParserError from './ParserError';
 import * as mess from './ParserMessages';
@@ -7,23 +8,21 @@ import * as mess from './ParserMessages';
 
 export default class Parser {
     parse(source) {
-        // TODO: we need access to the underlying getNewLine() method
-        this.tokenizer = new LookaheadIterator(new Tokenizer(source));
+        // This is a triple-wrapped iterator:
+        // 1. the tokenizer yields tokens one at a time
+        // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
+        // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
+        this.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
         return this.acceptProgram();
     }
 
     acceptProgram() {
         const imports = [], functions = [], types = [], exports = [];
-        console.log('here1', this.tokenizer[Symbol.iterator]);
         for (const c of this.tokenizer) {
-            console.log('here2');
             let node;
             if (node = this.acceptImportDeclaration(c)) {
-                console.log('here3');
                 if (functions.length || types.length) throw new ParserError(mess.IMPORT_AFTER_DECL, node.line, node.column);
-                console.log('here4');
                 imports.push(node);
-                console.log('here5');
             //} else if (node = this.acceptFunctionDeclaration(c)) {
             //    functions.push(node);
             //} else if (node = this.acceptTypeDeclaration(c)) {
@@ -31,15 +30,12 @@ export default class Parser {
             //} else if (node = this.acceptExportDeclaration(c)) {
             //    exports.push(node);
             } else if (c.type === 'EOF') {
-                console.log('here6');
                 return new AST.Program(imports, functions, types, exports);
             } else {
-                console.log('here7');
                 throw new ParserError(mess.INVALID_PROGRAM(c), c.startLine, c.startColumn);
             }
         }
         // empty program
-        console.log('here8');
         return new AST.Program();
     }
 
@@ -55,16 +51,15 @@ export default class Parser {
         const next = this.tokenizer.next().value;
         if (next.type === 'COLON') {
             // colon means default import
-            const defaultImportToken = this.tokenizer.next().value;
-            if (defaultImportToken.type !== 'IDENT') throw new ParserError(mess.INVALID_IMPORT, defaultImportToken.startLine, defaultImportToken.startColumn);
-            const newLineToken = this.tokenizer.getNewLine();
+            const defaultImportNameToken = this.tokenizer.next().value;
+            if (defaultImportNameToken.type !== 'IDENT') throw new ParserError(mess.INVALID_IMPORT, defaultImportNameToken.startLine, defaultImportNameToken.startColumn);
+            if (!defaultImportNameToken.hasNewLine) throw new ParserError(mess.IMPORT_NO_NEW_LINE, defaultImportNameToken.endLine, defaultImportNameToken.endColumn);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
                 moduleNameToken,
                 colonToken: next,
-                defaultImportToken,
-                newLineToken,
+                defaultImportNameToken,
                 defaultImport: true,
             });
         } else if (next.type === 'LBRACE') {
@@ -80,7 +75,7 @@ export default class Parser {
             }
             // close brace and new line must follow import names
             if (namedImportCloseBraceToken.type !== 'RBRACE') throw new ParserError(mess.INVALID_IMPORT, namedImportCloseBraceToken.startLine, namedImportCloseBraceToken.startColumn);
-            const newLineToken = this.tokenizer.next().value;
+            if (!namedImportCloseBraceToken.hasNewLine) throw new ParserError(mess.IMPORT_NO_NEW_LINE, namedImportCloseBraceToken.endLine, namedImportCloseBraceToken.endColumn);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
@@ -88,7 +83,6 @@ export default class Parser {
                 namedImportOpenBraceToken: next,
                 importComponents,
                 namedImportCloseBraceToken,
-                newLineToken,
                 defaultImport: false,
             })
         } else {

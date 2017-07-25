@@ -2,6 +2,7 @@ import { expect } from 'chai';
 
 import Parser from '../../src/parser/Parser';
 import { Program, ImportDeclaration, ImportComponent } from '../../src/ast';
+import { Token } from '../../src/parser/Tokenizer';
 
 
 const parser = new Parser();
@@ -19,8 +20,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                 fromToken: new Token('FROM', 1, 8, 'from'),
                 moduleNameToken: new Token('STRING_LITERAL', 1, 13, '"myModule"', 'myModule'),
                 colonToken: new Token('COLON', 1, 23, ":"),
-                defaultImportNameToken: new Token('IDENT', 1, 25, 'MyDefaultImport'),
-                newLineToken: new Token('NEWLINE', 1, 40, '\n'),
+                defaultImportNameToken: new Token('IDENT', 1, 25, 'MyDefaultImport', null, true),
                 defaultImport: true,
             }),
             new ImportDeclaration({
@@ -44,8 +44,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                         importNameToken: new Token('IDENT', 2, 53, 'myName'),
                     }),
                 ],
-                namedImportCloseBraceToken: new Token('RBRACE', 2, 60, '}'),
-                newLineToken: new Token('NEWLINE', 2, 61, ';'),
+                namedImportCloseBraceToken: new Token('RBRACE', 2, 60, '}', null, true),
                 defaultImport: false,
             }),
             new ImportDeclaration({
@@ -53,8 +52,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                 fromToken: new Token('FROM', 2, 70, 'from'),
                 moduleNameToken: new Token('STRING_LITERAL', 2, 75, '"thirdModule"', 'thirdModule'),
                 colonToken: new Token('COLON', 2, 88, ":"),
-                defaultImportNameToken: new Token('IDENT', 2, 90, 'OtherDefault'),
-                newLineToken: new Token('NEWLINE', 2, 102, '\n'),
+                defaultImportNameToken: new Token('IDENT', 2, 90, 'OtherDefault', null, true),
                 defaultImport: true,
             }),
         ], []));
