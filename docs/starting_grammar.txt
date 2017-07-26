@@ -15,9 +15,9 @@ ImportComponent ::= IDENT
 # - Default export (nameless, associated with module name)
 # - Named expression export (export a value)
 # - Named type export (export a type by name)
-ExportDeclaration ::= EXPORT DEFAULT Expression           -- default export
+ExportDeclaration ::= EXPORT DEFAULT Expression      -- default export
                     | EXPORT IDENT EQUALS Expression -- named inline export
-                    | EXPORT IDENT EQUALS Type -- named inline export
+                    | EXPORT IDENT EQUALS Type       -- named inline export
                     | EXPORT IDENT                   -- named export of already declared name
 
 # Functions have a return type, name, parameter list, and body

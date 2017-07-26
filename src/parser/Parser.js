@@ -16,6 +16,42 @@ export default class Parser {
         return this.acceptProgram();
     }
 
+    parseNextToken(parseFunc, message) {
+        const token = this.tokenizer.next().value;
+        const parsed = parseFunc(token);
+        if (!parsed) throw new ParserError(message, token.startLine, token.startColumn);
+        return parsed;
+    }
+
+    /**
+     * Get the next token, expecting it to be of type 'type',
+     * throwing an error with message 'message' if it is not.
+     */
+    expectNextToken(type, message) {
+        const token = this.tokenizer.next().value;
+        this.enforceTokenType(token, type, message);
+        return token;
+    }
+
+    /**
+     * Check if the token is of the specified type,
+     * throwing an error with the specified message if it is not.
+     */
+    enforceTokenType(token, type, message) {
+        if (token.type !== type) {
+            const formatted = (typeof message === 'function') ? message(token) : message;
+            throw new ParserError(formatted, token.startLine, token.startColumn);
+        }
+    }
+
+    /**
+     * Check if the token has a new line after it,
+     * throwing an error with the specified message if it is not.
+     */
+    enforceNewLine(token, message) {
+        if (!token.hasNewLine) throw new ParserError(message, token.endLine, token.endColumn);
+    }
+
     acceptProgram() {
         const imports = [], functions = [], types = [], exports = [];
         for (const c of this.tokenizer) {
@@ -43,17 +79,14 @@ export default class Parser {
         // this cannot be an import if the first token is not 'import'
         if (tok.type !== 'IMPORT') return false;
         // `from <string_literal>`
-        const fromToken = this.tokenizer.next().value;
-        if (fromToken.type !== 'FROM') throw new ParserError(mess.INVALID_IMPORT, fromToken.startLine, fromToken.startColumn);
-        const moduleNameToken = this.tokenizer.next().value;
-        if (moduleNameToken.type !== 'STRING_LITERAL') throw new ParserError(mess.INVALID_IMPORT_MODULE(moduleNameToken), moduleNameToken.startLine, moduleNameToken.startColumn);
+        const fromToken = this.expectNextToken('FROM', mess.INVALID_IMPORT);
+        const moduleNameToken = this.expectNextToken('STRING_LITERAL', mess.INVALID_IMPORT_MODULE);
 
         const next = this.tokenizer.next().value;
         if (next.type === 'COLON') {
             // colon means default import
-            const defaultImportNameToken = this.tokenizer.next().value;
-            if (defaultImportNameToken.type !== 'IDENT') throw new ParserError(mess.INVALID_IMPORT, defaultImportNameToken.startLine, defaultImportNameToken.startColumn);
-            if (!defaultImportNameToken.hasNewLine) throw new ParserError(mess.IMPORT_NO_NEW_LINE, defaultImportNameToken.endLine, defaultImportNameToken.endColumn);
+            const defaultImportNameToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
+            this.enforceNewLine(defaultImportNameToken, mess.IMPORT_NO_NEW_LINE);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
@@ -74,8 +107,8 @@ export default class Parser {
                 namedImportCloseBraceToken = this.tokenizer.next().value;
             }
             // close brace and new line must follow import names
-            if (namedImportCloseBraceToken.type !== 'RBRACE') throw new ParserError(mess.INVALID_IMPORT, namedImportCloseBraceToken.startLine, namedImportCloseBraceToken.startColumn);
-            if (!namedImportCloseBraceToken.hasNewLine) throw new ParserError(mess.IMPORT_NO_NEW_LINE, namedImportCloseBraceToken.endLine, namedImportCloseBraceToken.endColumn);
+            this.enforceTokenType(namedImportCloseBraceToken, 'RBRACE', mess.INVALID_IMPORT);
+            this.enforceNewLine(namedImportCloseBraceToken, mess.IMPORT_NO_NEW_LINE);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
@@ -84,25 +117,23 @@ export default class Parser {
                 importComponents,
                 namedImportCloseBraceToken,
                 defaultImport: false,
-            })
+            });
         } else {
             throw new ParserError(mess.INVALID_IMPORT, next.startLine, next.startColumn);
         }
     }
 
     acceptImportComponent(tok, first) {
-        let commaToken = undefined;
+        let commaToken;
         // a comma must separate each import name, so it will come before all but the first name
         if (!first) {
-            if (tok.type !== 'COMMA') throw new ParserError(mess.INVALID_IMPORT, tok.startLine, tok.startColumn);
-            commaToken = tok;
-            tok = this.tokenizer.next().value;
+            this.enforceTokenType(tok, 'COMMA', mess.INVALID_IMPORT);
+            [commaToken, tok] = [tok, this.tokenizer.next().value];
         }
-        if (tok.type !== 'IDENT') throw new ParserError(mess.INVALID_IMPORT, tok.startLine, tok.startColumn);
+        this.enforceTokenType(tok, 'IDENT', mess.INVALID_IMPORT);
         if (this.tokenizer.peek().type === 'AS') {
             const asToken = this.tokenizer.next().value;
-            const importAliasToken = this.tokenizer.next().value;
-            if (importAliasToken.type !== 'IDENT') throw new ParserError(mess.INVALID_IMPORT, importAliasToken.startLine, importAliasToken.startColumn);
+            const importAliasToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
             return new AST.ImportComponent({
                 commaToken,
                 importNameToken: tok,
@@ -120,13 +151,67 @@ export default class Parser {
     acceptFunctionDeclaration(tok) {
         // functions must start with 'func'
         if (tok.type !== 'FUNC') return false;
-        // parse return type
-        const retTypeStartToken = this.tokenizer.next().value;
-        const returnType = this.acceptType(retTypeStartToken);
-        // return type invalid
-        if (!returnType) throw new ParserError(mess.INVALID_RETURN_TYPE, retTypeStartToken.startLine, retTypeStartToken.startColumn);
-        const functionNameToken = this.tokenizer.next().value;
-        if (functionNameToken.type !== 'IDENT') throw new ParserError(mess.INVALID_FUNCTION_NAME(functionNameToken), functionNameToken.startLine, functionNameToken.startColumn);
-        // TODO: you were here
+        const returnType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_RETURN_TYPE);
+        const functionNameToken = this.expectNextToken('IDENT', mess.INVALID_FUNCTION_NAME);
+        const params = this.parseNextToken(t => this.acceptParameterList(t), mess.INVALID_PARAMETER_LIST);
+        const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_FAT_ARROW);
+        const next = this.tokenizer.next().value;
+        let functionBody = this.acceptExpression(next);
+        if (!functionBody) functionBody = this.acceptBlock(next);
+        if (!functionBody) throw new ParserError(mess.INVALID_FUNCTION_BODY, next.startLine, next.startColumn);
+        return new AST.FunctionDeclaration({
+            funcToken: tok,
+            returnType,
+            functionNameToken,
+            params,
+            fatArrowToken,
+            functionBody,
+        });
+    }
+
+    acceptType(tok) {
+        let typeNode;
+        // handle built-in types
+        switch (tok.type) {
+            case 'U8': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'I8': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'BYTE': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'U16': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'I16': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'SHORT': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'U32': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'I32': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'INTEGER': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'U64': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'I64': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'LONG': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'INT': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'F32': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'FLOAT': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'F64': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'DOUBLE': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'STRING': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'CHAR': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'BOOL': typeNode = new AST.Type({ builtIn: tok }); break;
+            case 'VOID': typeNode = new AST.Type({ builtIn: tok }); break;
+            default: break;
+        }
+        // handle alternative types
+        let type;
+        if (type = this.acceptStructType(tok)) typeNode = new AST.Type({ structType: type });
+        else if (type = this.acceptTupleType(tok)) typeNode = new AST.Type({ tupleType: type });
+        else if (type = this.acceptFunctionType(tok)) typeNode = new AST.Type({ functionType: type });
+        else return false;
+        // array types are left recursive
+        let [peek1, peek2] = this.tokenizer.peek(0, 2);
+        while (peek1.type === 'LBRACK' && peek2.type === 'RBRACK') {
+            typeNode = new AST.Type({
+                baseType: typeNode,
+                arrayLeftBracketToken: this.tokenizer.next().value,
+                arrayRightBracketToken: this.tokenizer.next().value,
+            });
+            [peek1, peek2] = this.tokenizer.peek(0, 2);
+        }
+        return typeNode;
     }
 }
