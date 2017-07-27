@@ -7,6 +7,10 @@ import * as mess from './ParserMessages';
 
 
 export default class Parser {
+    /**
+     * Top-level function.
+     * Given some source code string, parse it and return a syntax tree.
+     */
     parse(source) {
         // This is a triple-wrapped iterator:
         // 1. the tokenizer yields tokens one at a time
@@ -16,6 +20,12 @@ export default class Parser {
         return this.acceptProgram();
     }
 
+    // COMMON UTIL FUNCTIONS
+
+    /**
+     * Using the next token as a starting point, use the 'parseFunc' to attempt to parse a tree node
+     * from the input. Throw 'message' if the parse fails.
+     */
     parseNextToken(parseFunc, message) {
         const token = this.tokenizer.next().value;
         const parsed = parseFunc(token);
@@ -52,6 +62,13 @@ export default class Parser {
         if (!token.hasNewLine) throw new ParserError(message, token.endLine, token.endColumn);
     }
 
+    // PARSER FUNCTIONS
+
+    /**
+     * Top-level AST node.
+     *
+     * Program ::= ImportDeclaration* (FunctionDeclaration | TypeDeclaration | ExportDeclaration)*
+     */
     acceptProgram() {
         const imports = [], functions = [], types = [], exports = [];
         for (const c of this.tokenizer) {
@@ -75,6 +92,10 @@ export default class Parser {
         return new AST.Program();
     }
 
+    /**
+     * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON IDENT
+     *                       IMPORT FROM STRING_LITERAL LBRACE ImportComponent (COMMA ImportComponent)* RBRACE
+     */
     acceptImportDeclaration(tok) {
         // this cannot be an import if the first token is not 'import'
         if (tok.type !== 'IMPORT') return false;
@@ -123,6 +144,10 @@ export default class Parser {
         }
     }
 
+    /**
+     * ImportComponent ::= IDENT
+     *                     IDENT AS IDENT
+     */
     acceptImportComponent(tok, first) {
         let commaToken;
         // a comma must separate each import name, so it will come before all but the first name
@@ -148,6 +173,9 @@ export default class Parser {
         }
     }
 
+    /**
+     * FunctionDeclaration ::= FUNC Type IDENT ParameterList FAT_ARROW (Expression | Block)
+     */
     acceptFunctionDeclaration(tok) {
         // functions must start with 'func'
         if (tok.type !== 'FUNC') return false;
@@ -169,6 +197,24 @@ export default class Parser {
         });
     }
 
+    /**
+     * Type ::= U8 | I8 | BYTE |       # 8-bit integers:  unsigned, signed, unsigned
+     *          U16 | I16 | SHORT |    # 16-bit integers: unsigned, signed, unsigned
+     *          U32 | I32 | INTEGER |  # 32-bit integers: unsigned, signed, signed
+     *          U64 | I64 | LONG |     # 64-bit integers: unsigned, signed, signed
+     *          INT |                  # Unbounded integers
+     *          F32 | FLOAT |          # 32-bit floating point numbers
+     *          F64 | DOUBLE |         # 64-bit floating point numbers
+     *          STRING |               # Array of characters
+     *          CHAR |                 # UTF-8 Character
+     *          BOOL |                 # Boolean value
+     *          VOID |                 # No type (alias of ())
+     *          (Type LBRACK RBRACK) | # Array types
+     *          StructType |           # Structured type
+     *          TupleType |            # Tuple type
+     *          FunctionType |         # Function type
+     *          (LPAREN Type RPAREN)   # Explicitly bounded type
+     */
     acceptType(tok) {
         let typeNode;
         // handle built-in types
@@ -213,5 +259,43 @@ export default class Parser {
             [peek1, peek2] = this.tokenizer.peek(0, 2);
         }
         return typeNode;
+    }
+
+    /**
+     * ParameterList ::= LPAREN (Param (COMMA Param)*)? RPAREN
+     */
+    acceptParameterList(tok) {
+        if (tok.type !== 'LPAREN') return false;
+        let peek = this.tokenizer.peek();
+        const params = [];
+        if (peek.type !== 'RPAREN') {
+            // try to parse a parameter
+            params.push(this.parseNextToken(t => this.acceptParam(t), mess.INVALID_FUNCTION_PARAMETER));
+            while ((peek = this.tokenizer.peek()).type === 'COMMA') { // TODO: handle case where it is not a comma
+                const commaToken = this.tokenizer.next().value; // TODO: figure out where to put comma
+                params.push(this.parseNextToken(t => this.acceptParam(t), mess.INVALID_FUNCTION_PARAMETER));
+            }
+        }
+        // close param list
+        peek = this.tokenizer.peek();
+        if (peek.type === 'RPAREN') {
+            return new AST.ParameterList({
+                openParenToken: tok,
+                params,
+                closeParenToken: this.tokenizer.next().value,
+            });
+        }
+    }
+
+    /**
+     * Param ::= Type IDENT
+     */
+    acceptParam(tok) {
+        const type = this.parseNextToken(t => this.acceptType(t), mess.INVALID_PARAMETER_TYPE);
+        const identifierToken = this.expectNextToken('IDENT', mess.INVALID_PARAMETER_NAME);
+        return new AST.Param({
+            type,
+            identifierToken,
+        });
     }
 }
