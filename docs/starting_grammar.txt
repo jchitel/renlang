@@ -135,22 +135,23 @@ Identifier ::= IDENT | LPAREN OPERATOR RPAREN
 # literals for arrays, structs, and tuples
 ArrayLiteral ::= LBRACK (Expression (COMMA Expression)*)? RBRACK
 StructLiteral ::= LBRACE (IDENT COLON Expression)* RBRACE
-TupleLiteral ::= LPAREN (Expression (COMMA Expression)*)? RPAREN
+TupleLiteral ::= LPAREN RPAREN | LPAREN Expression (COMMA Expression)+ RPAREN # no such thing as '1-tuple'
 
 # calling a function
 FunctionApplication ::= Expression LPAREN (Expression (COMMA Expression)*)? RPAREN
 
-UnaryOperation ::= OPERATOR Expression
-                 | Expression BACKTICK Expression
-                 | Expression OPERATOR
-                 | Expression BACKTICK Expression
-BinaryOperation ::= Expression OPERATOR Expression |
-                    Expression BACKTICK Expression BACKTICK Expression
+UnaryOperation ::= OPERATOR Expression | Expression OPERATOR
+BinaryOperation ::= Expression OPERATOR Expression
 
 VarDeclaration ::= IDENT EQUALS Expression
 
 FieldAccess ::= Expression DOT IDENT
 ArrayAccess ::= Expression LBRACK Expression RBRACK
+
+LambdaExpression ::= LambdaParamList FAT_ARROW (Expression | Block)
+LambdaParamList ::= IDENT
+                  | LPAREN RPAREN
+                  | LPAREN (IDENT | Param) (COMMA (IDENT | Param))* RPAREN
 
 IfElseExpression :: IF LPAREN Expression RPAREN Expression ELSE Expression
 
@@ -208,7 +209,7 @@ COMMA ::= /,/
 EQUALS ::= /=/
 SEMI ::= /;/
 FAT_ARROW ::= /=>/
-BACKTICK ::= /`/
+BACKTICK ::= /`/  # This will eventually be used to allow identifiers to be used like operators, but it's too complex for now
 DOT ::= /\./
 
 STRING_LITERAL ::= /"([^"]|\\")*"/

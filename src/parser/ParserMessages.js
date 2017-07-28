@@ -8,3 +8,16 @@ export const INVALID_FUNCTION_NAME = tok => `Invalid function name; expected ide
 export const INVALID_PARAMETER_LIST = 'Invalid parameter list';
 export const INVALID_FAT_ARROW = tok => `Expected '=>', found ${tok.image}`;
 export const INVALID_FUNCTION_BODY = 'Invalid function body';
+export const MISSING_CLOSE_PAREN = tok => `Missing closing parenthesis, found '${tok.image}'`;
+export const INVALID_PARAMETER_TYPE = 'Invalid parameter type';
+export const INVALID_PARAMETER_NAME = tok => `Invalid parameter name; expected identifier, found '${tok.image}'`;
+export const INVALID_EXPRESSION = 'Invalid expression';
+export const MISSING_CLOSE_BRACE = tok => `Missing closing brace, found '${tok.image}'`;
+export const INVALID_FIELD_TYPE = 'Invalid field type';
+export const INVALID_FIELD_NAME = tok => `Invalid field name; expected identifier, found '${tok.image}'`;
+export const STRUCT_FIELD_NO_NEW_LINE = 'Struct fields must be followed by a new line or semicolon';
+export const INVALID_TYPE = 'Invalid type';
+export const FUNCTION_TYPE_MISSING_COMMA = tok => `Missing comma in function type, found '${tok.image}'`;
+export const FUNCTION_TYPE_MISSING_FAT_ARROW = tok => `Missing token in function type; expected '=>', found '${tok.image}'`;
+export const FUNCTION_TYPE_INVALID_RETURN_TYPE = 'Invalid return type in function type';
+export const TUPLE_TYPE_MISSING_COMMA = tok => `Missing comma in tuple type, found '${tok.image}'`;
