@@ -84,7 +84,7 @@ Statement ::= Expression |
 # - foreach (iterating iterables)
 # - while (check-first simple loop)
 # - do-while (check-after simple loop)
-ForEachStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
+ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
 WhileStatement ::= WHILE LPAREN Expression RPAREN Block
 DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
 # Other statements:

@@ -859,8 +859,145 @@ export default class Parser {
             return new AST.Statement({ throw: inner });
         } else if (inner = this.acceptReturnStatement(tok)) {
             return new AST.Statement({ return: inner });
+        } else if (inner = this.acceptBreakStatement(tok)) {
+            return new AST.Statement({ break: inner });
         } else {
             throw new ParserError(mess.INVALID_STATEMENT, tok.startLine, tok.startColumn);
         }
+    }
+
+    /**
+     * ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
+     */
+    acceptForStatement(tok) {
+        if (tok.type !== 'FOR') return false;
+        const openParenToken = this.expectNextToken('LPAREN', mess.FOR_MISSING_OPEN_PAREN);
+        const iterVarToken = this.expectNextToken('IDENT', mess.FOR_INVALID_ITER_IDENT);
+        const inToken = this.expectNextToken('IN', mess.FOR_MISSING_IN);
+        const iterableExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const closeParenToken = this.expectNextToken('RPAREN', mess.FOR_MISSING_CLOSE_PAREN);
+        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        return new AST.ForStatement({
+            forToken: tok,
+            openParenToken,
+            iterVarToken,
+            inToken,
+            iterableExp,
+            closeParenToken,
+            body,
+        });
+    }
+
+    /**
+     * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
+     */
+    acceptWhileStatement(tok) {
+        if (tok.type !== 'WHILE') return false;
+        const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
+        const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const closeParenToken = this.expectNextToken('RPAREN', mess.WHILE_MISSING_CLOSE_PAREN);
+        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        return new AST.WhileStatement({
+            whileToken: tok,
+            openParenToken,
+            conditionExp,
+            closeParenToken,
+            body,
+        });
+    }
+
+    /**
+     * DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
+     */
+    acceptDoWhileStatement(tok) {
+        if (tok.type !== 'DO') return false;
+        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const whileToken = this.expectNextToken('WHILE', mess.DO_WHILE_MISSING_WHILE);
+        const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
+        const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const closeParenToken = this.expectNextToken('RPAREN', mess.WHILE_MISSING_CLOSE_PAREN);
+        return new AST.DoWhileStatement({
+            doToken: tok,
+            body,
+            whileToken,
+            openParenToken,
+            conditionExp,
+            closeParenToken,
+        });
+    }
+
+    /**
+     * TryCatchStatement ::= TRY Block (CATCH LPAREN Paren RPAREN Block)+ (FINALLY Block)?
+     */
+    acceptTryCatchStatement(tok) {
+        if (tok.type !== 'TRY') return false;
+        const tryBody = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const catches = [];
+        // at least one catch block
+        let catchToken = this.expectNextToken('CATCH', mess.TRY_CATCH_MISSING_CATCH);
+        let openParenToken = this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN);
+        let catchParam = this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM);
+        let closeParenToken = this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN);
+        let catchBlock = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        catches.push({ catchToken, openParenToken, catchParam, closeParenToken, catchBlock });
+        // potentially more
+        while (this.tokenizer.peek().type === 'CATCH') {
+            catchToken = this.tokenizer.next().value;
+            openParenToken = this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN);
+            catchParam = this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM);
+            closeParenToken = this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN);
+            catchBlock = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+            catches.push({ catchToken, openParenToken, catchParam, closeParenToken, catchBlock });
+        }
+        // potential finally
+        let finallyToken;
+        let finallyBlock;
+        if (this.tokenizer.peek().type === 'FINALLY') {
+            finallyToken = this.tokenizer.next().value;
+            finallyBlock = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        }
+        return new AST.TryCatchStatement({
+            tryToken: tok,
+            tryBody,
+            catches,
+            finallyToken,
+            finallyBlock,
+        });
+    }
+
+    /**
+     * ThrowStatement ::= THROW Expression
+     */
+    acceptThrowStatement(tok) {
+        if (tok.type !== 'THROW') return false;
+        return new AST.ThrowStatement({
+            throwToken: tok,
+            exp: this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION),
+        });
+    }
+
+    /**
+     * ReturnStatement ::= RETURN Expression?
+     */
+    acceptReturnStatement(tok) {
+        if (tok.type !== 'RETURN') return false;
+        let exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        if (!exp) exp = undefined;
+        return new AST.ReturnStatement({
+            returnToken: tok,
+            exp,
+        });
+    }
+
+    /**
+     * BreakStatement ::= BREAK INTEGER_LITERAL?
+     */
+    acceptBreakStatement(tok) {
+        if (tok.type !== 'BREAK') return false;
+        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' ? this.tokenizer.next().value : undefined;
+        return new AST.BreakStatement({
+            breakToken: tok,
+            loopNumber,
+        });
     }
 }
