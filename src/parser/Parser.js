@@ -310,7 +310,7 @@ export default class Parser {
      */
     acceptType(tok) {
         let typeNode;
-        // handle built-in types
+        // handle single-token types
         switch (tok.type) {
             case 'U8': typeNode = new AST.Type({ builtIn: tok }); break;
             case 'I8': typeNode = new AST.Type({ builtIn: tok }); break;
@@ -336,7 +336,7 @@ export default class Parser {
             case 'IDENT': typeNode = new AST.Type({ name: tok }); break;
             default: break;
         }
-        // handle alternative types
+        // handle complex types
         let type;
         if (type = this.acceptStructType(tok)) typeNode = new AST.Type({ structType: type });
         else if (type = this.acceptFunctionType(tok)) typeNode = new AST.Type({ functionType: type }); // TODO: tuple type will register as invalid function type
@@ -461,10 +461,9 @@ export default class Parser {
             let outer;
             if (outer = this.tryFunctionApplication(exp)) {
                 exp = new AST.Expression({ functionApplication: outer });
-            } else if (outer = this.tryPostfixExpression(exp)) {
-                exp = new AST.Expression({ unary: outer });
-            } else if (outer = this.tryBinaryExpression(exp)) {
-                exp = new AST.Expression({ binary: outer });
+            } else if (outer = this.tryBinaryOrPostfixExpression(exp)) {
+                if (outer instanceof AST.BinaryExpression) exp = new AST.Expression({ binary: outer });
+                else exp = new AST.Expression({ unary: outer });
             } else if (outer = this.tryFieldAccess(exp)) {
                 exp = new AST.Expression({ fieldAccess: outer });
             } else if (outer = this.tryArrayAccess(exp)) {
@@ -581,5 +580,287 @@ export default class Parser {
             types,
             closeParenToken: this.tokenizer.next().value,
         });
+    }
+
+    /**
+     * VarDeclaration ::= IDENT EQUALS Expression
+     */
+    acceptVarDeclaration(tok) {
+        if (tok.type !== 'IDENT') return false;
+        const equalsToken = this.expectNextToken('EQUALS', mess.INVALID_VAR_DECLARATION);
+        const initialValue = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_INITIAL_VALUE);
+        return new AST.VarDeclaration({
+            varIdentToken: tok,
+            equalsToken,
+            initialValue,
+        });
+    }
+
+    /**
+     * LambdaExpression ::= LambdaParamList FAT_ARROW (Expression | Block)
+     */
+    acceptLambdaExpression(tok) {
+        const paramList = this.acceptLambdaParamList(tok);
+        if (!paramList) return false;
+        const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_LAMBDA_EXPRESSION_MISSING_FAT_ARROW);
+        let body = this.acceptExpression(tok);
+        if (!body) body = this.acceptBlock(tok);
+        if (!body) throw new ParserError(mess.INVALID_LAMBDA_EXPRESSION_BODY, tok.startLine, tok.startColumn);
+        return new AST.LambdaExpression({
+            paramList,
+            fatArrowToken,
+            body,
+        });
+    }
+
+    /**
+     * LambdaParamList ::= IDENT
+     *                   | LPAREN RPAREN
+     *                   | LPAREN (IDENT | Param) (COMMA (IDENT | Param))* RPAREN
+     */
+    acceptLambdaParamList(tok) {
+        if (tok.type === 'IDENT') return new AST.LambdaParamList({ params: [tok] });
+        if (tok.type !== 'LPAREN') return false;
+        if (this.tokenizer.peek().type === 'RPAREN') {
+            return new AST.LambdaParamList({
+                openParenToken: tok,
+                params: [],
+                closeParenToken: this.tokenizer.next().value,
+            });
+        }
+        const params = [];
+        let param = this.expectNextToken('IDENT');
+        if (!param) param = this.parseNextToken(t => this.acceptParam(t), mess.INVALID_LAMBDA_PARAM);
+        params.push(param);
+        while (this.tokenizer.peek().type !== 'RPAREN') {
+            param = null;
+            const commaToken = this.expectNextToken('COMMA', mess.LAMBDA_MISSING_COMMA);
+            param = this.expectNextToken('IDENT');
+            if (!param) param = this.parseNextToken(t => this.acceptParam(t), mess.INVALID_LAMBDA_PARAM);
+            param.commaToken = commaToken;
+            params.push(param);
+        }
+        return new AST.LambdaParamList({
+            openParenToken: tok,
+            params,
+            closeParenToken: this.tokenizer.next().value,
+        });
+    }
+
+    /**
+     * ArrayLiteral ::= LBRACK (Expression (COMMA Expression)*)? RBRACK
+     */
+    acceptArrayLiteral(tok) {
+        if (tok.type !== 'LBRACK') return false;
+        const items = [];
+        let first = true;
+        while (this.tokenizer.peek().type !== 'RBRACK') {
+            let commaToken;
+            if (first) first = false;
+            else commaToken = this.expectNextToken('COMMA', mess.ARRAY_LITERAL_MISSING_COMMA);
+            const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+            if (commaToken) exp.commaToken = commaToken;
+            items.push(exp);
+        }
+        return new AST.ArrayLiteral({
+            openBracketToken: tok,
+            items,
+            closeBracketToken: this.tokenizer.next().value,
+        });
+    }
+
+    /**
+     * StructLiteral ::= LBRACE (IDENT COLON Expression (COMMA IDENT COLON Expression)*)? RBRACE
+     */
+    acceptStructLiteral(tok) {
+        if (tok.type !== 'LBRACE') return false;
+        const items = [];
+        let first = true;
+        while (this.tokenizer.peek().type !== 'RBRACE') {
+            let commaToken;
+            if (first) first = false;
+            else commaToken = this.expectNextToken('COMMA', mess.STRUCT_LITERAL_MISSING_COMMA);
+            const keyToken = this.expectNextToken('IDENT', mess.STRUCT_LITERAL_MISSING_KEY);
+            const colonToken = this.expectNextToken('COLON', mess.STRUCT_LITERAL_MISSING_COLON);
+            const value = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+            items.push({
+                commaToken,
+                keyToken,
+                colonToken,
+                value,
+            });
+        }
+        return new AST.StructLiteral({
+            openBrackeToken: tok,
+            items,
+            closeBrackeToken: this.tokenizer.next().value,
+        });
+    }
+
+    /**
+     * TupleLiteral ::= LPAREN RPAREN | LPAREN Expression (COMMA Expression)+ RPAREN
+     */
+    acceptTupleLiteral(tok) {
+        if (tok.type !== 'LPAREN') return false;
+        const items = [];
+        let first = true;
+        while (this.tokenizer.peek().type !== 'RPAREN') {
+            let commaToken;
+            if (first) first = false;
+            else commaToken = this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA);
+            const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+            if (commaToken) exp.commaToken = commaToken;
+            items.push(exp);
+        }
+        if (items.length === 1) {
+            return new AST.Expression({
+                openParenToken: tok,
+                innerExpression: items[0],
+                closeParenToken: this.tokenizer.next().value,
+            });
+        }
+        return new AST.TupleLiteral({
+            openParenToken: tok,
+            items,
+            closeParenToken: this.tokenizer.next().value,
+        });
+    }
+
+    /**
+     * IfElseExpression :: IF LPAREN Expression RPAREN Expression ELSE Expression
+     */
+    acceptIfElseExpression(tok) {
+        if (tok.type !== 'IF') return false;
+        const openParenToken = this.expectNextToken('LPAREN', mess.IF_MISSING_OPEN_PAREN);
+        const condition = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const closeParenToken = this.expectNextToken('RPAREN', mess.IF_MISSING_CLOSE_PAREN);
+        const consequent = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const elseToken = this.expectNextToken('ELSE', mess.IF_MISSING_ELSE);
+        const alternate = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        return new AST.IfElseExpression({
+            ifToken: tok,
+            openParenToken,
+            condition,
+            closeParenToken,
+            consequent,
+            elseToken,
+            alternate,
+        });
+    }
+
+    /**
+     * PrefixExpression ::= OPERATOR Expression
+     */
+    acceptPrefixExpression(tok) {
+        if (tok.type !== 'OPERATOR') return false;
+        const target = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        return new AST.UnaryExpression({
+            prefix: true,
+            operatorToken: tok,
+            target,
+        });
+    }
+
+    /**
+     * FunctionApplication ::= Expression LPAREN (Expression (COMMA Expression)*)? RPAREN
+     */
+    tryFunctionApplication(target) {
+        if (this.tokenizer.peek().type !== 'LPAREN') return false;
+        const openParenToken = this.tokenizer.next().value;
+        const paramValues = [];
+        let first = true;
+        while (this.tokenizer.peek().type !== 'RPAREN') {
+            let commaToken;
+            if (first) first = false;
+            else commaToken = this.expectNextToken('COMMA', mess.FUNCTION_APPLICATION_MISSING_COMMA);
+            const value = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+            if (commaToken) value.commaToken = commaToken;
+            paramValues.push(value);
+        }
+        return new AST.FunctionApplication({
+            target,
+            openParenToken,
+            paramValues,
+            closeParenToken: this.tokenizer.next().value,
+        });
+    }
+
+    /**
+     * BinaryExpression ::= Expression OPERATOR Expression
+     * PostfixExpression ::= Expression OPERATOR
+     */
+    tryBinaryOrPostfixExpression(left) {
+        const operatorToken = this.tokenizer.peek();
+        if (operatorToken.type !== 'OPERATOR') return false;
+        this.tokenizer.next();
+        const right = this.parseNextToken(t => this.acceptExpression(t));
+        if (right) {
+            return new AST.BinaryExpression({
+                left,
+                operatorToken,
+                right,
+            });
+        }
+        return new AST.UnaryExpression({
+            prefix: false,
+            operatorToken,
+            target: left,
+        });
+    }
+
+    /**
+     * FieldAccess ::= Expression DOT IDENT
+     */
+    tryFieldAccess(target) {
+        if (this.tokenizer.peek().type !== 'DOT') return false;
+        const dotToken = this.tokenizer.next().value;
+        const fieldIdentToken = this.expectNextToken('IDENT', mess.FIELD_ACCESS_INVALID_FIELD_NAME);
+        return new AST.FieldAccess({
+            target,
+            dotToken,
+            fieldIdentToken,
+        });
+    }
+
+    /**
+     * ArrayAccess ::= Expression LBRACK Expression RBRACK
+     */
+    tryArrayAccess(target) {
+        if (this.tokenizer.peek().type !== 'LBRACK') return false;
+        const openBracketToken = this.tokenizer.next().value;
+        const indexExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+        const closeBracketToken = this.expectNextToken('RBRACK', mess.ARRAY_ACCESS_MISSING_CLOSE_BRACKET);
+        return new AST.ArrayAccess({ target, openBracketToken, indexExp, closeBracketToken });
+    }
+
+    /**
+     * Statement ::= Expression |
+     *               ForStatement |
+     *               WhileStatement |
+     *               DoWhileStatement |
+     *               TryCatchStatement |
+     *               ReturnStatement |
+     *               ThrowStatement |
+     *               BreakStatement
+     */
+    acceptStatement(tok) {
+        let inner;
+        if (inner = this.acceptExpression(tok)) {
+            return new AST.Statement({ exp: inner });
+        } else if (inner = this.acceptForStatement(tok)) {
+            return new AST.Statement({ for: inner });
+        } else if (inner = this.acceptWhileStatement(tok)) {
+            return new AST.Statement({ while: inner });
+        } else if (inner = this.acceptDoWhileStatement(tok)) {
+            return new AST.Statement({ doWhile: inner });
+        } else if (inner = this.acceptTryCatchStatement(tok)) {
+            return new AST.Statement({ tryCatch: inner });
+        } else if (inner = this.acceptThrowStatement(tok)) {
+            return new AST.Statement({ throw: inner });
+        } else if (inner = this.acceptReturnStatement(tok)) {
+            return new AST.Statement({ return: inner });
+        } else {
+            throw new ParserError(mess.INVALID_STATEMENT, tok.startLine, tok.startColumn);
+        }
     }
 }

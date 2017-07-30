@@ -84,8 +84,7 @@ Statement ::= Expression |
 # - foreach (iterating iterables)
 # - while (check-first simple loop)
 # - do-while (check-after simple loop)
-ForStatement ::= FOR LPAREN (VarDeclaration (COMMA VarDeclaration)*)? SEMI (Expression (COMMA Expression)*)? SEMI (Expression (COMMA Expression)*)? RPAREN Block
-ForEachStatement ::= FOREACH LPAREN IDENT IN Expression RPAREN Block
+ForEachStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
 WhileStatement ::= WHILE LPAREN Expression RPAREN Block
 DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
 # Other statements:
@@ -207,7 +206,6 @@ LBRACK ::= /\[/
 RBRACK ::= /\]/
 COMMA ::= /,/
 EQUALS ::= /=/
-SEMI ::= /;/
 FAT_ARROW ::= /=>/
 BACKTICK ::= /`/  # This will eventually be used to allow identifiers to be used like operators, but it's too complex for now
 DOT ::= /\./
