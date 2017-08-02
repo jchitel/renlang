@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 import parse from './parser';
+import typecheck from './typecheck';
 import translate from './translator';
 import interpret from './interpreter';
 
@@ -10,8 +11,10 @@ import interpret from './interpreter';
 const contents = readFileSync(resolve(process.argv[2]));
 // parse them
 const parsed = parse(contents);
-// translate the parse result to IR
-const translated = translate(parsed);
+// type check the parsed result
+const checked = typecheck(parsed);
+// translate the type checker result to IR
+const translated = translate(checked);
 // execute the IR in the interpreter and get the result of the program
 const result = interpret(translated);
 // write the result to stdout
