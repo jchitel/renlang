@@ -578,31 +578,9 @@ export default class Parser {
      * If it does not match either a tuple or an expression, then we proceed with the lambda parse starting with the param list.
      */
     acceptLambdaExpressionOrTupleLiteral(tok) {
-        const tuple = this.acceptTupleLiteral(tok);
-        let paramList;
-        if (tuple) {
-            if (this.tokenizer.peek().type !== 'FAT_ARROW') return tuple;
-            // this *can* be a lambda expression, check it
-            if (tuple instanceof AST.Expression && tuple.innerExpression.identToken) {
-                const param = new AST.LambdaParam({ identifierToken: tuple.innerExpression.identToken }, [tuple.innerExpression.identToken]);
-                paramList = new AST.LambdaParamList({
-                    openParenToken: tuple.openParenToken,
-                    params: [param],
-                    commaTokens: [],
-                    closeParenToken: tuple.closeParenToken,
-                }, [tuple.openParenToken, param, tuple.closeParenToken]);
-            } else if (tuple instanceof AST.TupleLiteral && tuple.items.every(i => i.identToken)) {
-                const params = tuple.items.map(i => new AST.LambdaParam({ identifierToken: i.identToken }, [i.identToken]));
-                paramList = new AST.LambdaParamList({
-                    openParenToken: tuple.openParenToken,
-                    params,
-                    commaTokens: tuple.commaTokens,
-                    closeParenToken: tuple.closeParenToken,
-                }, [tuple.openParenToken, ...interleave(params, tuple.commaTokens), tuple.closeParenToken]);
-            } else return tuple;
-        }
-        // not a tuple literal, might be a single implicit param
-        if (!paramList) paramList = this.acceptLambdaParamList(tok);
+        const tuple = this.acceptTupleLiteralOrLambdaParamList(tok);
+        if (tuple instanceof AST.TupleLiteral || tuple instanceof AST.Expression) return tuple;
+        const paramList = tuple;
         if (!paramList) return false;
         // if there is only one parameter and it is non-parenthesized, it could still be something else
         if (paramList.children.length === 1 && this.tokenizer.peek().type !== 'FAT_ARROW') return false;
@@ -613,30 +591,74 @@ export default class Parser {
     }
 
     /**
+     * TupleLiteral ::= LPAREN RPAREN | LPAREN Expression (COMMA Expression)+ RPAREN
      * LambdaParamList ::= IDENT
      *                   | LPAREN RPAREN
      *                   | LPAREN LambdaParam (COMMA LambdaParam)* RPAREN
      */
-    acceptLambdaParamList(tok) {
+    acceptTupleLiteralOrLambdaParamList(tok) {
+        // single identifier is params list
         if (tok.type === 'IDENT') return new AST.LambdaParamList({ params: [tok] }, [tok]);
         if (tok.type !== 'LPAREN') return false;
-        if (this.tokenizer.peek().type === 'RPAREN') {
-            const closeParenToken = this.tokenizer.next().value;
-            return new AST.LambdaParamList({ openParenToken: tok, params: [], closeParenToken }, [tok, closeParenToken]);
-        }
-        const params = [], commaTokens = [];
-        params.push(this.parseNextToken(t => this.acceptLambdaParam(t), mess.INVALID_LAMBDA_PARAM));
+        const items = [], commaTokens = [];
+        let first = true;
         while (this.tokenizer.peek().type !== 'RPAREN') {
-            commaTokens.push(this.expectNextToken('COMMA', mess.LAMBDA_MISSING_COMMA));
-            params.push(this.parseNextToken(t => this.acceptLambdaParam(t), mess.INVALID_LAMBDA_PARAM));
+            if (first) first = false;
+            else commaTokens.push(this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA));
+            // try to get a param
+            const next = this.tokenizer.next().value;
+            const param = this.acceptLambdaParam(next);
+            if (param) {
+                items.push(param);
+            } else {
+                const exp = this.acceptExpression(next);
+                items.push(exp);
+            }
         }
         const closeParenToken = this.tokenizer.next().value;
-        return new AST.LambdaParamList({
-            openParenToken: tok,
-            params,
-            commaTokens,
-            closeParenToken,
-        }, [tok, ...interleave(params, commaTokens), closeParenToken]);
+        /**
+         * Determine what it is:
+         * ? Next is FAT_ARROW
+         * 1. list of all lambda params = LambdaParamList
+         * 2. empty list = LambdaParamList
+         * 3. everything else = ERROR
+         * ? Next is not FAT_ARROW
+         * 1. one expression = Expression
+         * 2. list of all expressions = TupleLiteral
+         * 3. empty list = TupleLiteral
+         * 4. everything else = ERROR
+         */
+        const peek = this.tokenizer.peek();
+        if (peek.type === 'FAT_ARROW') {
+            // has to be a valid param list, otherwise it's an error
+            if (items.every(i => i instanceof AST.LambdaParam)) {
+                return new AST.LambdaParamList({
+                    openParenToken: tok,
+                    params: items,
+                    commaTokens,
+                    closeParenToken,
+                }, [tok, ...interleave(items, commaTokens), closeParenToken]);
+            } else {
+                throw new ParserError(mess.INVALID_LAMBDA_PARAM, tok.line, tok.column);
+            }
+        } else {
+            if (items.length === 1 && items[0] instanceof AST.Expression) {
+                return new AST.Expression({
+                    openParenToken: tok,
+                    innerExpression: items[0],
+                    closeParenToken,
+                }, [tok, items[0], closeParenToken]);
+            } else if (items.length === 0 || items.every(i => i instanceof AST.Expression)) {
+                return new AST.TupleLiteral({
+                    openParenToken: tok,
+                    items,
+                    commaTokens,
+                    closeParenToken,
+                }, [tok, ...interleave(items, commaTokens), closeParenToken]);
+            } else {
+                throw new ParserError(mess.INVALID_EXPRESSION, peek.line, peek.column);
+            }
+        }
     }
 
     /**
@@ -644,6 +666,7 @@ export default class Parser {
      */
     acceptLambdaParam(tok) {
         const type = this.acceptType(tok);
+        if (!type) return false;
         if (type.name && this.tokenizer.peek().type !== 'IDENT') {
             // if the type is an identifier and an identifier does not follow it, then it is an implicit parameter
             return new AST.LambdaParam({ identifierToken: type.name }, [type.name]);
@@ -696,34 +719,6 @@ export default class Parser {
             commaTokens,
             closeBraceToken,
         }, [tok, ...interleave(keyTokens, colonTokens, values, commaTokens), closeBraceToken]);
-    }
-
-    /**
-     * TupleLiteral ::= LPAREN RPAREN | LPAREN Expression (COMMA Expression)+ RPAREN
-     */
-    acceptTupleLiteral(tok) {
-        if (tok.type !== 'LPAREN') return false;
-        const items = [], commaTokens = [];
-        let first = true;
-        while (this.tokenizer.peek().type !== 'RPAREN') {
-            if (first) first = false;
-            else commaTokens.push(this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA));
-            items.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
-        }
-        const closeParenToken = this.tokenizer.next().value;
-        if (items.length === 1) {
-            return new AST.Expression({
-                openParenToken: tok,
-                innerExpression: items[0],
-                closeParenToken,
-            }, [tok, items[0], closeParenToken]);
-        }
-        return new AST.TupleLiteral({
-            openParenToken: tok,
-            items,
-            commaTokens,
-            closeParenToken,
-        }, [tok, ...interleave(items, commaTokens), closeParenToken]);
     }
 
     /**

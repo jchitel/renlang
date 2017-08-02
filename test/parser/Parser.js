@@ -509,6 +509,35 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
         });
     });
 
+    it('should parse single-explicit-parameter lambda expressions', () => {
+        const parsed = parser.parse('export v = (int a) => 1');
+        const exp = parsed.toTree().children[0].children[3];
+        expect(exp).to.eql({
+            type: 'Expression',
+            children: [{
+                type: 'LambdaExpression',
+                children: [
+                    {
+                        type: 'LambdaParamList',
+                        children: [
+                            { type: 'LPAREN', image: '(' },
+                            {
+                                type: 'LambdaParam',
+                                children: [
+                                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                                    { type: 'IDENT', image: 'a' },
+                                ],
+                            },
+                            { type: 'RPAREN', image: ')' },
+                        ],
+                    },
+                    { type: 'FAT_ARROW', image: '=>' },
+                    { type: 'Expression', children: [{ type: 'INTEGER_LITERAL', image: '1' }] },
+                ],
+            }],
+        });
+    });
+
     it('should parse identifier expression', () => {
         const parsed = parser.parse('export v = a');
         const exp = parsed.toTree().children[0].children[3];
