@@ -60,7 +60,7 @@ describe('NewLineCheckIterator', () => {
             column: 1,
             image: 'anew',
             value: null,
-            hasNewLine: false,
+            hasNewLine: true, // EOF counts as a new line
         }]);
     });
 });

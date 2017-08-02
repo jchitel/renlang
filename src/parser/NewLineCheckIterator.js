@@ -4,7 +4,7 @@ import LookaheadIterator from './LookaheadIterator';
 /**
  * This iterator is designed to wrap around a LookaheadIterator that is correspondingly wrapped around a tokenizer.
  * Its job is to look for new line tokens and handle their semantics.
- * For each token peeked at or iterated, if the one that follows it is a new line, a 'hasNewLine' flag is set to true.
+ * For each token peeked at or iterated, if the one that follows it is a new line (or the end of the file), a 'hasNewLine' flag is set to true.
  * Also, each new line token that is peeked or iterated is dropped.
  */
 export default class NewLineCheckIterator {
@@ -28,7 +28,7 @@ export default class NewLineCheckIterator {
             // if the value is a new line, skip it
             if (next.value.type === 'NEWLINE') continue;
             // set the flag value and return it
-            if (peek) next.value.hasNewLine = peek.type === 'NEWLINE';
+            if (peek) next.value.hasNewLine = peek.type === 'NEWLINE' || peek.type === 'EOF';
             return next;
         }
     }
@@ -50,7 +50,7 @@ export default class NewLineCheckIterator {
                 continue;
             }
             // set the flag and add the value
-            if (peek2) peek1.hasNewLine = peek2.type === 'NEWLINE';
+            if (peek2) peek1.hasNewLine = peek2.type === 'NEWLINE' || peek2.type === 'EOF';
             values.push(peek1);
         }
         // we have as many values as we need

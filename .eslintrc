@@ -23,6 +23,7 @@
     "no-empty": 0,
     "no-lonely-if": 0,
     "no-loop-func": 0,
+    "no-mixed-operators": 0,
     "no-nested-ternary": 0,
     "no-param-reassign": 0,
     "no-plusplus": 0,
