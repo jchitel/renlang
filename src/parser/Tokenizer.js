@@ -30,46 +30,48 @@ export default class Tokenizer {
 
     // reserved language keywords, any identifier that matches one of these is registered as a keyword instead
     static KEYWORD_TOKENS = [
-        'as',      // used for renaming imports
-        'bool',    // boolean type name
-        'break',   // statement to break from a loop
-        'byte',    // byte type name (alias of u8)
-        'catch',   // denotes a catch block in a try-catch block
-        'char',    // character type name
-        'default', // used to declare a default export, also for a default case in a pattern match block
-        'do',      // denotes the start of a do-while loop
-        'double',  // double type name (alias for f64)
-        'else',    // denotes the start of an else clause
-        'export',  // declares a module export
-        'f32',     // 32-bit floating point type (equivalent to 'float')
-        'f64',     // 64-bit floating point type (equivalent to 'double')
-        'finally', // denotes a finally block in a try-catch-finally block
-        'float',   // float type name (alias for f32)
-        'for',     // denotes the start of a classic for loop
-        'foreach', // denotes the start of an iterator loop
-        'from',    // used in import and export declarations to specify the name of another module
-        'func',    // denotes a named function declaration
-        'i16',     // 16 bit signed integer type
-        'i32',     // 32 bit signed integer type (equivalent to 'int')
-        'i64',     // 64 bit signed integer type (equivalent to 'long')
-        'i8',      // 8 bit signed integer type
-        'if',      // denotes the start of an if block
-        'import',  // declares a module import
-        'int',     // int type name (alias for i32)
-        'integer', // integer type name (true integer, infinite capacity)
-        'long',    // long type name (alias for i64)
-        'return',  // denotes a return statement to return a value from a function
-        'short',   // short type name (alias for u16)
-        'string',  // string type name
-        'throw',   // denotes a throw statement to throw an exception from a function
-        'try',     // denotes the start of a try-catch block
-        'type',    // denotes the start of a type declaration
-        'u16',     // 16 bit unsigned integer type (equivalent to 'short')
-        'u32',     // 32 bit unsigned integer type
-        'u64',     // 64 bit unsigned integer type
-        'u8',      // 8 bit unsigned integer type (equivalent to 'byte')
-        'void',    // return type of functions, indicates no value is returned (alias for '()')
-        'while',   // denotes the start of a while loop
+        'as',       // used for renaming imports
+        'bool',     // boolean type name
+        'break',    // statement to break from a loop
+        'byte',     // byte type name (alias of u8)
+        'catch',    // denotes a catch block in a try-catch block
+        'char',     // character type name
+        'continue', // statement to skip to the next iteration of a loop
+        'default',  // used to declare a default export, also for a default case in a pattern match block
+        'do',       // denotes the start of a do-while loop
+        'double',   // double type name (alias for f64)
+        'else',     // denotes the start of an else clause
+        'export',   // declares a module export
+        'f32',      // 32-bit floating point type (equivalent to 'float')
+        'f64',      // 64-bit floating point type (equivalent to 'double')
+        'finally',  // denotes a finally block in a try-catch-finally block
+        'float',    // float type name (alias for f32)
+        'for',      // denotes the start of a classic for loop
+        'foreach',  // denotes the start of an iterator loop
+        'from',     // used in import and export declarations to specify the name of another module
+        'func',     // denotes a named function declaration
+        'i16',      // 16 bit signed integer type
+        'i32',      // 32 bit signed integer type (equivalent to 'int')
+        'i64',      // 64 bit signed integer type (equivalent to 'long')
+        'i8',       // 8 bit signed integer type
+        'if',       // denotes the start of an if block
+        'import',   // declares a module import
+        'in',       // separates iterator variable and iterable expression in for statements
+        'int',      // int type name (alias for i32)
+        'integer',  // integer type name (true integer, infinite capacity)
+        'long',     // long type name (alias for i64)
+        'return',   // denotes a return statement to return a value from a function
+        'short',    // short type name (alias for u16)
+        'string',   // string type name
+        'throw',    // denotes a throw statement to throw an exception from a function
+        'try',      // denotes the start of a try-catch block
+        'type',     // denotes the start of a type declaration
+        'u16',      // 16 bit unsigned integer type (equivalent to 'short')
+        'u32',      // 32 bit unsigned integer type
+        'u64',      // 64 bit unsigned integer type
+        'u8',       // 8 bit unsigned integer type (equivalent to 'byte')
+        'void',     // return type of functions, indicates no value is returned (alias for '()')
+        'while',    // denotes the start of a while loop
     ];
 
     // reserved syntactic symbols, no operator can contain these (except =)

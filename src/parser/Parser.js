@@ -45,7 +45,6 @@ export default class Parser {
      * from the input. Throw 'message' if the parse fails.
      */
     parseNextToken(parseFunc, message) {
-        if (this.tokenizer.peek().type === 'EOF') return false;
         const token = this.tokenizer.next().value;
         const parsed = parseFunc(token);
         if (!parsed && message) throw new ParserError(message, token.line, token.column);
@@ -93,7 +92,7 @@ export default class Parser {
         for (const c of this.tokenizer) {
             let node;
             if (node = this.acceptImportDeclaration(c)) {
-                if (functions.length || types.length) throw new ParserError(mess.IMPORT_AFTER_DECL, node.line, node.column);
+                if (functions.length || types.length || exports.length) throw new ParserError(mess.IMPORT_AFTER_DECL, c.line, c.column);
                 imports.push(node);
                 children.push(node);
             } else if (node = this.acceptFunctionDeclaration(c)) {
@@ -107,13 +106,12 @@ export default class Parser {
                 children.push(node);
             } else if (c.type === 'EOF') {
                 children.push(c);
+                if (children.length === 1) throw new ParserError(mess.EMPTY_FILE, 1, 1);
                 return new AST.Program({ imports, functions, types, exports }, children);
             } else {
                 throw new ParserError(mess.INVALID_PROGRAM(c), c.line, c.column);
             }
         }
-        // empty program
-        throw new ParserError(mess.EMPTY_FILE, 1, 1);
     }
 
     /**
@@ -262,7 +260,7 @@ export default class Parser {
                     exportedValue,
                 }, [tok, defaultToken, exportedValue]);
             } else {
-                throw new ParserError(mess.INVALID_DEFAULT_EXPORT_VALUE, tok.line, tok.column);
+                throw new ParserError(mess.INVALID_DEFAULT_EXPORT_VALUE, next.line, next.column);
             }
         }
         if (next.type === 'IDENT') {
@@ -282,7 +280,7 @@ export default class Parser {
                         exportedValue,
                     }, [tok, exportName, equalsToken, exportedValue]);
                 } else {
-                    throw new ParserError(mess.INVALID_NAMED_EXPORT_VALUE, tok.line, tok.column);
+                    throw new ParserError(mess.INVALID_NAMED_EXPORT_VALUE, next.line, next.column);
                 }
             } else {
                 this.enforceNewLine(exportName, mess.EXPORT_NO_NEW_LINE);
@@ -292,7 +290,7 @@ export default class Parser {
                 }, [tok, exportName]);
             }
         }
-        throw new ParserError(mess.INVALID_EXPORT_DECLARATION);
+        throw new ParserError(mess.INVALID_EXPORT_DECLARATION, next.line, next.column);
     }
 
     /**
@@ -450,11 +448,11 @@ export default class Parser {
                 exp = new AST.Expression({ unary: inner }, [inner]);
             } else if (tok.type === 'LPAREN') {
                 // handle parentheses
-                if (inner = this.acceptLambdaExpressionOrTupleLiteral(tok)) {
-                    if (inner instanceof AST.LambdaExpression) exp = new AST.Expression({ lambda: inner }, [inner]);
-                    else if (inner instanceof AST.TupleLiteral) exp = new AST.Expression({ tupleLiteral: inner }, [inner]);
-                    else exp = inner; // just a parenthetical expression
-                }
+                // the below function will never return false at this location, so there is no need to verify truthiness
+                inner = this.acceptLambdaExpressionOrTupleLiteral(tok);
+                if (inner instanceof AST.LambdaExpression) exp = new AST.Expression({ lambda: inner }, [inner]);
+                else if (inner instanceof AST.TupleLiteral) exp = new AST.Expression({ tupleLiteral: inner }, [inner]);
+                else exp = inner; // just a parenthetical expression
             }
             if (!exp) return false;
         }
@@ -475,6 +473,16 @@ export default class Parser {
             }
         }
         return exp;
+    }
+
+    /**
+     * We need this function because return statements can optionally not include an expression, and the binary/postfix logic also needs to determine if there
+     * is an expression without consuming tokens.
+     * Effectively, a token can be the start of an expression iff it is a literal token, an identifier, the start of a structured literal, the start of an if
+     * expression, or the start of one of the three wacky parenthesis expressions (tuples, lambdas, paren-expressions).
+     */
+    isStartOfExpression(tok) {
+        return ['INTEGER_LITERAL', 'FLOAT_LITERAL', 'STRING_LITERAL', 'CHARACTER_LITERAL', 'IDENT', 'LBRACK', 'LBRACE', 'IF', 'OPER', 'LPAREN'].includes(tok.type);
     }
 
     /**
@@ -581,7 +589,7 @@ export default class Parser {
         const tuple = this.acceptTupleLiteralOrLambdaParamList(tok);
         if (tuple instanceof AST.TupleLiteral || tuple instanceof AST.Expression) return tuple;
         const paramList = tuple;
-        if (!paramList) return false;
+        // acceptTupleLiteralOrLambdaParamList() will always return a valid node or throw an error, it will never be false
         // if there is only one parameter and it is non-parenthesized, it could still be something else
         if (paramList.children.length === 1 && this.tokenizer.peek().type !== 'FAT_ARROW') return false;
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_LAMBDA_EXPRESSION_MISSING_FAT_ARROW);
@@ -599,7 +607,7 @@ export default class Parser {
     acceptTupleLiteralOrLambdaParamList(tok) {
         // single identifier is params list
         if (tok.type === 'IDENT') return new AST.LambdaParamList({ params: [tok] }, [tok]);
-        if (tok.type !== 'LPAREN') return false;
+        // we used to check for an LPAREN, but because of the logic leading to here, it is impossible for this not to be an LPAREN at this point
         const items = [], commaTokens = [];
         let first = true;
         while (this.tokenizer.peek().type !== 'RPAREN') {
@@ -656,7 +664,7 @@ export default class Parser {
                     closeParenToken,
                 }, [tok, ...interleave(items, commaTokens), closeParenToken]);
             } else {
-                throw new ParserError(mess.INVALID_EXPRESSION, peek.line, peek.column);
+                throw new ParserError(mess.INVALID_EXPRESSION, tok.line, tok.column);
             }
         }
     }
@@ -787,8 +795,8 @@ export default class Parser {
         const operatorToken = this.tokenizer.peek();
         if (operatorToken.type !== 'OPER') return false;
         this.tokenizer.next();
-        const right = this.parseNextToken(t => this.acceptExpression(t));
-        if (right) {
+        if (this.isStartOfExpression(this.tokenizer.peek())) {
+            const right = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
             return new AST.BinaryExpression({
                 left,
                 operatorToken,
@@ -858,6 +866,8 @@ export default class Parser {
             return new AST.Statement({ return: inner }, [inner]);
         } else if (inner = this.acceptBreakStatement(tok)) {
             return new AST.Statement({ break: inner }, [inner]);
+        } else if (inner = this.acceptContinueStatement(tok)) {
+            return new AST.Statement({ continue: inner }, [inner]);
         } else {
             return false;
         }
@@ -992,9 +1002,11 @@ export default class Parser {
      */
     acceptReturnStatement(tok) {
         if (tok.type !== 'RETURN') return false;
-        const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        if (!exp) return new AST.ReturnStatement({ returnToken: tok }, [tok]);
-        return new AST.ReturnStatement({ returnToken: tok, exp }, [tok, exp]);
+        if (this.isStartOfExpression(this.tokenizer.peek())) {
+            const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
+            return new AST.ReturnStatement({ returnToken: tok, exp }, [tok, exp]);
+        }
+        return new AST.ReturnStatement({ returnToken: tok }, [tok]);
     }
 
     /**
@@ -1005,5 +1017,15 @@ export default class Parser {
         const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
         if (!loopNumber) return new AST.BreakStatement({ breakToken: tok }, [tok]);
         return new AST.BreakStatement({ breakToken: tok, loopNumber }, [tok, loopNumber]);
+    }
+
+    /**
+     * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
+     */
+    acceptContinueStatement(tok) {
+        if (tok.type !== 'CONTINUE') return false;
+        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
+        if (!loopNumber) return new AST.ContinueStatement({ continueToken: tok }, [tok]);
+        return new AST.ContinueStatement({ continueToken: tok, loopNumber }, [tok, loopNumber]);
     }
 }

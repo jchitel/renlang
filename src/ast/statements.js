@@ -18,3 +18,5 @@ export class ThrowStatement extends ASTNode { }
 export class ReturnStatement extends ASTNode { }
 
 export class BreakStatement extends ASTNode { }
+
+export class ContinueStatement extends ASTNode { }
