@@ -196,9 +196,7 @@ export default class Parser {
         const params = this.parseNextToken(t => this.acceptParameterList(t), mess.INVALID_PARAMETER_LIST);
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_FAT_ARROW);
         const next = this.tokenizer.next().value;
-        let functionBody = this.acceptBlock(next);
-        if (!functionBody) functionBody = this.acceptExpression(next);
-        if (!functionBody) throw new ParserError(mess.INVALID_FUNCTION_BODY, next.line, next.column);
+        const functionBody = this.acceptFunctionBody(next);
         return new AST.FunctionDeclaration({
             funcToken: tok,
             returnType,
@@ -207,6 +205,23 @@ export default class Parser {
             fatArrowToken,
             functionBody,
         }, [tok, returnType, functionNameToken, params, fatArrowToken, functionBody]);
+    }
+
+    /**
+     * This is NOT a normal parser function.
+     * There is ambiguity between blocks and struct literals, but only for function bodies.
+     * So when we hit a function body, if there is an open brace, we accept a statement.
+     * Otherwise, we always want an expression before a statement.
+     */
+    acceptFunctionBody(tok) {
+        if (tok.type === 'LBRACE') {
+            return this.acceptStatement(tok);
+        } else {
+            let body = this.acceptExpression(tok);
+            if (!body) body = this.acceptStatement(tok);
+            if (!body) throw new ParserError(mess.INVALID_FUNCTION_BODY, tok.line, tok.column);
+            return body;
+        }
     }
 
     /**
@@ -327,8 +342,7 @@ export default class Parser {
                 if (type instanceof AST.FunctionType) typeNode = new AST.Type({ functionType: type }, [type]);
                 else if (type instanceof AST.TupleType) typeNode = new AST.Type({ tupleType: type }, [type]);
                 else typeNode = type; // the case of a single type in parentheses just returns a type
-            }
-            else return false;
+            } else return false;
         }
         // array types are left recursive
         let [peek1, peek2] = this.tokenizer.peek(0, 2);
@@ -464,32 +478,6 @@ export default class Parser {
     }
 
     /**
-     * Block ::= LBRACE Statement* RBRACE |
-     *           Statement
-     */
-    acceptBlock(tok) {
-        if (tok.type === 'LBRACE') {
-            const statements = [];
-            let next = this.tokenizer.next().value;
-            while (true) {
-                const statement = this.acceptStatement(next);
-                if (statement) statements.push(statement);
-                else break;
-                next = this.tokenizer.next().value;
-            }
-            this.enforceTokenType(next, 'RBRACE', mess.MISSING_CLOSE_BRACE);
-            return new AST.Block({
-                openBraceToken: tok,
-                statements,
-                closeBraceToken: next,
-            }, [tok, ...statements, next]);
-        }
-        const statement = this.acceptStatement(tok);
-        if (!statement) return false;
-        return new AST.Block({ statement }, [statement]);
-    }
-
-    /**
      * StructType ::= LBRACE (Type IDENT)* RBRACE
      */
     acceptStructType(tok) {
@@ -620,9 +608,7 @@ export default class Parser {
         if (paramList.children.length === 1 && this.tokenizer.peek().type !== 'FAT_ARROW') return false;
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_LAMBDA_EXPRESSION_MISSING_FAT_ARROW);
         const next = this.tokenizer.next().value;
-        let body = this.acceptBlock(next);
-        if (!body) body = this.acceptExpression(next);
-        if (!body) throw new ParserError(mess.INVALID_LAMBDA_EXPRESSION_BODY, next.line, next.column);
+        const body = this.acceptFunctionBody(next);
         return new AST.LambdaExpression({ paramList, fatArrowToken, body }, [paramList, fatArrowToken, body]);
     }
 
@@ -720,7 +706,6 @@ export default class Parser {
         const items = [], commaTokens = [];
         let first = true;
         while (this.tokenizer.peek().type !== 'RPAREN') {
-            let commaToken;
             if (first) first = false;
             else commaTokens.push(this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA));
             items.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
@@ -848,7 +833,8 @@ export default class Parser {
     }
 
     /**
-     * Statement ::= Expression |
+     * Statement ::= Block
+     *               Expression |
      *               ForStatement |
      *               WhileStatement |
      *               DoWhileStatement |
@@ -859,7 +845,9 @@ export default class Parser {
      */
     acceptStatement(tok) {
         let inner;
-        if (inner = this.acceptExpression(tok)) {
+        if (inner = this.acceptBlock(tok)) {
+            return new AST.Statement({ block: inner }, [inner]);
+        } else if (inner = this.acceptExpression(tok)) {
             return new AST.Statement({ exp: inner }, [inner]);
         } else if (inner = this.acceptForStatement(tok)) {
             return new AST.Statement({ for: inner }, [inner]);
@@ -876,8 +864,29 @@ export default class Parser {
         } else if (inner = this.acceptBreakStatement(tok)) {
             return new AST.Statement({ break: inner }, [inner]);
         } else {
-            throw new ParserError(mess.INVALID_STATEMENT, tok.line, tok.column);
+            return false;
         }
+    }
+
+    /**
+     * Block ::= LBRACE Statement* RBRACE
+     */
+    acceptBlock(tok) {
+        if (tok.type !== 'LBRACE') return false;
+        const statements = [];
+        let next = this.tokenizer.next().value;
+        while (true) {
+            const statement = this.acceptStatement(next);
+            if (statement) statements.push(statement);
+            else break;
+            next = this.tokenizer.next().value;
+        }
+        this.enforceTokenType(next, 'RBRACE', mess.MISSING_CLOSE_BRACE);
+        return new AST.Block({
+            openBraceToken: tok,
+            statements,
+            closeBraceToken: next,
+        }, [tok, ...statements, next]);
     }
 
     /**
@@ -890,7 +899,7 @@ export default class Parser {
         const inToken = this.expectNextToken('IN', mess.FOR_MISSING_IN);
         const iterableExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
         const closeParenToken = this.expectNextToken('RPAREN', mess.FOR_MISSING_CLOSE_PAREN);
-        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
         return new AST.ForStatement({
             forToken: tok,
             openParenToken,
@@ -910,7 +919,7 @@ export default class Parser {
         const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
         const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
         const closeParenToken = this.expectNextToken('RPAREN', mess.WHILE_MISSING_CLOSE_PAREN);
-        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
         return new AST.WhileStatement({
             whileToken: tok,
             openParenToken,
@@ -925,7 +934,7 @@ export default class Parser {
      */
     acceptDoWhileStatement(tok) {
         if (tok.type !== 'DO') return false;
-        const body = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
         const whileToken = this.expectNextToken('WHILE', mess.DO_WHILE_MISSING_WHILE);
         const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
         const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
@@ -945,25 +954,25 @@ export default class Parser {
      */
     acceptTryCatchStatement(tok) {
         if (tok.type !== 'TRY') return false;
-        const tryBody = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+        const tryBody = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
         // at least one catch block
         const catchTokens = [this.expectNextToken('CATCH', mess.TRY_CATCH_MISSING_CATCH)];
         const openParenTokens = [this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN)];
         const catchParams = [this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM)];
         const closeParenTokens = [this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN)];
-        const catchBlocks = [this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT)];
+        const catchBlocks = [this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT)];
         // potentially more
         while (this.tokenizer.peek().type === 'CATCH') {
             catchTokens.push(this.tokenizer.next().value);
             openParenTokens.push(this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN));
             catchParams.push(this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM));
             closeParenTokens.push(this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN));
-            catchBlocks.push(this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT));
+            catchBlocks.push(this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT));
         }
         // potential finally
         if (this.tokenizer.peek().type === 'FINALLY') {
             const finallyToken = this.tokenizer.next().value;
-            const finallyBlock = this.parseNextToken(t => this.acceptBlock(t), mess.INVALID_STATEMENT);
+            const finallyBlock = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
             return new AST.TryCatchStatement({ tryToken: tok, tryBody, catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks, finallyToken, finallyBlock },
                 [tok, tryBody, ...interleave(catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks), finallyToken, finallyBlock]);
         }

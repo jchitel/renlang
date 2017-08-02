@@ -1,7 +1,6 @@
 import { expect } from 'chai';
 
 import Parser from '../../src/parser/Parser';
-import ParserError from '../../src/parser/ParserError';
 import Tokenizer from '../../src/parser/Tokenizer';
 import LookaheadIterator from '../../src/parser/LookaheadIterator';
 
@@ -57,7 +56,7 @@ describe('Parser', () => {
         } catch (err) {
             const { message, startLine, startColumn, endLine, endColumn } = err;
             expect({ message, startLine, startColumn, endLine, endColumn })
-                .to.eql({ message: "Fail (Line 1, Column 5)", startLine: 1, startColumn: 5, endLine: 1, endColumn: 5 });
+                .to.eql({ message: 'Fail (Line 1, Column 5)', startLine: 1, startColumn: 5, endLine: 1, endColumn: 5 });
         }
     });
 
@@ -119,7 +118,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
     });
 
     it('should parse function declarations', () => {
-        const sourceString = `func int getInt() => 1`;
+        const sourceString = 'func int getInt() => 1';
         const parsed = parser.parse(sourceString);
         expect(parsed.toTree()).to.eql({
             type: 'Program',
@@ -188,12 +187,12 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                         }],
                     },
                 ],
-            }, { type: 'EOF', image: null }]
-        })
+            }, { type: 'EOF', image: null }],
+        });
     });
 
     it('should parse type declarations', () => {
-        const sourceString = `type b = bool`;
+        const sourceString = 'type b = bool';
         const parsed = parser.parse(sourceString);
         expect(parsed.toTree()).to.eql({
             type: 'Program',
@@ -213,7 +212,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
     });
 
     it('should parse default exports', () => {
-        const sourceString = `export default 1`;
+        const sourceString = 'export default 1';
         const parsed = parser.parse(sourceString);
         expect(parsed.toTree()).to.eql({
             type: 'Program',
@@ -232,7 +231,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
     });
 
     it('should parse named exports', () => {
-        const sourceString = `export one = 1`;
+        const sourceString = 'export one = 1';
         const parsed = parser.parse(sourceString);
         expect(parsed.toTree()).to.eql({
             type: 'Program',
@@ -252,7 +251,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
     });
 
     it('should parse exports of already declared names', () => {
-        const sourceString = `export one`;
+        const sourceString = 'export one';
         const parsed = parser.parse(sourceString);
         expect(parsed.toTree()).to.eql({
             type: 'Program',
@@ -476,7 +475,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                             { type: 'LPAREN', image: '(' },
                             { type: 'LambdaParam', children: [{ type: 'IDENT', image: 'a' }] },
                             { type: 'RPAREN', image: ')' },
-                        ]
+                        ],
                     },
                     { type: 'FAT_ARROW', image: '=>' },
                     { type: 'Expression', children: [{ type: 'INTEGER_LITERAL', image: '2' }] },
@@ -501,7 +500,7 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
                             { type: 'COMMA', image: ',' },
                             { type: 'LambdaParam', children: [{ type: 'IDENT', image: 'b' }] },
                             { type: 'RPAREN', image: ')' },
-                        ]
+                        ],
                     },
                     { type: 'FAT_ARROW', image: '=>' },
                     { type: 'Expression', children: [{ type: 'INTEGER_LITERAL', image: '2' }] },
@@ -761,11 +760,14 @@ import from "otherModule" { name, name1 as oneName, myName }; import from "third
         const parsed = parser.parse('func void fun() => {}');
         const exp = parsed.toTree().children[0].children[5];
         expect(exp).to.eql({
-            type: 'Block',
-            children: [
-                { type: 'LBRACE', image: '{' },
-                { type: 'RBRACE', image: '}' },
-            ],
+            type: 'Statement',
+            children: [{
+                type: 'Block',
+                children: [
+                    { type: 'LBRACE', image: '{' },
+                    { type: 'RBRACE', image: '}' },
+                ],
+            }],
         });
     });
 });
