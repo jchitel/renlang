@@ -18,6 +18,15 @@ export class Token {
         this.value = value;
         this.hasNewLine = hasNewLine;
     }
+
+    getLocation() {
+        return {
+            startLine: this.line,
+            startColumn: this.column,
+            endLine: this.line,
+            endColumn: this.column + this.image.length - 1,
+        };
+    }
 }
 
 /**
@@ -44,6 +53,7 @@ export default class Tokenizer {
         'export',   // declares a module export
         'f32',      // 32-bit floating point type (equivalent to 'float')
         'f64',      // 64-bit floating point type (equivalent to 'double')
+        'false',    // boolean false value
         'finally',  // denotes a finally block in a try-catch-finally block
         'float',    // float type name (alias for f32)
         'for',      // denotes the start of a classic for loop
@@ -64,6 +74,7 @@ export default class Tokenizer {
         'short',    // short type name (alias for u16)
         'string',   // string type name
         'throw',    // denotes a throw statement to throw an exception from a function
+        'true',     // boolean true value
         'try',      // denotes the start of a try-catch block
         'type',     // denotes the start of a type declaration
         'u16',      // 16 bit unsigned integer type (equivalent to 'short')

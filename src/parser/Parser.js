@@ -112,6 +112,7 @@ export default class Parser {
                 throw new ParserError(mess.INVALID_PROGRAM(c), c.line, c.column);
             }
         }
+        throw new Error('Tokenizer had no elements');
     }
 
     /**
@@ -424,6 +425,7 @@ export default class Parser {
             case 'FLOAT_LITERAL': exp = new AST.Expression({ floatLiteralToken: tok }, [tok]); break;
             case 'STRING_LITERAL': exp = new AST.Expression({ stringLiteralToken: tok }, [tok]); break;
             case 'CHARACTER_LITERAL': exp = new AST.Expression({ characterLiteralToken: tok }, [tok]); break;
+            case 'TRUE': case 'FALSE': exp = new AST.Expression({ boolLiteralToken: tok }, [tok]); break;
             case 'IDENT': {
                 if (inner = this.acceptVarDeclaration(tok)) {
                     exp = new AST.Expression({ varDecl: inner }, [inner]);
@@ -955,7 +957,7 @@ export default class Parser {
     }
 
     /**
-     * TryCatchStatement ::= TRY Block (CATCH LPAREN Paren RPAREN Block)+ (FINALLY Block)?
+     * TryCatchStatement ::= TRY Block (CATCH LPAREN Param RPAREN Block)+ (FINALLY Block)?
      */
     acceptTryCatchStatement(tok) {
         if (tok.type !== 'TRY') return false;

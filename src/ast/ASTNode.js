@@ -11,7 +11,7 @@ import { Token } from '../parser/Tokenizer';
 export default class ASTNode {
     constructor(properties, children) {
         Object.assign(this, properties);
-        this.children = children;
+        if (children) this.children = children;
     }
 
     /**
@@ -27,5 +27,24 @@ export default class ASTNode {
                 .filter(c => c instanceof ASTNode || c instanceof Token)
                 .map(c => (c instanceof ASTNode ? c.toTree() : { type: c.type, image: c.image })),
         };
+    }
+
+    registerLocation(key, value) {
+        if (!this.locations) this.locations = {};
+        this.locations[key] = value;
+    }
+
+    createAndRegisterLocation(key, start, end) {
+        const location = {
+            startLine: start.startLine,
+            startColumn: start.startColumn,
+            endLine: end.endLine,
+            endColumn: end.endColumn,
+        };
+        this.registerLocation(key, location);
+    }
+
+    _createNewNode() {
+        return Object.create(Object.getPrototypeOf(this));
     }
 }

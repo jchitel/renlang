@@ -1,53 +1,211 @@
+import Module from '../runtime/Module';
+import TypeCheckError from './TypeCheckError';
+import * as mess from './TypeCheckerMessages';
+import * as decl from '../ast/declarations';
+
+
 /**
- * The type checker will be implemented using the visitor pattern on a valid AST.
- * First, the syntax tree output will need to be collapsed to a proper AST, where there are no nodes with only one child,
- * and any unnecessary delimiters (such as commas and parentheses) and tokens that have no semantic purpose in the code are removed.
- * Next, the tree needs to be arranged properly, primarily around the binary operators.
- * Every operator must have a 'fixity' value (find a better name) that determines its precedence.
- * In the case of sequences of non-parenthesized binary expressions, the fixity value will determine how the tree will be arranged.
- * Once this step is done, semantic analysis can be done.
- * This will require multiple passes.
- * First, all types in the program must be enumerated.
- * This may require parsing other modules as an intermediate step and extracting their type information.
- * Here we may encounter type definitions that are invalid.
- * Because the program is syntactically correct, multiple errors can be emitted.
- * Then, we must analyze all logic nodes (expressions and statements) in all loaded modules' trees.
- * We need to create a flow graph linking all identifier declarations (including functions and operators) with places that they are used.
- * Then we need to start with all nodes that have a definite type and trace them along this flow diagram.
- * Any place where we come across a node that has been marked with a type that doesn't match the expected type, an error must be emitted.
- * Once we reach the end, any identifier that is not initialized will trigger an error, and any identifier with no inferred type will trigger an error.
- * Then we need to resolve all of this with parameter types and return types of functions.
- * At some point, we also need to do statement analysis, for example break and continue statements can only exist within loops, and explicit loop numbers for those must be valid.
- * We also need to verify that a main function exists in the entry point module and is of valid form.
- * Also, we are not dealing with closures this time around, so any variables accessed outside of their function scope will trigger errors.
- * Once that is done, we should be good and type checked.
- *
- * Ok, let's extract some actual steps out of this:
- * 0. Convert AST to actual AST
- * 1. Resolve all imports (process module imports, running the parser and starting over at step 0 for each one)
- * 2. Resolve all types (all encountered type declarations need to be stored in a type symbol table)
- * 3. Resolve all functions (all encountered function declarations need to be stored in a function symbol table)
- * 4. Resolve all exports (all exports need to be placed in an export table for each module)
- * For each function:
- * 5. Fix expression order (prededence and associativity, restructure tree to match proper operator semantics)
- * 6. Create flow graph for types (each referenced type mapped to every place it is used)
- * 6.5. Resolve types (all types with no corresponding declaration are an error)
- * 7. Create flow graph for functions (each referenced function mapped to every place it is used)
- * 8. Create flow graph for other declared values (each referenced variable/export mapped to every place it is used)
- * 9. Resolve declared names (every function or value referenced with no corresponding declaration are an error)
- * 10. Visit each function, tracing types
- *     - starting with everything with an explicit type [parameters and primitive literals], trace the flow of those types through everywhere they are used, marking types of expressions along the way.
- *     - any time a name is referenced, look it up in the symbol table, visiting it if it hasn't yet been visited
- *     - if a function or operator or other syntactic construct with a specific expression type is invoked with the wrong types, all errors
- *     - once a return expression is reached, it should match the return type of the function
- *     - this should flow from top to bottom of each function
- *     - every break and continue statement also needs to be checked
- * 11. Verify that the entry point has a valid main() function
- * 12. Return errors, if any
- * 13. If no errors, success, result is a table of modules with the main module marked with a special symbol.
+ * Semantic analysis class
  */
 export default class TypeChecker {
-    constructor(ast) {
-        this.ast = ast;
+    constructor() {
+        this.modules = [];
+        this.moduleCache = {};
+        this.errors = [];
+    }
+
+    /**
+     * Perform semantic analysis on the program, starting with the AST and file path of the
+     * entry point (known as "main") module.
+     * The outputted value will be a table of all modules in the program,
+     * with the main module at position 0.
+     */
+    check(mainAst, mainModulePath) {
+        // create a module for the main AST
+        this.mainModule = new Module(0, mainModulePath, mainAst.reduce());
+        this.modules.push(this.mainModule);
+        this.moduleCache = { [mainModulePath]: 0 };
+        // process all declarations, recursively traversing all modules
+        this.processDeclarations(this.mainModule);
+        // the program is now type checked and all modules are loaded. Return them.
+        return this.modules;
+    }
+
+    /**
+     * Process all name declarations in a module.
+     * This will organize all imports and exports of a module.
+     * It will also organize all available names in the module into one of three categories:
+     * types, functions, or constants.
+     * When this is done, all modules in the environment will be loaded,
+     * and all available names in each module will be available for access.
+     */
+    processDeclarations(module) {
+        for (const imp of module.ast.imports) this.processImport(module, imp);
+        for (const typ of module.ast.types) this.processType(module, typ);
+        for (const func of module.ast.functions) this.processFunction(module, func);
+        for (const exp of module.ast.exports) this.processExport(module, exp);
+    }
+
+    /**
+     * Process an import of a module.
+     * This will load the imported module (if not already loaded),
+     * determine the validity of each imported name,
+     * and organize each imported value into the modules symbol tables.
+     */
+    processImport(module, imp) {
+        // resolve the module's path
+        const importPath = module.resolvePath(imp.moduleName);
+        if (!importPath) {
+            // invalid module path specified
+            this.errors.push(new TypeCheckError(mess.MODULE_PATH_NOT_EXIST(imp.moduleName), module.path, imp.locations.moduleName));
+            return;
+        }
+        // load the module. if it has been loaded already, get it from the cache
+        let imported;
+        if (!this.moduleCache[importPath]) {
+            imported = new Module(this.modules.length, importPath);
+            this.modules.push(imported);
+            this.moduleCache[importPath] = imported.id;
+            // this is a new module, so we need to process it before we can proceed
+            this.processDeclarations(imported);
+        } else {
+            imported = this.modules[this.moduleCache[importPath]];
+        }
+        // process the import names
+        for (const [name, alias] of Object.entries(imp.importNames)) {
+            // verify that the module exports the name
+            if (!imported.exports[name]) {
+                this.errors.push(new TypeCheckError(mess.MODULE_DOESNT_EXPORT_NAME(imp.moduleName, name), module.path, imp.locations[`importName_${name}`]));
+                return;
+            }
+            // verify that the alias doesn't already exist; imports always come first, so we only need to check imports
+            if (module.imports[alias]) {
+                this.errors.push(new TypeCheckError(mess.NAME_CLASH(alias), module.path, imp.locations[`importAlias_${name}`]));
+                return;
+            }
+            // valid import, create an import entry linking the import to the export
+            module.imports[alias] = { moduleId: imported.id, exportName: name, kind: imported.exports[name].kind, ast: imp };
+            // add the value to the appropriate table with a flag indicating that it exists in another module
+            switch (module.imports[alias].kind) {
+                case 'type': module.types[alias] = { imported: true }; break;
+                case 'func': module.functions[alias] = { imported: true }; break;
+                case 'expr': module.constants[alias] = { imported: true }; break;
+                default: break; // will never happen
+            }
+        }
+    }
+
+    /**
+     * Process a type declared in a module.
+     * This will determine the validity of the type name
+     * and organize it into the type symbol table in the module.
+     */
+    processType(module, typ) {
+        const name = typ.name;
+        // handle name clashes
+        if (module.imports[name] || module.types[name]) {
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, type.locations.name));
+            return;
+        }
+        if (module.functions[name]) {
+            // set the error on whichever comes last
+            const [funcLoc, typeLoc] = [module.functions[name].ast.locations.name, typ.location.name];
+            if (funcLoc.startLine < typeLoc.startLine || (funcLoc.startLine === typeLoc.startLine && funcLoc.startColumn < typeLoc.startColumn)) {
+                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
+            } else {
+                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
+            }
+        }
+        module.types[name] = { ast: typ };
+    }
+
+    /**
+     * Process a function declared in a module.
+     * This will determine the validity of the function name
+     * and organize it into the function symbol table in the module.
+     */
+    processFunction(module, func) {
+        const name = func.name;
+        // handle name clashes
+        if (module.imports[name] || module.functions[name]) {
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, func.locations.name));
+            return;
+        }
+        if (module.types[name]) {
+            // set the error on whichever comes last
+            const [typeLoc, funcLoc] = [module.types[name].ast.locations.name, func.location.name];
+            if (typeLoc.startLine < funcLoc.startLine || (typeLoc.startLine === funcLoc.startLine && typeLoc.startColumn < funcLoc.startColumn)) {
+                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
+            } else {
+                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
+            }
+        }
+        module.functions[name] = { ast: func };
+    }
+
+    /**
+     * Process an export declared in a module.
+     * This will determine the validity of the export name and the exported value's name,
+     * and organize the exported value into the module's symbol tables.
+     */
+    processExport(module, exp) {
+        const { name, exportedValue } = exp;
+        // exports are in their own scope (unless they are expressions, which is handled below) so we only need to check expressions
+        if (module.exports[name]) {
+            this.errors.push(new TypeCheckError(mess.EXPORT_CLASH(name), module.path, exp.locations.name));
+            return;
+        }
+        // determine the kind and match it with a value
+        if (exportedValue) {
+            // inline export, the value will need to be added to the module
+            if (exportedValue instanceof decl.TypeDeclaration) {
+                module.exports[name] = { kind: 'type', valueName: exportedValue.name };
+                this.processType(module, exportedValue);
+            } else if (exportedValue instanceof decl.FunctionDeclaration) {
+                module.exports[name] = { kind: 'func', valueName: exportedValue.name };
+                this.processFunction(module, exportedValue);
+            } else {
+                // otherwise it's an expression, and the value is available in the module, check for name clashes
+                if (module.imports[name]) {
+                    this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, exp.locations.name));
+                    return;
+                }
+                if (module.types[name]) {
+                    // set the error on whichever comes last
+                    const [typeLoc, expLoc] = [module.types[name].ast.locations.name, exp.location.name];
+                    if (typeLoc.startLine < expLoc.startLine || (typeLoc.startLine === expLoc.startLine && typeLoc.startColumn < expLoc.startColumn)) {
+                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, expLoc));
+                    } else {
+                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
+                    }
+                }
+                if (module.functions[name]) {
+                    // set the error on whichever comes last
+                    const [funcLoc, expLoc] = [module.functions[name].ast.locations.name, exp.location.name];
+                    if (funcLoc.startLine < expLoc.startLine || (funcLoc.startLine === expLoc.startLine && funcLoc.startColumn < expLoc.startColumn)) {
+                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, expLoc));
+                    } else {
+                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
+                    }
+                }
+                module.exports[name] = { kind: 'expr', valueName: name };
+                // expose it on a special constants table
+                module.constants[name] = { ast: exportedValue };
+            }
+        } else {
+            // it exports some already declared value, get the kind from that value
+            if (module.imports[name]) {
+                // we are re-exporting an import, get the kind from the import
+                module.exports[name] = { kind: module.imports[name].kind, valueName: name };
+            } else if (module.types[name]) {
+                module.exports[name] = { kind: 'type', valueName: name };
+            } else if (module.functions[name]) {
+                module.exports[name] = { kind: 'func', valueName: name };
+            } else {
+                // exporting a non-declared value
+                this.errors.push(new TypeCheckError(mess.NOT_DEFINED(name), module.path, exp.locations.name));
+                return;
+            }
+        }
     }
 }
