@@ -216,15 +216,92 @@ export default class TypeChecker {
         }
     }
 
+    /**
+     * Typecheck all declarations in a module by visiting each one for type checking.
+     * Ignore imported declarations because they don't exist in this module.
+     * Those will be resolved as they are used.
+     */
     visitTypes(module) {
-        for (const type of module.types) {
-            type.type = type.ast.visitType(this, module);
+        // types, functions, and constants need to be resolved
+        const toResolve = [...module.types.filter(t => !t.imported), ...module.functions.filter(f => !f.imported), ...module.constants.filter(c => !c.imported)];
+        for (const decl of toResolve) {
+            this.resolveType(module, decl);
         }
-        for (const func of module.functions) {
-            func.type = func.ast.visitType(this, module);
+    }
+
+    /**
+     * Type check a declaration.
+     * Do nothing if is has already been checked.
+     * If it is already resolving, we have a circular dependency that can't be resolved, which is an error.
+     * Otherwise, it hasn't been resolved yet, and we visit the top level of the declaration's AST.
+     */
+    resolveType(module, decl) {
+        if (decl.type) return; // resolved already
+        if (decl.resolving) {
+            this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, decl.ast.locations.self));
+            // set the type to Unknown so that this error only occurs once
+            decl.type = new Unknown();
+            return;
         }
-        for (const cons of module.constants) {
-            cons.type = cons.ast.visitType(this, module);
+        if (decl.ast instanceof decl.FunctionDeclaration) {
+            // TODO: in some cases circular dependencies are not a problem, for example with recursion.
+            // TODO: it seems like we may not be able to avoid union types.
+        } else {
+            // Set a flag on each declaration as we resolve it so that we can track circular dependencies
+            decl.resolving = true;
+            decl.type = decl.ast.visitType(this, module);
+            decl.resolving = false;
+        }
+    }
+
+    /**
+     * Given a module and the name of a type, get the Type instance of the type.
+     * The type may exist in another module, so this method resolves imports and exports
+     * to track down the actual declaration.
+     * The type is also resolved here if it hasn't been already.
+     */
+    getType(module, name) {
+        const type = module.types[name];
+        if (type.imported) {
+            // type is imported, resolve the import to the corresponding export in the imported module
+            const imp = module.imports[name];
+            const importedModule = this.modules[imp.moduleId];
+            const exp = importedModule.exports[imp.exportName];
+            // get the type from that module, recursively so that we can handle forwarded imports
+            const importedType = this.getType(importedModule, exp.valueName);
+            return importedType.type;
+        } else {
+            // the type was declared in this module, return it if it has already been type checked
+            if (type.type) return type.type;
+            // otherwise resolve it and return the resolved type
+            this.resolveType(module, type);
+            return type.type;
+        }
+    }
+
+    /**
+     * Given a module and the name of some value (either a function or a constant), get the Type instance of the value.
+     * The value may exist in another module, so this method resolves imports and exports
+     * to track down the actual declaration.
+     * The type is also resolves here if it hasn't been already.
+     */
+    getValue(module, name) {
+        const value = module.functions[name] || module.constants[name];
+        if (!value) throw new Error(`Value ${name} somehow did not exist in module ${module.path}`);
+        if (value.imported) {
+            // value is imported, resolve the import to the corresponding export in the imported module
+            const imp = module.imports[name];
+            const importedModule = this.modules[imp.moduleId];
+            const exp = importedModule.exports[imp.exportName];
+            // get the value from that module, recursively so that we can handle forwarded imports
+            const importedValue = this.getValue(importedModule, exp.valueName);
+            return importedValue.type;
+        } else {
+            // the value was declared in this module, return it if it has already been type checked
+            if (value.type) return value.type;
+            // otherwise resolve it and return the resolved type
+            this.resolveType(module, value);
+            return value.type;
         }
     }
 }
