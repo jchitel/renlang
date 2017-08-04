@@ -27,6 +27,8 @@ export default class TypeChecker {
         this.moduleCache = { [mainModulePath]: 0 };
         // process all declarations, recursively traversing all modules
         this.processDeclarations(this.mainModule);
+        // analyze types and functions
+        this.resolveTypes();
         // the program is now type checked and all modules are loaded. Return them.
         return this.modules;
     }
@@ -44,6 +46,12 @@ export default class TypeChecker {
         for (const typ of module.ast.types) this.processType(module, typ);
         for (const func of module.ast.functions) this.processFunction(module, func);
         for (const exp of module.ast.exports) this.processExport(module, exp);
+    }
+
+    resolveTypes() {
+        for (const module of this.modules) {
+            this.visitTypes(module);
+        }
     }
 
     /**
@@ -104,7 +112,7 @@ export default class TypeChecker {
         const name = typ.name;
         // handle name clashes
         if (module.imports[name] || module.types[name]) {
-            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, type.locations.name));
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typ.locations.name));
             return;
         }
         if (module.functions[name]) {
@@ -116,7 +124,7 @@ export default class TypeChecker {
                 this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
             }
         }
-        module.types[name] = { ast: typ };
+        module.types[name] = { ast: typ.type };
     }
 
     /**
@@ -204,8 +212,19 @@ export default class TypeChecker {
             } else {
                 // exporting a non-declared value
                 this.errors.push(new TypeCheckError(mess.NOT_DEFINED(name), module.path, exp.locations.name));
-                return;
             }
+        }
+    }
+
+    visitTypes(module) {
+        for (const type of module.types) {
+            type.type = type.ast.visitType(this, module);
+        }
+        for (const func of module.functions) {
+            func.type = func.ast.visitType(this, module);
+        }
+        for (const cons of module.constants) {
+            cons.type = cons.ast.visitType(this, module);
         }
     }
 }

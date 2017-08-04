@@ -44,6 +44,10 @@ export default class ASTNode {
         this.registerLocation(key, location);
     }
 
+    reduce() {
+        throw new Error('Unimplemented method');
+    }
+
     _createNewNode() {
         return Object.create(Object.getPrototypeOf(this));
     }
