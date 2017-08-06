@@ -1,6 +1,6 @@
-export class Type {}
+export class TType {}
 
-export class Integer extends Type {
+export class TInteger extends TType {
     constructor(size, signed) {
         super();
         this.size = size;
@@ -8,39 +8,39 @@ export class Integer extends Type {
     }
 }
 
-export class Float extends Type {
+export class TFloat extends TType {
     constructor(size) {
         super();
         this.size = size;
     }
 }
 
-export class Char extends Type {}
+export class TChar extends TType {}
 
-export class Bool extends Type {}
+export class TBool extends TType {}
 
-export class Tuple extends Type {
+export class TTuple extends TType {
     constructor(types) {
         super();
         this.types = types;
     }
 }
 
-export class Struct extends Type {
+export class TStruct extends TType {
     constructor(fields) {
         super();
         this.fields = fields;
     }
 }
 
-export class Array extends Type {
+export class TArray extends TType {
     constructor(baseType) {
         super();
         this.baseType = baseType;
     }
 }
 
-export class Function extends Type {
+export class TFunction extends TType {
     constructor(paramTypes, returnType) {
         super();
         this.paramTypes = paramTypes;
@@ -48,8 +48,16 @@ export class Function extends Type {
     }
 }
 
+export class TUnion extends TType {
+    constructor(left, right) {
+        super();
+        this.left = left;
+        this.right = right;
+    }
+}
+
 /**
  * Represents an unknown type, used in cases where the type cannot be determined.
  * This will always end up being an error when it bubbles up to the top.
  */
-export class Unknown extends Type {}
+export class TUnknown extends TType {}

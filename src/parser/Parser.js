@@ -343,19 +343,40 @@ export default class Parser {
                 else typeNode = type; // the case of a single type in parentheses just returns a type
             } else return false;
         }
-        // array types are left recursive
-        let [peek1, peek2] = this.tokenizer.peek(0, 2);
-        while (peek1.type === 'LBRACK' && peek2.type === 'RBRACK') {
-            const [arrayLeftBracketToken, arrayRightBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
-            typeNode = new AST.ArrayType({
-                baseType: typeNode,
-                arrayLeftBracketToken,
-                arrayRightBracketToken,
-            }, [typeNode, arrayLeftBracketToken, arrayRightBracketToken]);
-            [peek1, peek2] = this.tokenizer.peek(0, 2);
+        // handle left recursion, types that start with an inner type
+        while (this.tokenizer.peek()) {
+            let outer;
+            if (outer = this.tryArrayType(typeNode)) {
+                typeNode = new AST.Type({ arrayType: outer }, [outer]);
+            } else if (outer = this.tryUnionType(typeNode)) {
+                typeNode = new AST.Type({ unionType: outer }, [outer]);
+            } else {
+                break;
+            }
         }
-        if (typeNode instanceof AST.ArrayType) typeNode = new AST.Type({ arrayType: typeNode }, [typeNode]);
         return typeNode;
+    }
+
+    tryArrayType(baseType) {
+        const [peek1, peek2] = this.tokenizer.peek(0, 2);
+        if (peek1.type !== 'LBRACK' || peek2.type !== 'RBRACK') return false;
+        const [arrayLeftBracketToken, arrayRightBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
+        return new AST.ArrayType({
+            baseType,
+            arrayLeftBracketToken,
+            arrayRightBracketToken,
+        }, [baseType, arrayLeftBracketToken, arrayRightBracketToken]);
+    }
+
+    tryUnionType(left) {
+        if (this.tokenizer.peek().image !== '|') return false;
+        const vbarToken = this.tokenizer.next().value;
+        const right = this.parseNextToken(t => this.acceptType(t), mess.INVALID_UNION_TYPE);
+        return new AST.UnionType({
+            left,
+            vbarToken,
+            right,
+        }, [left, vbarToken, right]);
     }
 
     /**

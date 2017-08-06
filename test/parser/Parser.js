@@ -307,7 +307,7 @@ describe('Parser', () => {
 
         it('should throw an error for an empty file', () => {
             expect(() => parser.parse('')).to.throw('Empty file (Line 1, Column 1)');
-        })
+        });
     });
 
     describe('parsing types', () => {
@@ -442,15 +442,58 @@ describe('Parser', () => {
                     type: 'ArrayType',
                     children: [
                         {
-                            type: 'ArrayType',
-                            children: [
-                                { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
-                                { type: 'LBRACK', image: '[' },
-                                { type: 'RBRACK', image: ']' },
-                            ],
+                            type: 'Type',
+                            children: [{
+                                type: 'ArrayType',
+                                children: [
+                                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                                    { type: 'LBRACK', image: '[' },
+                                    { type: 'RBRACK', image: ']' },
+                                ],
+                            }],
                         },
                         { type: 'LBRACK', image: '[' },
                         { type: 'RBRACK', image: ']' },
+                    ],
+                }],
+            });
+        });
+
+        it('should parse union types', () => {
+            let parsed = parser.parse('type t = int | string');
+            let type = parsed.toTree().children[0].children[3];
+            expect(type).to.eql({
+                type: 'Type',
+                children: [{
+                    type: 'UnionType',
+                    children: [
+                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                        { type: 'OPER', image: '|' },
+                        { type: 'Type', children: [{ type: 'STRING', image: 'string' }] },
+                    ],
+                }],
+            });
+
+            parsed = parser.parse('type t = int | char | string');
+            type = parsed.toTree().children[0].children[3];
+            expect(type).to.eql({
+                type: 'Type',
+                children: [{
+                    type: 'UnionType',
+                    children: [
+                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                        { type: 'OPER', image: '|' },
+                        {
+                            type: 'Type',
+                            children: [{
+                                type: 'UnionType',
+                                children: [
+                                    { type: 'Type', children: [{ type: 'CHAR', image: 'char' }] },
+                                    { type: 'OPER', image: '|' },
+                                    { type: 'Type', children: [{ type: 'STRING', image: 'string' }] },
+                                ],
+                            }],
+                        },
                     ],
                 }],
             });
@@ -491,6 +534,22 @@ describe('Parser', () => {
             expect(exp).to.eql({
                 type: 'Expression',
                 children: [{ type: 'CHARACTER_LITERAL', image: "'a'" }],
+            });
+        });
+
+        it('should parse boolean literal expressions', () => {
+            let parsed = parser.parse('export v = true');
+            let exp = parsed.toTree().children[0].children[3];
+            expect(exp).to.eql({
+                type: 'Expression',
+                children: [{ type: 'TRUE', image: 'true' }],
+            });
+
+            parsed = parser.parse('export v = false');
+            exp = parsed.toTree().children[0].children[3];
+            expect(exp).to.eql({
+                type: 'Expression',
+                children: [{ type: 'FALSE', image: 'false' }],
             });
         });
 

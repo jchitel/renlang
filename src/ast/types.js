@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { Integer, Float, Char, Bool, Tuple, Struct, Array, Function, Unknown } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TUnknown } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 
@@ -41,21 +41,21 @@ export class PrimitiveType extends ASTNode {
 
     visitType() {
         switch (this.type) {
-            case 'u8': case 'byte': return new Integer(8, false);
-            case 'i8': return new Integer(8, true);
-            case 'u16': case 'short': return new Integer(16, false);
-            case 'i16': return new Integer(16, true);
-            case 'u32': return new Integer(32, false);
-            case 'i32': case 'integer': return new Integer(32, true);
-            case 'u64': return new Integer(64, false);
-            case 'i64': case 'long': return new Integer(64, true);
-            case 'int': return new Integer(Infinity, true);
-            case 'f32': case 'float': return new Float(32);
-            case 'f64': case 'double': return new Float(64);
-            case 'char': return new Char();
-            case 'string': return new Array(new Char());
-            case 'bool': return new Bool();
-            case 'void': return new Tuple([]);
+            case 'u8': case 'byte': return new TInteger(8, false);
+            case 'i8': return new TInteger(8, true);
+            case 'u16': case 'short': return new TInteger(16, false);
+            case 'i16': return new TInteger(16, true);
+            case 'u32': return new TInteger(32, false);
+            case 'i32': case 'integer': return new TInteger(32, true);
+            case 'u64': return new TInteger(64, false);
+            case 'i64': case 'long': return new TInteger(64, true);
+            case 'int': return new TInteger(Infinity, true);
+            case 'f32': case 'float': return new TFloat(32);
+            case 'f64': case 'double': return new TFloat(64);
+            case 'char': return new TChar();
+            case 'string': return new TArray(new TChar());
+            case 'bool': return new TBool();
+            case 'void': return new TTuple([]);
             default: throw new Error(`Invalid built-in type ${this.type}`);
         }
     }
@@ -71,7 +71,7 @@ export class IdentifierType extends ASTNode {
         const type = module.types[this.name];
         if (!type) {
             typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.name), module.path, this.locations.self));
-            return new Unknown();
+            return new TUnknown();
         }
         if (type.imported) {
             // if the type is imported, we need to get the exported type
@@ -106,9 +106,9 @@ export class FunctionType extends ASTNode {
     visitType(typeChecker, module) {
         const paramTypes = this.paramTypes.map(t => t.visitType(typeChecker, module));
         const returnType = this.returnType.visitType(typeChecker, module);
-        if (paramTypes.some(t => t instanceof Unknown)) return new Unknown();
-        if (returnType instanceof Unknown) return new Unknown();
-        return new Function(paramTypes, returnType); // eslint-disable-line no-new-func
+        if (paramTypes.some(t => t instanceof TUnknown)) return new TUnknown();
+        if (returnType instanceof TUnknown) return new TUnknown();
+        return new TFunction(paramTypes, returnType); // eslint-disable-line no-new-func
     }
 }
 
@@ -122,8 +122,8 @@ export class TupleType extends ASTNode {
 
     visitType(typeChecker, module) {
         const types = this.types.map(t => t.visitType(typeChecker, module));
-        if (types.some(t => t instanceof Unknown)) return new Unknown();
-        return new Tuple(types);
+        if (types.some(t => t instanceof TUnknown)) return new TUnknown();
+        return new TTuple(types);
     }
 }
 
@@ -144,12 +144,12 @@ export class StructType extends ASTNode {
         for (const field of this.fields) {
             if (fields[field.name]) {
                 typeChecker.errors.push(new TypeCheckError(mess.NAME_CLASH(field.name), module.path, this.locations[`field_${field.name}`]));
-                return new Unknown();
+                return new TUnknown();
             }
             fields[field.name] = field.type.visitType(typeChecker, module);
-            if (fields[field.name] instanceof Unknown) return new Unknown();
+            if (fields[field.name] instanceof TUnknown) return new TUnknown();
         }
-        return new Struct(fields);
+        return new TStruct(fields);
     }
 }
 
@@ -163,7 +163,24 @@ export class ArrayType extends ASTNode {
 
     visitType(typeChecker, module) {
         const baseType = this.baseType.visitType(typeChecker, module);
-        if (baseType instanceof Unknown) return new Unknown();
+        if (baseType instanceof TUnknown) return new TUnknown();
         return new Array(baseType);
+    }
+}
+
+export class UnionType extends ASTNode {
+    reduce() {
+        const node = this._createNewNode();
+        node.left = this.left.reduce();
+        node.right = this.right.reduce();
+        node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);
+        return node;
+    }
+
+    visitType(typeChecker, module) {
+        const left = this.left.visitType(typeChecker, module);
+        const right = this.right.visitType(typeChecker, module);
+        if (left instanceof TUnknown || right instanceof TUnknown) return new TUnknown();
+        return new TUnion(left, right);
     }
 }
