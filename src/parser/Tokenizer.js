@@ -186,9 +186,14 @@ export default class Tokenizer {
             // 11. Whitespace (space and tab)
             // 12. Everything else (throws an error for now)
 
-            // check to see if the character is a valid identifier start
-            if (kind === 'uppercase' || kind === 'lowercase' || c === '_') {
-                // consume an identifier
+            if (c === '/' && c1 === '/') {
+                // single-line comment
+                yield this.consumeSingleLineComment(c);
+            } else if (c === '/' && c1 === '*') {
+                // multi-line comment
+                yield this.consumeMultiLineComment(c);
+            } else if (kind === 'uppercase' || kind === 'lowercase' || c === '_') {
+                // valid identifier start, consume an identifier
                 yield this.consumeIdentifier(c);
             } else if (c === '-') {
                 // if it is followed by a number, consume it as a number
@@ -264,6 +269,30 @@ export default class Tokenizer {
         else if (char >= 'A' && char <= 'Z') return 'uppercase';
         else if (char >= '0' && char <= '9') return 'number';
         else return char;
+    }
+
+    consumeSingleLineComment(image) {
+        while (this.iterator.peek() !== '\n' && this.iterator.peek()) {
+            image += this.iterator.next().value;
+        }
+        if (this.iterator.peek() === '\n') image += this.iterator.next().value;
+        return new Token('COMMENT', this.lineNumber, this.getColumnNumber(image.length), image);
+    }
+
+    consumeMultiLineComment(image) {
+        const lineNumber = this.lineNumber;
+        const columnNumber = this.getColumnNumber(1);
+        image += this.iterator.next().value;
+        while (this.iterator.peek() && this.iterator.peek() !== '*' && this.iterator.peek(1) !== '/') {
+            if (this.iterator.peek() === '\n') {
+                this.lineNumber++;
+                this.currentLineOffset = this.iterator.offset + 1;
+            }
+            image += this.iterator.next().value;
+        }
+        if (this.iterator.peek() === '*') image += this.iterator.next().value;
+        if (this.iterator.peek() === '/') image += this.iterator.next().value;
+        return new Token('COMMENT', lineNumber, columnNumber, image);
     }
 
     /**

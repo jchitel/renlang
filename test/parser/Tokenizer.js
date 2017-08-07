@@ -16,6 +16,25 @@ describe('Tokenizer', () => {
         expect(tokenizer.iterator[Symbol.iterator]().next().value).to.eql('h');
     });
 
+    it('should consume a single-line comment', () => {
+        let [token] = getTokens('// this is a comment');
+        expect(token).to.eql(new Token('COMMENT', 1, 1, '// this is a comment'));
+
+        [token] = getTokens('// this is a comment\n');
+        expect(token).to.eql(new Token('COMMENT', 1, 1, '// this is a comment\n'));
+    });
+
+    it('should consume a multi-line comment', () => {
+        let [token] = getTokens('/* this is a comment */');
+        expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment */'));
+
+        [token] = getTokens('/* this is a comment');
+        expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment'));
+
+        [token] = getTokens('/* this is a comment\nand another line */');
+        expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment\nand another line */'));
+    });
+
     it('should consume an identifier', () => {
         let [token] = getTokens('hello');
         expect(token).to.eql(new Token('IDENT', 1, 1, 'hello'));
