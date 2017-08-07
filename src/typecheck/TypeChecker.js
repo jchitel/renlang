@@ -2,6 +2,7 @@ import Module from '../runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
 import * as decl from '../ast/declarations';
+import { TUnknown } from './types';
 
 
 /**
@@ -224,8 +225,8 @@ export default class TypeChecker {
     visitTypes(module) {
         // types, functions, and constants need to be resolved
         const toResolve = [...module.types.filter(t => !t.imported), ...module.functions.filter(f => !f.imported), ...module.constants.filter(c => !c.imported)];
-        for (const decl of toResolve) {
-            this.resolveType(module, decl);
+        for (const dec of toResolve) {
+            this.resolveType(module, dec);
         }
     }
 
@@ -235,22 +236,22 @@ export default class TypeChecker {
      * If it is already resolving, we have a circular dependency that can't be resolved, which is an error.
      * Otherwise, it hasn't been resolved yet, and we visit the top level of the declaration's AST.
      */
-    resolveType(module, decl) {
-        if (decl.type) return; // resolved already
-        if (decl.resolving) {
-            this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, decl.ast.locations.self));
+    resolveType(module, dec) {
+        if (dec.type) return; // resolved already
+        if (dec.resolving) {
+            this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, dec.ast.locations.self));
             // set the type to Unknown so that this error only occurs once
-            decl.type = new Unknown();
+            dec.type = new TUnknown();
             return;
         }
-        if (decl.ast instanceof decl.FunctionDeclaration) {
+        if (dec.ast instanceof dec.FunctionDeclaration) {
             // TODO: in some cases circular dependencies are not a problem, for example with recursion.
             // TODO: it seems like we may not be able to avoid union types.
         } else {
             // Set a flag on each declaration as we resolve it so that we can track circular dependencies
-            decl.resolving = true;
-            decl.type = decl.ast.visitType(this, module);
-            decl.resolving = false;
+            dec.resolving = true;
+            dec.type = dec.ast.visitType(this, module);
+            dec.resolving = false;
         }
     }
 
