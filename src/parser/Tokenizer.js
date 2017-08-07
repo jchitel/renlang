@@ -40,6 +40,7 @@ export default class Tokenizer {
     // reserved language keywords, any identifier that matches one of these is registered as a keyword instead
     static KEYWORD_TOKENS = [
         'as',       // used for renaming imports
+        'any',      // supertype of all types
         'bool',     // boolean type name
         'break',    // statement to break from a loop
         'byte',     // byte type name (alias of u8)

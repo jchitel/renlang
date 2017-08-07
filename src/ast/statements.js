@@ -39,6 +39,12 @@ export class Block extends ASTNode {
         node.createAndRegisterLocation('self', this.openBraceToken.getLocation(), this.closeBraceToken.getLocation());
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        for (const statement of this.statements) {
+            statement.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        }
+    }
 }
 
 /**
@@ -50,6 +56,9 @@ export class Noop extends ASTNode {
         super({});
         this.createAndRegisterLocation('self', startLoc, endLoc);
     }
+
+    // noop, nothing to check
+    resolveType() {}
 }
 
 export class ForStatement extends ASTNode {
@@ -62,6 +71,19 @@ export class ForStatement extends ASTNode {
         node.createAndRegisterLocation('self', this.forToken.getLocation(), node.body.locations.self);
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // type check the iterable expression, will fill in the base type of the array
+        const arrayType = this.iterableExp.resolveType(typeChecker, module, symbolTable, new TArray(null));
+        const baseType = arrayType.baseType;
+        // add the iterator variable to the symbol table, visit the body, then remove it
+        symbolTable[this.iterVar] = baseType;
+        // add the loop number as a special symbol
+        symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
+        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        delete symbolTable[this.iterVar];
+        symbolTable['@@loopNumber']--;
+    }
 }
 
 export class WhileStatement extends ASTNode {
@@ -72,6 +94,16 @@ export class WhileStatement extends ASTNode {
         node.createAndRegisterLocation('self', this.whileToken.getLocation(), node.body.locations.self);
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // type check the condition
+        this.conditionExp.resolveType(typeChecker, module, symbolTable, new TBool());
+        // add the loop number as a special symbol
+        symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
+        // type check the body
+        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        symbolTable['@@loopNumber']--;
+    }
 }
 
 export class DoWhileStatement extends ASTNode {
@@ -81,6 +113,16 @@ export class DoWhileStatement extends ASTNode {
         node.conditionExp = this.conditionExp.reduce();
         node.createAndRegisterLocation('self', this.doToken.getLocation(), this.closeParenToken.getLocation());
         return node;
+    }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // add the loop number as a special symbol
+        symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
+        // type check the body
+        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        symbolTable['@@loopNumber']--;
+        // type check the condition
+        this.conditionExp.resolveType(typeChecker, module, symbolTable, new TBool());
     }
 }
 
@@ -96,6 +138,20 @@ export class TryCatchStatement extends ASTNode {
         node.createAndRegisterLocation('self', this.tryToken.getLocation(), node.finally ? node.finally.locations.self : node.catches[node.catches.length - 1].locations.self);
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // type check the try
+        this.try.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        // type check each try
+        for (const cat of this.catches) {
+            // add the param to the symbol table, type check the catch, remove it
+            symbolTable[cat.param.name] = cat.param.type.resolveType(typeChecker, module);
+            cat.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+            delete symbolTable[cat.param.name];
+        }
+        // type check the finally
+        this.finally.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+    }
 }
 
 export class ThrowStatement extends ASTNode {
@@ -104,6 +160,11 @@ export class ThrowStatement extends ASTNode {
         node.exp = this.exp.reduce();
         node.createAndRegisterLocation('self', this.throwToken.getLocation(), node.exp.locations.self);
         return node;
+    }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // type check the expression, it can be anything
+        this.exp.resolveType(typeChecker, module, symbolTable, new TAny());
     }
 }
 
@@ -118,6 +179,18 @@ export class ReturnStatement extends ASTNode {
         }
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+        // no return value, assumed to be ()
+        if (!this.exp) {
+            if (!(this.expectedReturnType instanceof TTuple) || this.expectedReturnType.types.length !== 0) {
+                typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TTuple(), this.expectedReturnType), module.path, this.locations.self));
+                return;
+            }
+        }
+        // otherwise check the return value
+        this.exp.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+    }
 }
 
 export class BreakStatement extends ASTNode {
@@ -131,6 +204,15 @@ export class BreakStatement extends ASTNode {
         }
         return node;
     }
+
+    resolveType(typeChecker, module, symbolTable) {
+        const loopNumber = symbolTable['@@loopNumber'];
+        if (loopNumber < 0) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BREAK_STATEMENT), module.path, this.locations.self);
+        } else if (this.loopNumber < 0 || this.loopNumber > loopNumber) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BREAK_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
+        }
+    }
 }
 
 export class ContinueStatement extends ASTNode {
@@ -143,5 +225,14 @@ export class ContinueStatement extends ASTNode {
             node.registerlocation('self', this.continueToken.getLocation());
         }
         return node;
+    }
+
+    resolveType(typeChecker, module, symbolTable) {
+        const loopNumber = symbolTable['@@loopNumber'];
+        if (loopNumber < 0) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_CONTINUE_STATEMENT), module.path, this.locations.self);
+        } else if (this.loopNumber < 0 || this.loopNumber > loopNumber) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_CONTINUE_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
+        }
     }
 }

@@ -1,17 +1,23 @@
 import Module from '../runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
-import * as decl from '../ast/declarations';
-import { TUnknown } from './types';
+import * as _decl from '../ast/declarations';
+import * as _type from '../ast/types';
+import { TUnknown, TRecursive } from './types';
 
+
+const AST = { ..._decl, ..._type };
 
 /**
  * Semantic analysis class
  */
 export default class TypeChecker {
     constructor() {
+        // array of all modules loaded in the application, where each index is the id of the module
         this.modules = [];
+        // object mapping absolute paths of modules to the corresponding module id
         this.moduleCache = {};
+        // list of errors to emit in the event of type check errors
         this.errors = [];
     }
 
@@ -28,8 +34,12 @@ export default class TypeChecker {
         this.moduleCache = { [mainModulePath]: 0 };
         // process all declarations, recursively traversing all modules
         this.processDeclarations(this.mainModule);
-        // analyze types and functions
+        // analyze types of declarations, type check expressions and statements
         this.resolveTypes();
+        if (this.errors.length) {
+            // if there were any errors, throw a combined one
+            throw new Error(this.errors.map(e => e.message).join('\n'));
+        }
         // the program is now type checked and all modules are loaded. Return them.
         return this.modules;
     }
@@ -49,11 +59,25 @@ export default class TypeChecker {
         for (const exp of module.ast.exports) this.processExport(module, exp);
     }
 
+    /**
+     * Traverse each module, resolving the type of every declaration
+     * and performing type checking for all statements and expressions.
+     * Ignore imported declarations because they don't exist in the module.
+     * Those will be resolved as they are used.
+     */
     resolveTypes() {
         for (const module of this.modules) {
-            this.visitTypes(module);
+            // types, functions, and constants need to be resolved
+            const toResolve = [...module.type, ...module.functions, ...module.constants].filter(t => !t.imported);
+            for (const decl of toResolve) {
+                this.resolveType(module, decl);
+            }
         }
     }
+
+    // //////////////////////////
+    // PROCESSING DECLARATIONS //
+    // //////////////////////////
 
     /**
      * Process an import of a module.
@@ -125,7 +149,7 @@ export default class TypeChecker {
                 this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
             }
         }
-        module.types[name] = { ast: typ.type };
+        module.types[name] = { ast: typ };
     }
 
     /**
@@ -167,10 +191,10 @@ export default class TypeChecker {
         // determine the kind and match it with a value
         if (exportedValue) {
             // inline export, the value will need to be added to the module
-            if (exportedValue instanceof decl.TypeDeclaration) {
+            if (exportedValue instanceof AST.TypeDeclaration) {
                 module.exports[name] = { kind: 'type', valueName: exportedValue.name };
                 this.processType(module, exportedValue);
-            } else if (exportedValue instanceof decl.FunctionDeclaration) {
+            } else if (exportedValue instanceof AST.FunctionDeclaration) {
                 module.exports[name] = { kind: 'func', valueName: exportedValue.name };
                 this.processFunction(module, exportedValue);
             } else {
@@ -199,7 +223,7 @@ export default class TypeChecker {
                 }
                 module.exports[name] = { kind: 'expr', valueName: name };
                 // expose it on a special constants table
-                module.constants[name] = { ast: exportedValue };
+                module.constants[name] = { ast: exp };
             }
         } else {
             // it exports some already declared value, get the kind from that value
@@ -217,42 +241,37 @@ export default class TypeChecker {
         }
     }
 
-    /**
-     * Typecheck all declarations in a module by visiting each one for type checking.
-     * Ignore imported declarations because they don't exist in this module.
-     * Those will be resolved as they are used.
-     */
-    visitTypes(module) {
-        // types, functions, and constants need to be resolved
-        const toResolve = [...module.types.filter(t => !t.imported), ...module.functions.filter(f => !f.imported), ...module.constants.filter(c => !c.imported)];
-        for (const dec of toResolve) {
-            this.resolveType(module, dec);
-        }
-    }
+    // //////////////////
+    // RESOLVING TYPES //
+    // //////////////////
 
     /**
      * Type check a declaration.
      * Do nothing if is has already been checked.
      * If it is already resolving, we have a circular dependency that can't be resolved, which is an error.
      * Otherwise, it hasn't been resolved yet, and we visit the top level of the declaration's AST.
+     * If a type resolution reaches a name, it will resolve that name in place, calling either getType() or getValueType() below.
+     * To prevent double resolution, we track which ones have already been resolved.
      */
-    resolveType(module, dec) {
-        if (dec.type) return; // resolved already
-        if (dec.resolving) {
-            this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, dec.ast.locations.self));
+    resolveType(module, decl) {
+        if (decl.type) return decl.type; // resolved already
+        if (decl.resolving) {
+            // type recursion is handled in getType(), so this will only happen for recursively defined constants
+            this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, decl.ast.locations.self));
             // set the type to Unknown so that this error only occurs once
-            dec.type = new TUnknown();
-            return;
+            decl.type = new TUnknown();
+            return decl.type;
         }
-        if (dec.ast instanceof dec.FunctionDeclaration) {
-            // TODO: in some cases circular dependencies are not a problem, for example with recursion.
-            // TODO: it seems like we may not be able to avoid union types.
+        if (decl.ast instanceof AST.FunctionDeclaration) {
+            // function declarations can be recursive, and they always contain their type right in their declaration
+            decl.ast.resolveType(this, module);
         } else {
             // Set a flag on each declaration as we resolve it so that we can track circular dependencies
-            dec.resolving = true;
-            dec.type = dec.ast.visitType(this, module);
-            dec.resolving = false;
+            decl.resolving = true;
+            decl.ast.resolveType(this, module);
+            decl.resolving = false;
         }
+        return decl.type;
     }
 
     /**
@@ -269,14 +288,14 @@ export default class TypeChecker {
             const importedModule = this.modules[imp.moduleId];
             const exp = importedModule.exports[imp.exportName];
             // get the type from that module, recursively so that we can handle forwarded imports
-            const importedType = this.getType(importedModule, exp.valueName);
-            return importedType.type;
+            return this.getType(importedModule, exp.valueName);
         } else {
             // the type was declared in this module, return it if it has already been type checked
             if (type.type) return type.type;
+            // if the type is resolving, we have a recursive type, return the recursive reference because we don't have an actual type yet
+            if (type.resolving) return new TRecursive(type);
             // otherwise resolve it and return the resolved type
-            this.resolveType(module, type);
-            return type.type;
+            return this.resolveType(module, type);
         }
     }
 
@@ -286,7 +305,7 @@ export default class TypeChecker {
      * to track down the actual declaration.
      * The type is also resolves here if it hasn't been already.
      */
-    getValue(module, name) {
+    getValueType(module, name) {
         const value = module.functions[name] || module.constants[name];
         if (!value) throw new Error(`Value ${name} somehow did not exist in module ${module.path}`);
         if (value.imported) {
@@ -295,14 +314,12 @@ export default class TypeChecker {
             const importedModule = this.modules[imp.moduleId];
             const exp = importedModule.exports[imp.exportName];
             // get the value from that module, recursively so that we can handle forwarded imports
-            const importedValue = this.getValue(importedModule, exp.valueName);
-            return importedValue.type;
+            return this.getValue(importedModule, exp.valueName);
         } else {
             // the value was declared in this module, return it if it has already been type checked
             if (value.type) return value.type;
             // otherwise resolve it and return the resolved type
-            this.resolveType(module, value);
-            return value.type;
+            return this.resolveType(module, value);
         }
     }
 }

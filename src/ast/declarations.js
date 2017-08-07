@@ -1,4 +1,5 @@
 import ASTNode from './ASTNode';
+import { TFunction, TUnknown } from '../typecheck/types';
 
 
 export class Program extends ASTNode {
@@ -57,6 +58,23 @@ export class FunctionDeclaration extends ASTNode {
         node.body = this.functionBody.reduce();
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        // resolve types of parameters and return type
+        const paramTypes = this.params.map(p => p.resolveType(typeChecker, module));
+        const returnType = this.returnType.resolveType(typeChecker, module);
+        // the type of the function will be unknown if any component types are unknown, otherwise it has a function type
+        if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) this.type = new TUnknown();
+        else this.type = new TFunction(paramTypes, returnType);
+        // create a symbol table initialized to contain the parameters
+        const symbolTable = {};
+        for (let i = 0; i < this.params.length; ++i) {
+            symbolTable[this.params[i].name] = paramTypes[i];
+        }
+        // type check the function body, passing along the starting symbol table and the return type of the function as the expected type of the body
+        this.body.resolveType(typeChecker, module, symbolTable, returnType);
+        return this.type;
+    }
 }
 
 export class ParameterList extends ASTNode {
@@ -69,10 +87,14 @@ export class ParameterList extends ASTNode {
 export class Param extends ASTNode {
     reduce() {
         const node = this._createNewNode();
-        node.type = this.type.reduce();
+        node.typeNode = this.type.reduce();
         node.name = this.identifierToken.image;
         node.registerLocation('name', this.identifierToken.getLocation());
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        return this.type = this.typeNode.resolveType(typeChecker, module);
     }
 }
 
@@ -81,8 +103,12 @@ export class TypeDeclaration extends ASTNode {
         const node = this._createNewNode();
         node.name = this.typeNameToken.image;
         node.registerLocation('name', this.typeNameToken.getLocation());
-        node.type = this.type.reduce();
+        node.typeNode = this.type.reduce();
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        return this.type = this.typeNode.resolveType(typeChecker, module);
     }
 }
 
@@ -93,5 +119,12 @@ export class ExportDeclaration extends ASTNode {
         node.registerLocation('name', this.defaultToken ? this.defaultToken.getLocation() : this.exportName.getLocation());
         if (this.exportedValue) node.value = this.exportedValue.reduce();
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        // empty symbol table
+        const symbolTable = {};
+        // visit the value of the export, we don't have a resolved type yet so just pass null
+        return this.type = this.value.resolveType(typeChecker, module, symbolTable, null);
     }
 }

@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TUnknown } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TUnknown, TAny } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 
@@ -18,6 +18,8 @@ export class Type extends ASTNode {
             return this.structType.reduce();
         } else if (this.arrayType) {
             return this.arrayType.reduce();
+        } else if (this.unionType) {
+            return this.unionType.reduce();
         } else if (this.innerType) {
             const node = this._createNewNode();
             node.parenthesized = this.innerType.reduce();
@@ -28,36 +30,38 @@ export class Type extends ASTNode {
         }
     }
 
-    visitType(typeChecker, module) {
-        return this.parenthesized.visitType(typeChecker, module);
+    resolveType(typeChecker, module) {
+        return this.type = this.parenthesized.resolveType(typeChecker, module);
     }
 }
 
 export class PrimitiveType extends ASTNode {
-    constructor(type, location) {
-        super({ type });
+    constructor(typeNode, location) {
+        super({ typeNode });
         this.registerLocation('self', location);
     }
 
-    visitType() {
-        switch (this.type) {
-            case 'u8': case 'byte': return new TInteger(8, false);
-            case 'i8': return new TInteger(8, true);
-            case 'u16': case 'short': return new TInteger(16, false);
-            case 'i16': return new TInteger(16, true);
-            case 'u32': return new TInteger(32, false);
-            case 'i32': case 'integer': return new TInteger(32, true);
-            case 'u64': return new TInteger(64, false);
-            case 'i64': case 'long': return new TInteger(64, true);
-            case 'int': return new TInteger(Infinity, true);
-            case 'f32': case 'float': return new TFloat(32);
-            case 'f64': case 'double': return new TFloat(64);
-            case 'char': return new TChar();
-            case 'string': return new TArray(new TChar());
-            case 'bool': return new TBool();
-            case 'void': return new TTuple([]);
+    resolveType() {
+        switch (this.typeNode) {
+            case 'u8': case 'byte': this.type = new TInteger(8, false);
+            case 'i8': this.type = new TInteger(8, true);
+            case 'u16': case 'short': this.type = new TInteger(16, false);
+            case 'i16': this.type = new TInteger(16, true);
+            case 'u32': this.type = new TInteger(32, false);
+            case 'i32': case 'integer': this.type = new TInteger(32, true);
+            case 'u64': this.type = new TInteger(64, false);
+            case 'i64': case 'long': this.type = new TInteger(64, true);
+            case 'int': this.type = new TInteger(Infinity, true);
+            case 'f32': case 'float': this.type = new TFloat(32);
+            case 'f64': case 'double': this.type = new TFloat(64);
+            case 'char': this.type = new TChar();
+            case 'string': this.type = new TArray(new TChar());
+            case 'bool': this.type = new TBool();
+            case 'void': this.type = new TTuple([]);
+            case 'any': this.type = new TAny();
             default: throw new Error(`Invalid built-in type ${this.type}`);
         }
+        return this.type;
     }
 }
 
@@ -67,30 +71,14 @@ export class IdentifierType extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    visitType(typeChecker, module) {
-        const type = module.types[this.name];
-        if (!type) {
+    resolveType(typeChecker, module) {
+        if (!module.types[this.name]) {
             typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.name), module.path, this.locations.self));
-            return new TUnknown();
-        }
-        if (type.imported) {
-            // if the type is imported, we need to get the exported type
-            // TODO: this may be recursive, plus this will be repeated. this logic belongs in the type checker class
-            const imp = module.imports[this.name];
-            const importedModule = typeChecker.modules[imp.moduleId];
-            const exportedType = importedModule.exports[imp.exportName];
-            const importedType = importedModule.types[exportedType.valueName];
-            if (importedType.type) return importedType.type;
-            const resolvedType = importedType.ast.visitType(typeChecker, importedModule);
-            importedType.type = resolvedType;
-            return resolvedType;
+            this.type = new TUnknown();
         } else {
-            // otherwise the type was declared in this class
-            if (type.type) return type.type;
-            const resolvedType = type.ast.visitType(typeChecker, module);
-            type.type = resolvedType;
-            return resolvedType;
+            this.type = typeChecker.getType(module, this.name);
         }
+        return this.type;
     }
 }
 
@@ -103,12 +91,12 @@ export class FunctionType extends ASTNode {
         return node;
     }
 
-    visitType(typeChecker, module) {
-        const paramTypes = this.paramTypes.map(t => t.visitType(typeChecker, module));
-        const returnType = this.returnType.visitType(typeChecker, module);
-        if (paramTypes.some(t => t instanceof TUnknown)) return new TUnknown();
-        if (returnType instanceof TUnknown) return new TUnknown();
-        return new TFunction(paramTypes, returnType); // eslint-disable-line no-new-func
+    resolveType(typeChecker, module) {
+        const paramTypes = this.paramTypes.map(t => t.resolveType(typeChecker, module));
+        const returnType = this.returnType.resolveType(typeChecker, module);
+        if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) this.type = new TUnknown();
+        else this.type = new TFunction(paramTypes, returnType);
+        return this.type;
     }
 }
 
@@ -120,10 +108,11 @@ export class TupleType extends ASTNode {
         return node;
     }
 
-    visitType(typeChecker, module) {
-        const types = this.types.map(t => t.visitType(typeChecker, module));
-        if (types.some(t => t instanceof TUnknown)) return new TUnknown();
-        return new TTuple(types);
+    resolveType(typeChecker, module) {
+        const types = this.types.map(t => t.resolveType(typeChecker, module));
+        if (types.some(t => t instanceof TUnknown)) this.type = new TUnknown();
+        else this.type = new TTuple(types);
+        return this.type;
     }
 }
 
@@ -139,17 +128,22 @@ export class StructType extends ASTNode {
         return node;
     }
 
-    visitType(typeChecker, module) {
+    resolveType(typeChecker, module) {
         const fields = {};
         for (const field of this.fields) {
             if (fields[field.name]) {
                 typeChecker.errors.push(new TypeCheckError(mess.NAME_CLASH(field.name), module.path, this.locations[`field_${field.name}`]));
-                return new TUnknown();
+                this.type = new TUnknown();
+                break;
             }
-            fields[field.name] = field.type.visitType(typeChecker, module);
-            if (fields[field.name] instanceof TUnknown) return new TUnknown();
+            fields[field.name] = field.type.resolveType(typeChecker, module);
+            if (fields[field.name] instanceof TUnknown) {
+                this.type = new TUnknown();
+                break;
+            }
         }
-        return new TStruct(fields);
+        if (!this.type) this.type = new TStruct(fields);
+        return this.type;
     }
 }
 
@@ -161,26 +155,31 @@ export class ArrayType extends ASTNode {
         return node;
     }
 
-    visitType(typeChecker, module) {
-        const baseType = this.baseType.visitType(typeChecker, module);
-        if (baseType instanceof TUnknown) return new TUnknown();
-        return new Array(baseType);
+    resolveType(typeChecker, module) {
+        const baseType = this.baseType.resolveType(typeChecker, module);
+        if (baseType instanceof TUnknown) this.type = new TUnknown();
+        else this.type = new TArray(baseType);
     }
 }
 
 export class UnionType extends ASTNode {
     reduce() {
         const node = this._createNewNode();
-        node.left = this.left.reduce();
+        // collapse the left and right types into a single list if they are union types
+        const left = this.left.reduce();
+        if (left instanceof UnionType) node.types = [...left.types];
+        else node.types = [left];
         node.right = this.right.reduce();
+        if (right instanceof UnionType) node.types = [...node.types, ...right.types];
+        else node.types.push(right);
         node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);
         return node;
     }
 
-    visitType(typeChecker, module) {
-        const left = this.left.visitType(typeChecker, module);
-        const right = this.right.visitType(typeChecker, module);
-        if (left instanceof TUnknown || right instanceof TUnknown) return new TUnknown();
-        return new TUnion(left, right);
+    resolveType(typeChecker, module) {
+        const types = this.types.map(t => t.resolveType(typeChecker, module));
+        if (types.some(t => t instanceof TUnknown)) this.type = new TUnknown();
+        else this.type = new TUnion(types);
+        return this.type;
     }
 }

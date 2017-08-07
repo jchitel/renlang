@@ -48,6 +48,17 @@ export default class ASTNode {
         throw new Error('Unimplemented method');
     }
 
+    /**
+     * This method is the meat of the type checking logic.
+     * It is passed the type checker instance and containing module instance always,
+     * if it is a statement it also receives a symbol table and the expected return type of the containing function.
+     * If it is an expression it also receives a symbol table and the expected type of the expression (if any).
+     * This method MUST set the type property of the node, and it MUST return that type (unless it is a statement).
+     */
+    resolveType() {
+        throw new Error('Unimplemented method');
+    }
+
     _createNewNode() {
         return Object.create(Object.getPrototypeOf(this));
     }

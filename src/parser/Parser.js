@@ -328,6 +328,7 @@ export default class Parser {
             case 'CHAR':
             case 'BOOL':
             case 'VOID':
+            case 'ANY':
                 typeNode = new AST.Type({ builtIn: tok }, [tok]);
                 break;
             case 'IDENT': typeNode = new AST.Type({ name: tok }, [tok]); break;

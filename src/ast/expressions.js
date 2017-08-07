@@ -1,4 +1,5 @@
 import ASTNode from './ASTNode';
+import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny } from '../typecheck/types';
 
 
 export class Expression extends ASTNode {
@@ -46,12 +47,45 @@ export class Expression extends ASTNode {
             throw new Error('Invalid Expression node');
         }
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        return this.type = this.parenthesized.resolveType(typeChecker, module, symbolTable, expectedType);
+    }
 }
 
 export class IntegerLiteral extends ASTNode {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
+    }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        // if the expected type is not an integer or the integer value is outside the set specified by the expected type, it's an error
+        if (!(expectedType instanceof TInteger) || !expectedType.isValidValue(this.value)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(this.estimateType(), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
+    }
+
+    estimateType() {
+        let signed, size;
+        if (this.value < 0) {
+            signed = true;
+            if ((-this.value) < (2**7)) size = 8;
+            else if ((-this.value) < (2**15)) size = 16;
+            else if ((-this.value) < (2**31)) size = 32;
+            else if (this.value > -(2**63)) size = 64; // TODO: not sure this is possible to calculate this way
+            else size = Infinity;
+        } else {
+            signed = false;
+            if (this.value < (2**8)) size = 8;
+            else if (this.value < (2**16)) size = 16;
+            else if (this.value < (2**32)) size = 32;
+            else if (this.value < (2**64)) size = 64; // TODO: not sure this is possible to calculate this way
+            else size = Infinity;
+        }
+        return new TInteger(size, signed);
     }
 }
 
@@ -60,12 +94,33 @@ export class FloatLiteral extends ASTNode {
         super({ value });
         this.registerLocation('self', location);
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        // if the expected type is not a float or the float value is outside the set specified by the expected type, it's an error
+        if (!(expectedType instanceof TFloat) || !expectedType.isValidValue(this.value)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(this.estimateType(), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
+    }
+
+    estimateType() {
+        return new TFloat(64); // TODO: add this logic
+    }
 }
 
 export class CharLiteral extends ASTNode {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
+    }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        if (!(expectedType instanceof TChar)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TChar(), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
     }
 }
 
@@ -74,6 +129,14 @@ export class StringLiteral extends ASTNode {
         super({ value });
         this.registerLocation('self', location);
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        if (!(expectedType instanceof TArray) || !(expectedType.baseType instanceof TChar)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(new TChar()), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
+    }
 }
 
 export class BoolLiteral extends ASTNode {
@@ -81,12 +144,36 @@ export class BoolLiteral extends ASTNode {
         super({ value: image === 'true' });
         this.registerLocation('self', location);
     }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        if (!(expectedType instanceof TBool)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TBool(), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
+    }
 }
 
 export class IdentifierExpression extends ASTNode {
     constructor(name, location) {
         super({ name });
         this.registerLocation('self', location);
+    }
+
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        let actualType = symbolTable[this.name];
+        if (!actualType) {
+            actualType = typeChecker.getValueType(module, this.name);
+        }
+        if (!actualType) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINES(this.name), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        if (!expectedType.isAssignableFrom(actualType)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualType, expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        return this.type = expectedType;
     }
 }
 
@@ -97,6 +184,42 @@ export class ArrayLiteral extends ASTNode {
         node.createAndRegisterLocation('self', this.openBracketToken.getLocation(), this.closeBracketToken.getLocation());
         return node;
     }
+
+    // TODO: how to relate this to isAssignableFrom()
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        if (!(expectedType instanceof TArray)) {
+            // don't bother type checking items inside the array, just pass null for the base type
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(null), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        // no items, can't infer type, assume expected type is correct
+        if (!this.items.length) {
+            if (!expectedType.baseType) return this.type = new TArray(new TAny());
+            return this.type = expectedType;
+        }
+        if (expectedType.baseType) {
+            // check assignability for each item in the array
+            for (const i in this.items) {
+                const t = i.resolveType(typeChecker, module.symbolTable, expectedType.baseType);
+                // TODO you were here
+            }
+        }
+        // infer the type of the first item
+        let baseType = this.items[0].resolveType(typeChecker, module, symbolTable, expectedType);
+        // for all remaining items, make sure there is one base assignable type for them all
+        for (let i = 1; i < this.items.length; ++i) {
+            const type = this.items[i].resolveType(typeChecker, module);
+            if (baseType.isAssignableTo(type) && !type.isAssignableTo(baseType)) {
+                // if there is an assignability relationship but type is more general than baseType, use type
+                baseType = type;
+            } else if (!baseType.isAssignableTo(type) && !type.isAssignableTo(baseType)) {
+                // no assignability relationship, the only type we can use is any. TODO: this shouldn't be the way
+                baseType = new TAny();
+                break;
+            }
+        }
+        return new TArray(baseType);
+    }
 }
 
 export class TupleLiteral extends ASTNode {
@@ -105,6 +228,20 @@ export class TupleLiteral extends ASTNode {
         node.items = this.items.map(i => i.reduce());
         node.createAndRegisterLocation('self', this.openParenToken.getLocation(), this.closeParenToken.getLocation());
         return node;
+    }
+
+    // TODO: how to relate this to isAssignableFrom()
+    resolveType(typeChecker, module, symbolTable, expectedType) {
+        if (!(expectedType instanceof TTuple)) {
+            // don't bother type checking items inside the tuple, just pass null for each item
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(this.items.map(i => null)), expectedType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        for (let i = 0; i < this.items.length; ++i) {
+            const item = this.items[i];
+            item.resolveType(typeChecker, module, symbolTable, expectedType.items[i]);
+        }
+        return this.type = expectedType;
     }
 }
 
@@ -119,6 +256,15 @@ export class StructLiteral extends ASTNode {
         node.createAndRegisterLocation('self', this.openBraceToken.getLocation(), this.closeBraceToken.getLocation());
         return node;
     }
+
+    // TODO: how to relate this to isAssignableFrom()
+    resolveType(typeChecker, module) {
+        const fields = {};
+        for (const { key, value } of this.entries) {
+            fields[key] = value.resolveType(typeChecker, module);
+        }
+        return new TStruct(fields);
+    }
 }
 
 export class LambdaExpression extends ASTNode {
@@ -131,6 +277,12 @@ export class LambdaExpression extends ASTNode {
             this.openParenToken ? this.openParenToken.getLocation() : this.params[0].type ? this.params[0].type.locations.self : this.params[0].locations.name,
             this.body.locations.self);
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        const paramTypes = this.params.map(p => p.resolveType(typeChecker, module));
+        // can't infer return type, that will happen when we are checking types
+        return new TFunction(paramTypes, null);
     }
 }
 
@@ -152,6 +304,11 @@ export class LambdaParam extends ASTNode {
         node.registerLocation('name', this.identifierToken.getLocation());
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        // if the type isn't explicit, we can't infer it, that will happen during type checking
+        return this.type ? this.type.resolveType(typeChecker, module) : null;
+    }
 }
 
 export class UnaryExpression extends ASTNode {
@@ -165,6 +322,11 @@ export class UnaryExpression extends ASTNode {
         node.createAndRegisterLocation('self', node.prefix ? node.locations.oper : node.target.locations.self, node.prefix ? node.target.locations.self : node.locations.oper);
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        const targetType = this.target.resolveType(typeChecker, module);
+        return typeChecker.getOperatorReturnType(module, this.oper, targetType);
+    }
 }
 
 export class BinaryExpression extends ASTNode {
@@ -177,6 +339,12 @@ export class BinaryExpression extends ASTNode {
         node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        const leftType = this.left.resolveType(typeChecker, module);
+        const rightType = this.right.resolveType(typeChecker, module);
+        return typeChecker.getOperatorReturnType(module, this.oper, leftType, rightType);
+    }
 }
 
 export class IfElseExpression extends ASTNode {
@@ -187,6 +355,21 @@ export class IfElseExpression extends ASTNode {
         node.alternate = this.alternate.reduce();
         node.createAndRegisterLocation('self', this.ifToken.getLocation(), node.alternate.locations.self);
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        let type = this.consequent.resolveType(typeChecker, module);
+        if (type instanceof TUnknown) return new TUnknown();
+        const altType = this.alternate.resolveType(typeChecker, module);
+        if (altType instanceof TUnknown) return new TUnknown();
+        if (type.isAssignableTo(altType) && !altType.isAssignableTo(type)) {
+            // if there is an assignability relationship but altType is more general than type, use altType
+            type = altType;
+        } else if (!type.isAssignableTo(altType) && !altType.isAssignableTo(type)) {
+            // no assignability relationship, the only type we can use is any. TODO: this shouldn't be the way
+            type = new TAny();
+        }
+        return type;
     }
 }
 
@@ -199,6 +382,10 @@ export class VarDeclaration extends ASTNode {
         node.createAndRegisterLocation('self', node.locations.name, node.initExp.locations.self);
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        return this.initExp.resolveType(typeChecker, module);
+    }
 }
 
 export class FunctionApplication extends ASTNode {
@@ -208,6 +395,13 @@ export class FunctionApplication extends ASTNode {
         node.paramValues = this.paramValues.map(v => v.reduce());
         node.createAndRegisterLocation('self', node.target.locations.self, this.closeParenToken.getLocation());
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        const funcType = this.target.resolveType(typeChecker, module);
+        // the type is not a function type so it cannot be inferred
+        if (!(funcType instanceof TFunction)) return new TUnknown();
+        return funcType.returnType;
     }
 }
 
@@ -220,6 +414,13 @@ export class FieldAccess extends ASTNode {
         node.createAndRegisterLocation('self', node.target.locations.self, node.locations.field);
         return node;
     }
+
+    resolveType(typeChecker, module) {
+        const structType = this.target.resolveType(typeChecker, module);
+        // type is not a struct type so it can't be inferred
+        if (!(structType instanceof TStruct)) return new TUnknown();
+        return structType.fields[this.field];
+    }
 }
 
 export class ArrayAccess extends ASTNode {
@@ -229,5 +430,12 @@ export class ArrayAccess extends ASTNode {
         node.indexExp = this.indexExp.reduce();
         node.createAndRegisterLocation('self', node.target.locations.self, this.closeBracketToken.getLocation());
         return node;
+    }
+
+    resolveType(typeChecker, module) {
+        const arrayType = this.target.resolveType(typeChecker, module);
+        // type is not an array type so it can't be inferred
+        if (!(arrayType instanceof TArray)) return new TUnknown();
+        return arrayType.baseType;
     }
 }
