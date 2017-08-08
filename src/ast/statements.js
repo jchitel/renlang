@@ -1,4 +1,7 @@
 import ASTNode from './ASTNode';
+import { TBool, TTuple, TArray, TAny, TUnknown, determineGeneralType } from '../typecheck/types';
+import TypeCheckError from '../typecheck/TypeCheckError';
+import * as mess from '../typecheck/TypeCheckerMessages';
 
 
 export class Statement extends ASTNode {
@@ -40,10 +43,13 @@ export class Block extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
+        let returnType = null;
         for (const statement of this.statements) {
-            statement.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+            const type = statement.resolveType(typeChecker, module, symbolTable);
+            returnType = determineGeneralType(returnType, type);
         }
+        return returnType;
     }
 }
 
@@ -72,17 +78,24 @@ export class ForStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
         // type check the iterable expression, will fill in the base type of the array
-        const arrayType = this.iterableExp.resolveType(typeChecker, module, symbolTable, new TArray(null));
-        const baseType = arrayType.baseType;
+        const arrayType = this.iterableExp.resolveType(typeChecker, module, symbolTable);
+        let iterType;
+        if (!(new TArray(null).isAssignableFrom(arrayType))) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(arrayType, new TArray(null)), module.path, this.iterableExp.locations.self));
+            iterType = new TUnknown();
+        } else {
+            iterType = arrayType.baseType;
+        }
         // add the iterator variable to the symbol table, visit the body, then remove it
-        symbolTable[this.iterVar] = baseType;
+        symbolTable[this.iterVar] = iterType;
         // add the loop number as a special symbol
         symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
-        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        const returnType = this.body.resolveType(typeChecker, module, symbolTable);
         delete symbolTable[this.iterVar];
         symbolTable['@@loopNumber']--;
+        return returnType;
     }
 }
 
@@ -97,7 +110,10 @@ export class WhileStatement extends ASTNode {
 
     resolveType(typeChecker, module, symbolTable, expectedReturnType) {
         // type check the condition
-        this.conditionExp.resolveType(typeChecker, module, symbolTable, new TBool());
+        const conditionType = this.conditionExp.resolveType(typeChecker, module, symbolTable);
+        if (!(new TBool().isAssignableFrom(conditionType))) {
+            
+        }
         // add the loop number as a special symbol
         symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
         // type check the body

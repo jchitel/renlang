@@ -1,5 +1,7 @@
 import ASTNode from './ASTNode';
 import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny } from '../typecheck/types';
+import TypeCheckError from '../typecheck/TypeCheckError';
+import * as mess from '../typecheck/TypeCheckerMessages';
 
 
 export class Expression extends ASTNode {
@@ -72,17 +74,17 @@ export class IntegerLiteral extends ASTNode {
         let signed, size;
         if (this.value < 0) {
             signed = true;
-            if ((-this.value) < (2**7)) size = 8;
-            else if ((-this.value) < (2**15)) size = 16;
-            else if ((-this.value) < (2**31)) size = 32;
-            else if (this.value > -(2**63)) size = 64; // TODO: not sure this is possible to calculate this way
+            if ((-this.value) < (2 ** 7)) size = 8;
+            else if ((-this.value) < (2 ** 15)) size = 16;
+            else if ((-this.value) < (2 ** 31)) size = 32;
+            else if (this.value > -(2 ** 63)) size = 64; // TODO: not sure this is possible to calculate this way
             else size = Infinity;
         } else {
             signed = false;
-            if (this.value < (2**8)) size = 8;
-            else if (this.value < (2**16)) size = 16;
-            else if (this.value < (2**32)) size = 32;
-            else if (this.value < (2**64)) size = 64; // TODO: not sure this is possible to calculate this way
+            if (this.value < (2 ** 8)) size = 8;
+            else if (this.value < (2 ** 16)) size = 16;
+            else if (this.value < (2 ** 32)) size = 32;
+            else if (this.value < (2 ** 64)) size = 64; // TODO: not sure this is possible to calculate this way
             else size = Infinity;
         }
         return new TInteger(size, signed);

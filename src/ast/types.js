@@ -43,22 +43,22 @@ export class PrimitiveType extends ASTNode {
 
     resolveType() {
         switch (this.typeNode) {
-            case 'u8': case 'byte': this.type = new TInteger(8, false);
-            case 'i8': this.type = new TInteger(8, true);
-            case 'u16': case 'short': this.type = new TInteger(16, false);
-            case 'i16': this.type = new TInteger(16, true);
-            case 'u32': this.type = new TInteger(32, false);
-            case 'i32': case 'integer': this.type = new TInteger(32, true);
-            case 'u64': this.type = new TInteger(64, false);
-            case 'i64': case 'long': this.type = new TInteger(64, true);
-            case 'int': this.type = new TInteger(Infinity, true);
-            case 'f32': case 'float': this.type = new TFloat(32);
-            case 'f64': case 'double': this.type = new TFloat(64);
-            case 'char': this.type = new TChar();
-            case 'string': this.type = new TArray(new TChar());
-            case 'bool': this.type = new TBool();
-            case 'void': this.type = new TTuple([]);
-            case 'any': this.type = new TAny();
+            case 'u8': case 'byte': this.type = new TInteger(8, false); break;
+            case 'i8': this.type = new TInteger(8, true); break;
+            case 'u16': case 'short': this.type = new TInteger(16, false); break;
+            case 'i16': this.type = new TInteger(16, true); break;
+            case 'u32': this.type = new TInteger(32, false); break;
+            case 'i32': case 'integer': this.type = new TInteger(32, true); break;
+            case 'u64': this.type = new TInteger(64, false); break;
+            case 'i64': case 'long': this.type = new TInteger(64, true); break;
+            case 'int': this.type = new TInteger(Infinity, true); break;
+            case 'f32': case 'float': this.type = new TFloat(32); break;
+            case 'f64': case 'double': this.type = new TFloat(64); break;
+            case 'char': this.type = new TChar(); break;
+            case 'string': this.type = new TArray(new TChar()); break;
+            case 'bool': this.type = new TBool(); break;
+            case 'void': this.type = new TTuple([]); break;
+            case 'any': this.type = new TAny(); break;
             default: throw new Error(`Invalid built-in type ${this.type}`);
         }
         return this.type;
@@ -169,7 +169,7 @@ export class UnionType extends ASTNode {
         const left = this.left.reduce();
         if (left instanceof UnionType) node.types = [...left.types];
         else node.types = [left];
-        node.right = this.right.reduce();
+        const right = this.right.reduce();
         if (right instanceof UnionType) node.types = [...node.types, ...right.types];
         else node.types.push(right);
         node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);

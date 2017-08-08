@@ -317,3 +317,13 @@ export class TRecursive extends TType {
         return this.decl.type.isAssignableFrom(t);
     }
 }
+
+/**
+ * Given two optional types, return the more general one of the two
+ */
+export function determineGeneralType(type1, type2) {
+    if (!type2) return type1;
+    if (type2.isAssignableFrom(type1) && !type1.isAssignableFrom(type2)) return type2;
+    if (!type2.isAssignableFrom(type1) && type1.isAssignableFrom(type2)) return type1;
+    return type1;
+}

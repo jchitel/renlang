@@ -1,5 +1,7 @@
 import ASTNode from './ASTNode';
 import { TFunction, TUnknown } from '../typecheck/types';
+import TypeCheckError from '../typecheck/TypeCheckError';
+import * as mess from '../typecheck/TypeCheckerMessages';
 
 
 export class Program extends ASTNode {
@@ -72,7 +74,10 @@ export class FunctionDeclaration extends ASTNode {
             symbolTable[this.params[i].name] = paramTypes[i];
         }
         // type check the function body, passing along the starting symbol table and the return type of the function as the expected type of the body
-        this.body.resolveType(typeChecker, module, symbolTable, returnType);
+        const actualReturnType = this.body.resolveType(typeChecker, module, symbolTable);
+        if (!returnType.isAssignableFrom(actualReturnType)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, returnType), module.path, this.returnType.locations.self));
+        }
         return this.type;
     }
 }
@@ -125,6 +130,6 @@ export class ExportDeclaration extends ASTNode {
         // empty symbol table
         const symbolTable = {};
         // visit the value of the export, we don't have a resolved type yet so just pass null
-        return this.type = this.value.resolveType(typeChecker, module, symbolTable, null);
+        return this.type = this.value.resolveType(typeChecker, module, symbolTable);
     }
 }
