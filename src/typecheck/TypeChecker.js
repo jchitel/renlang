@@ -307,7 +307,7 @@ export default class TypeChecker {
      */
     getValueType(module, name) {
         const value = module.functions[name] || module.constants[name];
-        if (!value) throw new Error(`Value ${name} somehow did not exist in module ${module.path}`);
+        if (!value) return null;
         if (value.imported) {
             // value is imported, resolve the import to the corresponding export in the imported module
             const imp = module.imports[name];

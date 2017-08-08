@@ -206,13 +206,27 @@ export class TFunction extends TType {
         if (!(t instanceof TFunction)) return false;
         // they need to have the same number of params
         if (this.paramTypes.length !== t.paramTypes.length) return false;
-        // the return types need to be assignable
-        if (!this.returnType.isAssignableFrom(t.returnType)) return false;
+        // the return types need to be assignable (assume it's ok if the return type is omitted, as in a lambda)
+        if (t.returnType !== null && !this.returnType.isAssignableFrom(t.returnType)) return false;
         // the param types need to be assignable (using the reverse relationship as described above)
         for (let i = 0; i < this.paramTypes.length; ++i) {
+            // lambda param types can omit the type, we assume assignability here
+            if (t.paramTypes[i] === null) continue;
             if (!t.paramTypes[i].isAssignableFrom(this.paramTypes[i])) return false;
         }
         return true;
+    }
+
+    /**
+     * Lambdas can omit types for parameters and must omit them for return types,
+     * so here is where we know the expected type of the function and can fill in the blanks.
+     * We assume here that type checking has already been done, so all we do here is fill in the types.
+     */
+    completeResolution(explicitType) {
+        for (let i = 0; i < this.paramTypes.length; ++i) {
+            if (!this.paramTypes[i]) this.paramTypes[i] = explicitType.paramTypes[i];
+        }
+        this.returnType = explicitType.returnType;
     }
 }
 

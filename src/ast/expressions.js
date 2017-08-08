@@ -2,6 +2,7 @@ import ASTNode from './ASTNode';
 import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
+import { getOperator } from '../runtime/operators';
 
 
 export class Expression extends ASTNode {
@@ -226,7 +227,24 @@ export class LambdaExpression extends ASTNode {
     resolveType(typeChecker, module, symbolTable) {
         const paramTypes = this.params.map(p => p.resolveType(typeChecker, module, symbolTable));
         // can't infer return type, that will happen when we are checking types
-        return new TFunction(paramTypes, null);
+        return this.type = new TFunction(paramTypes, null);
+    }
+
+    /**
+     * Once the type of the lambda has been inferred and filled in,
+     * we need to do resolution on the body.
+     */
+    completeResolution(typeChecker, module) {
+        // create a symbol table initialized to contain the parameters
+        const symbolTable = {};
+        for (let i = 0; i < this.params.length; ++i) {
+            symbolTable[this.params[i].name] = this.type.paramTypes[i];
+        }
+        // type check the function body, passing along the starting symbol table
+        const actualReturnType = this.body.resolveType(typeChecker, module, symbolTable);
+        if (!this.returnType.isAssignableFrom(actualReturnType)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, this.returnType), module.path, this.locations.self));
+        }
     }
 }
 
@@ -267,10 +285,22 @@ export class UnaryExpression extends ASTNode {
         return node;
     }
 
-    // TODO: factor in lambda types
     resolveType(typeChecker, module, symbolTable) {
         const targetType = this.target.resolveType(typeChecker, module, symbolTable);
-        return this.type = typeChecker.getOperatorReturnType(module, this.oper, targetType);
+        // check if the operator exists
+        const oper = getOperator(this.oper, this.prefix ? 'prefix' : 'suffix');
+        if (!oper) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.oper), module.path, this.locations.oper));
+            return this.type = new TUnknown();
+        }
+        // resolve the function type of the operator using the type being passed to it
+        this.operType = oper.getType(targetType);
+        if (this.operType instanceof TUnknown) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_OPERATOR(this.oper, targetType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        // the return type of the operator type is the type of this expression
+        return this.type = this.operType.returnType;
     }
 }
 
@@ -285,11 +315,107 @@ export class BinaryExpression extends ASTNode {
         return node;
     }
 
-    // TODO: factor in lambda types
+    selectAssociativity(a, b) {
+        // default to ours, if the other is none or equal, this won't change, if ours is none and the other isn't, use the other, otherwise use left
+        let ass = a.associativity === 'none' ? (b.associativity === 'none' ? 'left' : b.associativity) : a.associativity;
+        if (a.associativity === 'left' && b.associativity === 'right' || a.associativity === 'right' && b.associativity === 'left') {
+            // conflicting associativity, impossible to resolve precedence
+            typeChecker.errors.push(new TypeCheckError(mess.CONFLICTING_ASSOCIATIVITY(a.symbol, b.symbol), module.path, this.locations.self));
+            return;
+        }
+        return ass;
+    }
+
+    /**
+     * Shift the expression tree so that this node is moved to the current right node's left child,
+     * and the right node's left child becomes this node's right child
+     */
+    shiftRightUp() {
+        // clone this node, overwriting the right node with the current right node's left node
+        const clone = Object.assign(this._createNewNode(), { oper: this.oper, left: this.left, right: this.right.left, locations: this.locations });
+        // copy the fields of the right node onto this, overwriting the left node with this new clone
+        Object.assign(this, { oper: this.right.oper, left: clone, right: this.right.right, locations: this.right.locations });
+    }
+
+    /**
+     * Shift the expression tree so that this node is moved to the current left node's right child,
+     * and the left node's right child becomes this node's left child
+     */
+    shiftLeftUp() {
+        // clone this node, overwriting the left node with the current left node's right node
+        const clone = Object.assign(this._createNewNode(), { oper: this.oper, left: this.left.right, right: this.right, locations: this.locations });
+        // copy the fields of the left node onto this, overwriting the right node with this new clone
+        Object.assign(this, { oper: this.left.oper, left: this.left.left, right: clone, locations: this.left.locations });
+    }
+
+    /**
+     * Resolve the precedence of this binary operator if it has children that are also binary operators.
+     * This is a complicated bit of logic that is based on two rules:
+     * - operators with higher precedence get pushed down in the tree
+     * - operators with the same precedence get pushed left for left associativity and right for right associativity
+     * This is attempted by starting at the top node of a tree of binary expressions,
+     * which will initially be a fully left-associative structure, where the full chain
+     * of operators goes down to the left.
+     * We then traverse the tree, shifting it according to the above rules, until it has been completely resolved.
+     * TODO: this REALLY needs to be tested, I have no idea if this is going to work.
+     */
+    resolvePrecedence(typeChecker, module) {
+        const oper = getOperator(this.oper, 'infix');
+        if (this.right instanceof BinaryExpression) {
+            const rightOper = getOperator(this.right.oper, 'infix');
+            if (rightOper.precedence < oper.precedence) {
+                this.shiftRightUp();
+            } else if (rightOper.precedence == oper.precedence) {
+                const ass = this.selectAssociativity(oper, rightOper);
+                if (ass === 'left') this.shiftRightUp();
+            }
+        }
+        // continue to iterate until we don't need to switch the tree
+        while (this.left instanceof BinaryExpression) {
+            const leftOper = getOperator(this.left.oper, 'infix');
+            if (leftOper.precedence < oper.precedence) {
+                this.shiftLeftUp();
+                // visit the new parent, which is actually now the current node
+                this.resolvePrecedence(typeChecker, module);
+                // finish visiting the original node, which is now the right child
+                this.right.resolvePrecedence(typeChecker, module);
+                continue;
+            } else if (leftOper.precedence === oper.precedence) {
+                const ass = this.selectAssociativity(oper, leftOper);
+                if (ass === 'right') {
+                    this.shiftLeftUp();
+                    // visit the new parent, which is actually now the current node
+                    this.resolvePrecedence(typeChecker, module);
+                    // finish visiting the original node, which is now the right child
+                    this.right.resolvePrecedence(typeChecker, module);
+                    continue;
+                }
+            }
+            // the tree is structured validly, stop looping
+            break;
+        }
+    }
+
     resolveType(typeChecker, module, symbolTable) {
+        // resolve the expression based on precedence rules, may mutate tree
+        this.resolvePrecedence(typeChecker, module);
+        // resolve the left and right expression types
         const leftType = this.left.resolveType(typeChecker, module, symbolTable);
         const rightType = this.right.resolveType(typeChecker, module, symbolTable);
-        return this.type = typeChecker.getOperatorReturnType(module, this.oper, leftType, rightType);
+        // check if the operator exists
+        const oper = getOperator(this.oper, 'infix');
+        if (!oper) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.oper), module.path, this.locations.oper));
+            return this.type = new TUnknown();
+        }
+        // resolve the function type of the operator using the types being passed to it
+        this.operType = oper.getType(leftType, rightType);
+        if (this.operType instanceof TUnknown) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_OPERATOR(this.oper, targetType), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        }
+        // the return type of the operator type is the type of this expression
+        return this.type = this.operType.returnType;
     }
 }
 
@@ -326,8 +452,14 @@ export class VarDeclaration extends ASTNode {
 
     resolveType(typeChecker, module, symbolTable) {
         const expType = this.initExp.resolveType(typeChecker, module, symbolTable);
-        symbolTable[this.name] = expType;
-        return expType;
+        if (symbolTable[this.name] || module.getValueType(this.name)) {
+            // symbol already exists
+            typeChecker.errors.push(new TypeCheckError(mess.NAME_CLASH(this.name), module.path, this.locations.name));
+        } else {
+            // add the variable to the symbol table
+            symbolTable[this.name] = expType;
+        }
+        return this.type = expType;
     }
 }
 
@@ -340,17 +472,31 @@ export class FunctionApplication extends ASTNode {
         return node;
     }
 
-    // TODO: factor in lambda types
-    resolveType(typeChecker, module) {
-        const funcType = this.target.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, symbolTable) {
+        const funcType = this.target.resolveType(typeChecker, module, symbolTable);
+        if (funcType instanceof TUnknown) return this.type = new TUnknown();
         // the type is not a function type so it cannot be inferred
         if (!(funcType instanceof TFunction)) {
             typeChecker.errors.push(new TypeCheckError(mess.NOT_INVOKABLE, module.path, this.target.locations.self));
             return this.type = new TUnknown();
         }
+        // resolve parameters
         for (let i = 0; i < this.paramValues.length; ++i) {
-            // TODO you were here
+            const paramType = this.paramValues[i].resolveType(typeChecker, module, symbolTable);
+            // skip arguments that have already been errored
+            if (paramType instanceof TUnknown) continue;
+            // resolve passed value against parameter type
+            if (!funcType.paramTypes[i].isAssignableFrom(paramType)) {
+                typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(paramType, funcType.paramTypes[i]), module.path, this.paramValues[i].locations.self));
+                continue;
+            }
+            if (this.paramValues[i] instanceof LambdaExpression) {
+                // function application is the only place that lambdas can be passed (for now), so we need to complete the resolution of the type and the lambda body
+                paramType.completeResolution(funcType.paramTypes[i]);
+                this.paramValues[i].completeResolution(typeChecker, module);
+            }
         }
+        // resulting expression type is the return type of the function type
         return this.type = funcType.returnType;
     }
 }
@@ -365,10 +511,20 @@ export class FieldAccess extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const structType = this.target.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, symbolTable) {
+        const structType = this.target.resolveType(typeChecker, module, symbolTable);
+        if (structType instanceof TUnknown) return this.type = new TUnknown();
         // type is not a struct type so it can't be inferred
-        if (!(structType instanceof TStruct)) return new TUnknown();
+        if (!(structType instanceof TStruct)) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_STRUCT, module.path, this.target.locations.self));
+            return this.type = new TUnknown();
+        }
+        // verify that the field exists
+        if (!structType.fields[this.field]) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.field), module.path, this.locations.field));
+            return this.type = new TUnknown();
+        }
+        // return the type of the field
         return structType.fields[this.field];
     }
 }
@@ -382,10 +538,20 @@ export class ArrayAccess extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const arrayType = this.target.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, symbolTable) {
+        const arrayType = this.target.resolveType(typeChecker, module, symbolTable);
+        if (arrayType instanceof TUnknown) return this.type = new TUnknown();
         // type is not an array type so it can't be inferred
-        if (!(arrayType instanceof TArray)) return new TUnknown();
-        return arrayType.baseType;
+        if (!(arrayType instanceof TArray)) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_ARRAY, module.path, this.target.locations.self));
+            return this.type = new TUnknown();
+        }
+        // verify that the index expression is an integer
+        const indexExpType = this.indexExp.resolveType(typeChecker, module, symbolTable);
+        if (!(indexExpType instanceof TUnknown) && !(indexExpType instanceof TInteger)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(indexExpType, new TInteger(null, null)), module.path, this.indexExp.locations.self));
+        }
+        // type is the base type of the array
+        return this.type = arrayType.baseType;
     }
 }
