@@ -52,25 +52,6 @@ export class TInteger extends TType {
         // we have an integer type which represents either the same or a subset of this's set
         return true;
     }
-
-    isValidValue(value) {
-        if (this.size === Infinity) {
-            // if unbounded, it just needs to match the sign
-            return value < 0 ? this.signed : true;
-        }
-        if (this.signed) {
-            // if signed, the value is bounded by [2^(size-1), 2^(size-1))
-            if (value > 0) {
-                return value < (2 ** (this.size - 1));
-            } else {
-                return (-value) <= (2 ** (this.size - 1));
-            }
-        } else {
-            // otherwise, the value is bounded by [0, 2^size)
-            if (value < 0) return false;
-            return value < (2 ** this.size);
-        }
-    }
 }
 
 /**
@@ -95,10 +76,6 @@ export class TFloat extends TType {
         if (this.size < t.size) return false;
         // we have a float type which represents either the same or a subset of this's set
         return true;
-    }
-
-    isValidValue(value) {
-        return true; // TODO: figure out how to implement this logic in JS
     }
 }
 
@@ -261,8 +238,7 @@ export class TUnion extends TType {
             // ex: (int | bool | char) = (int | bool) // valid
             // ex: (int | bool) = (int | char) // not valid
             for (const st of t.types) {
-                if (this.types.some(tt => tt.isAssignableFrom(st))) continue;
-                else return false;
+                if (!this.types.some(tt => tt.isAssignableFrom(st))) return false;
             }
             return true;
         } else {
@@ -322,8 +298,14 @@ export class TRecursive extends TType {
  * Given two optional types, return the more general one of the two
  */
 export function determineGeneralType(type1, type2) {
+    // one or both is falsy
     if (!type2) return type1;
+    if (!type1) return type2;
+    // there is a relationship, select the more general one
     if (type2.isAssignableFrom(type1) && !type1.isAssignableFrom(type2)) return type2;
     if (!type2.isAssignableFrom(type1) && type1.isAssignableFrom(type2)) return type1;
+    // no relationship, the only type is any
+    if (!type2.isAssignableFrom(type1) && !type1.isAssignableFrom(type2)) return new TAny();
+    // types are equivalent
     return type1;
 }

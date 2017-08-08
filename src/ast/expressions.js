@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 
@@ -50,8 +50,8 @@ export class Expression extends ASTNode {
         }
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        return this.type = this.parenthesized.resolveType(typeChecker, module, symbolTable, expectedType);
+    resolveType(typeChecker, module, symbolTable) {
+        return this.type = this.parenthesized.resolveType(typeChecker, module, symbolTable);
     }
 }
 
@@ -61,13 +61,8 @@ export class IntegerLiteral extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        // if the expected type is not an integer or the integer value is outside the set specified by the expected type, it's an error
-        if (!(expectedType instanceof TInteger) || !expectedType.isValidValue(this.value)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(this.estimateType(), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+    resolveType() {
+        return this.estimateType();
     }
 
     estimateType() {
@@ -87,7 +82,7 @@ export class IntegerLiteral extends ASTNode {
             else if (this.value < (2 ** 64)) size = 64; // TODO: not sure this is possible to calculate this way
             else size = Infinity;
         }
-        return new TInteger(size, signed);
+        return this.type = new TInteger(size, signed);
     }
 }
 
@@ -97,17 +92,12 @@ export class FloatLiteral extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        // if the expected type is not a float or the float value is outside the set specified by the expected type, it's an error
-        if (!(expectedType instanceof TFloat) || !expectedType.isValidValue(this.value)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(this.estimateType(), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+    resolveType() {
+        return this.estimateType();
     }
 
     estimateType() {
-        return new TFloat(64); // TODO: add this logic
+        return this.type = new TFloat(64); // TODO: add this logic
     }
 }
 
@@ -117,12 +107,8 @@ export class CharLiteral extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        if (!(expectedType instanceof TChar)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TChar(), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+    resolveType() {
+        return this.type = new TChar();
     }
 }
 
@@ -132,12 +118,8 @@ export class StringLiteral extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        if (!(expectedType instanceof TArray) || !(expectedType.baseType instanceof TChar)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(new TChar()), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+    resolveType() {
+        return this.type = new TArray(new TChar());
     }
 }
 
@@ -147,12 +129,8 @@ export class BoolLiteral extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        if (!(expectedType instanceof TBool)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TBool(), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+    resolveType() {
+        return this.type = new TBool();
     }
 }
 
@@ -162,20 +140,16 @@ export class IdentifierExpression extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedType) {
+    resolveType(typeChecker, module, symbolTable) {
         let actualType = symbolTable[this.name];
         if (!actualType) {
             actualType = typeChecker.getValueType(module, this.name);
         }
         if (!actualType) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINES(this.name), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.name), module.path, this.locations.self));
             return this.type = new TUnknown();
         }
-        if (!expectedType.isAssignableFrom(actualType)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualType, expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        return this.type = expectedType;
+        return this.type = actualType;
     }
 }
 
@@ -187,40 +161,15 @@ export class ArrayLiteral extends ASTNode {
         return node;
     }
 
-    // TODO: how to relate this to isAssignableFrom()
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        if (!(expectedType instanceof TArray)) {
-            // don't bother type checking items inside the array, just pass null for the base type
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(null), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
-        }
-        // no items, can't infer type, assume expected type is correct
-        if (!this.items.length) {
-            if (!expectedType.baseType) return this.type = new TArray(new TAny());
-            return this.type = expectedType;
-        }
-        if (expectedType.baseType) {
-            // check assignability for each item in the array
-            for (const i in this.items) {
-                const t = i.resolveType(typeChecker, module.symbolTable, expectedType.baseType);
-                // TODO you were here
-            }
-        }
+    resolveType(typeChecker, module, symbolTable) {
         // infer the type of the first item
-        let baseType = this.items[0].resolveType(typeChecker, module, symbolTable, expectedType);
+        let baseType = this.items[0].resolveType(typeChecker, module, symbolTable);
         // for all remaining items, make sure there is one base assignable type for them all
         for (let i = 1; i < this.items.length; ++i) {
             const type = this.items[i].resolveType(typeChecker, module);
-            if (baseType.isAssignableTo(type) && !type.isAssignableTo(baseType)) {
-                // if there is an assignability relationship but type is more general than baseType, use type
-                baseType = type;
-            } else if (!baseType.isAssignableTo(type) && !type.isAssignableTo(baseType)) {
-                // no assignability relationship, the only type we can use is any. TODO: this shouldn't be the way
-                baseType = new TAny();
-                break;
-            }
+            baseType = determineGeneralType(baseType, type);
         }
-        return new TArray(baseType);
+        return this.type = new TArray(baseType);
     }
 }
 
@@ -232,18 +181,12 @@ export class TupleLiteral extends ASTNode {
         return node;
     }
 
-    // TODO: how to relate this to isAssignableFrom()
-    resolveType(typeChecker, module, symbolTable, expectedType) {
-        if (!(expectedType instanceof TTuple)) {
-            // don't bother type checking items inside the tuple, just pass null for each item
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TArray(this.items.map(i => null)), expectedType), module.path, this.locations.self));
-            return this.type = new TUnknown();
+    resolveType(typeChecker, module, symbolTable) {
+        const itemTypes = [];
+        for (const item of this.items) {
+            itemTypes.push(item.resolveType(typeChecker, module, symbolTable));
         }
-        for (let i = 0; i < this.items.length; ++i) {
-            const item = this.items[i];
-            item.resolveType(typeChecker, module, symbolTable, expectedType.items[i]);
-        }
-        return this.type = expectedType;
+        return this.type = new TTuple(itemTypes);
     }
 }
 
@@ -259,13 +202,12 @@ export class StructLiteral extends ASTNode {
         return node;
     }
 
-    // TODO: how to relate this to isAssignableFrom()
-    resolveType(typeChecker, module) {
+    resolveType(typeChecker, module, symbolTable) {
         const fields = {};
         for (const { key, value } of this.entries) {
-            fields[key] = value.resolveType(typeChecker, module);
+            fields[key] = value.resolveType(typeChecker, module, symbolTable);
         }
-        return new TStruct(fields);
+        return this.type = new TStruct(fields);
     }
 }
 
@@ -281,8 +223,8 @@ export class LambdaExpression extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const paramTypes = this.params.map(p => p.resolveType(typeChecker, module));
+    resolveType(typeChecker, module, symbolTable) {
+        const paramTypes = this.params.map(p => p.resolveType(typeChecker, module, symbolTable));
         // can't infer return type, that will happen when we are checking types
         return new TFunction(paramTypes, null);
     }
@@ -301,15 +243,15 @@ export class LambdaParamList extends ASTNode {
 export class LambdaParam extends ASTNode {
     reduce() {
         const node = this._createNewNode();
-        if (this.type) node.type = this.type.reduce();
+        if (this.type) node.typeNode = this.type.reduce();
         node.name = this.identifierToken.image;
         node.registerLocation('name', this.identifierToken.getLocation());
         return node;
     }
 
-    resolveType(typeChecker, module) {
+    resolveType(typeChecker, module, symbolTable) {
         // if the type isn't explicit, we can't infer it, that will happen during type checking
-        return this.type ? this.type.resolveType(typeChecker, module) : null;
+        return this.type = (this.typeNode ? this.typeNode.resolveType(typeChecker, module, symbolTable) : null);
     }
 }
 
@@ -325,9 +267,10 @@ export class UnaryExpression extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const targetType = this.target.resolveType(typeChecker, module);
-        return typeChecker.getOperatorReturnType(module, this.oper, targetType);
+    // TODO: factor in lambda types
+    resolveType(typeChecker, module, symbolTable) {
+        const targetType = this.target.resolveType(typeChecker, module, symbolTable);
+        return this.type = typeChecker.getOperatorReturnType(module, this.oper, targetType);
     }
 }
 
@@ -342,10 +285,11 @@ export class BinaryExpression extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const leftType = this.left.resolveType(typeChecker, module);
-        const rightType = this.right.resolveType(typeChecker, module);
-        return typeChecker.getOperatorReturnType(module, this.oper, leftType, rightType);
+    // TODO: factor in lambda types
+    resolveType(typeChecker, module, symbolTable) {
+        const leftType = this.left.resolveType(typeChecker, module, symbolTable);
+        const rightType = this.right.resolveType(typeChecker, module, symbolTable);
+        return this.type = typeChecker.getOperatorReturnType(module, this.oper, leftType, rightType);
     }
 }
 
@@ -359,19 +303,14 @@ export class IfElseExpression extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        let type = this.consequent.resolveType(typeChecker, module);
-        if (type instanceof TUnknown) return new TUnknown();
-        const altType = this.alternate.resolveType(typeChecker, module);
-        if (altType instanceof TUnknown) return new TUnknown();
-        if (type.isAssignableTo(altType) && !altType.isAssignableTo(type)) {
-            // if there is an assignability relationship but altType is more general than type, use altType
-            type = altType;
-        } else if (!type.isAssignableTo(altType) && !altType.isAssignableTo(type)) {
-            // no assignability relationship, the only type we can use is any. TODO: this shouldn't be the way
-            type = new TAny();
+    resolveType(typeChecker, module, symbolTable) {
+        const conditionType = this.condition.resolveType(typeChecker, module, symbolTable);
+        if (!(new TBool().isAssignableFrom(conditionType))) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(conditionType, new TBool()), module.path, this.condition.locations.self));
         }
-        return type;
+        const type = this.consequent.resolveType(typeChecker, module, symbolTable);
+        const altType = this.alternate.resolveType(typeChecker, module, symbolTable);
+        return this.type = determineGeneralType(type, altType);
     }
 }
 
@@ -385,8 +324,10 @@ export class VarDeclaration extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        return this.initExp.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, symbolTable) {
+        const expType = this.initExp.resolveType(typeChecker, module, symbolTable);
+        symbolTable[this.name] = expType;
+        return expType;
     }
 }
 
@@ -399,11 +340,18 @@ export class FunctionApplication extends ASTNode {
         return node;
     }
 
+    // TODO: factor in lambda types
     resolveType(typeChecker, module) {
         const funcType = this.target.resolveType(typeChecker, module);
         // the type is not a function type so it cannot be inferred
-        if (!(funcType instanceof TFunction)) return new TUnknown();
-        return funcType.returnType;
+        if (!(funcType instanceof TFunction)) {
+            typeChecker.errors.push(new TypeCheckError(mess.NOT_INVOKABLE, module.path, this.target.locations.self));
+            return this.type = new TUnknown();
+        }
+        for (let i = 0; i < this.paramValues.length; ++i) {
+            // TODO you were here
+        }
+        return this.type = funcType.returnType;
     }
 }
 

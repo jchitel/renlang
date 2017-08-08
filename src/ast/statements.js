@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { TBool, TTuple, TArray, TAny, TUnknown, determineGeneralType } from '../typecheck/types';
+import { TBool, TTuple, TArray, TUnknown, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 
@@ -108,17 +108,18 @@ export class WhileStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
         // type check the condition
         const conditionType = this.conditionExp.resolveType(typeChecker, module, symbolTable);
         if (!(new TBool().isAssignableFrom(conditionType))) {
-            
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(conditionType, new TBool()), module.path, this.conditionExp.locations.self));
         }
         // add the loop number as a special symbol
         symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
         // type check the body
-        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        const returnType = this.body.resolveType(typeChecker, module, symbolTable);
         symbolTable['@@loopNumber']--;
+        return returnType;
     }
 }
 
@@ -131,14 +132,18 @@ export class DoWhileStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
         // add the loop number as a special symbol
         symbolTable['@@loopNumber'] = symbolTable['@@loopNumber'] ? (symbolTable['@@loopNumber'] + 1) : 0;
         // type check the body
-        this.body.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        const returnType = this.body.resolveType(typeChecker, module, symbolTable);
         symbolTable['@@loopNumber']--;
         // type check the condition
-        this.conditionExp.resolveType(typeChecker, module, symbolTable, new TBool());
+        const conditionType = this.conditionExp.resolveType(typeChecker, module, symbolTable);
+        if (!(new TBool().isAssignableFrom(conditionType))) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(conditionType, new TBool()), module.path, this.conditionExp.locations.self));
+        }
+        return returnType;
     }
 }
 
@@ -155,18 +160,20 @@ export class TryCatchStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
         // type check the try
-        this.try.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        let returnType = this.try.resolveType(typeChecker, module, symbolTable);
         // type check each try
         for (const cat of this.catches) {
             // add the param to the symbol table, type check the catch, remove it
             symbolTable[cat.param.name] = cat.param.type.resolveType(typeChecker, module);
-            cat.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+            const returnType1 = cat.resolveType(typeChecker, module, symbolTable);
+            returnType = determineGeneralType(returnType, returnType1);
             delete symbolTable[cat.param.name];
         }
         // type check the finally
-        this.finally.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        const returnType1 = this.finally.resolveType(typeChecker, module, symbolTable);
+        return determineGeneralType(returnType, returnType1);
     }
 }
 
@@ -178,9 +185,9 @@ export class ThrowStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
-        // type check the expression, it can be anything
-        this.exp.resolveType(typeChecker, module, symbolTable, new TAny());
+    resolveType(typeChecker, module, symbolTable) {
+        // type check the expression, it can be anything so we don't have to do anything with the result
+        this.exp.resolveType(typeChecker, module, symbolTable);
     }
 }
 
@@ -196,16 +203,11 @@ export class ReturnStatement extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module, symbolTable, expectedReturnType) {
+    resolveType(typeChecker, module, symbolTable) {
         // no return value, assumed to be ()
-        if (!this.exp) {
-            if (!(this.expectedReturnType instanceof TTuple) || this.expectedReturnType.types.length !== 0) {
-                typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(new TTuple(), this.expectedReturnType), module.path, this.locations.self));
-                return;
-            }
-        }
+        if (!this.exp) return new TTuple();
         // otherwise check the return value
-        this.exp.resolveType(typeChecker, module, symbolTable, expectedReturnType);
+        return this.exp.resolveType(typeChecker, module, symbolTable);
     }
 }
 
