@@ -16,7 +16,7 @@ const operators = {
 function operator(symbol, type) {
     return (cls) => {
         operators[type][symbol] = cls;
-    }
+    };
 }
 
 /**
@@ -535,7 +535,7 @@ export class BitwiseOrOperator extends Operator {
  * OR performs a boolean XOR for two boolean values
  */
 @operator('^', 'infix')
-export class BitwiseAndOperator extends Operator {
+export class XorOperator extends Operator {
     constructor() {
         super('^', 'infix', 7, 'left');
     }
@@ -543,6 +543,7 @@ export class BitwiseAndOperator extends Operator {
     getType(operand1, operand2) {
         const t = getBooleanBinaryOperatorType(operand1, operand2);
         if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
+        return t;
     }
 }
 
@@ -684,7 +685,7 @@ export class BitwiseOrAssignmentOperator extends Operator {
  * Assignment form of XOR operator, performs a XOR on a reference to an expression and stores the result back into the reference.
  */
 @operator('^=', 'infix')
-export class BitwiseAndAssignmentOperator extends Operator {
+export class XorAssignmentOperator extends Operator {
     constructor() {
         super('^=', 'infix', 0, 'left');
     }
@@ -692,6 +693,7 @@ export class BitwiseAndAssignmentOperator extends Operator {
     getType(operand1, operand2) {
         const t = getBooleanBinaryOperatorType(operand1, operand2);
         if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
+        return t;
     }
 }
 
@@ -831,7 +833,7 @@ export class ApplyOperator extends Operator {
             return new TFunction([operand1, operand2], operand1.returnType);
         } else {
             // otherwise, we need to cut off the first parameter
-            const [_, ...params] = operand1.paramTypes;
+            const [_, ...params] = operand1.paramTypes; // eslint-disable-line no-unused-vars
             // and the operator will return a new function with the remaining parameters
             return new TFunction([operand1, operand2], new TFunction(params, operand1.returnType));
         }

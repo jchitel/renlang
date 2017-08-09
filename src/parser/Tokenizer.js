@@ -189,10 +189,12 @@ export default class Tokenizer {
 
             if (c === '/' && c1 === '/') {
                 // single-line comment
-                yield this.consumeSingleLineComment(c);
+                const com = this.consumeSingleLineComment(c);
+                if (!this.ignoreMode) yield com;
             } else if (c === '/' && c1 === '*') {
                 // multi-line comment
-                yield this.consumeMultiLineComment(c);
+                const com = this.consumeMultiLineComment(c);
+                if (!this.ignoreMode) yield com;
             } else if (kind === 'uppercase' || kind === 'lowercase' || c === '_') {
                 // valid identifier start, consume an identifier
                 yield this.consumeIdentifier(c);
@@ -247,11 +249,13 @@ export default class Tokenizer {
                     this.currentLineOffset = this.iterator.offset;
                 } else {
                     // otherwise treat it as normal whitespace
-                    if (!this.ignoreMode) yield this.consumeWhitespace(c);
+                    const w = this.consumeWhitespace(c);
+                    if (!this.ignoreMode) yield w;
                 }
             } else if (c === ' ' || c === '\t') {
                 // consume whitespace
-                if (!this.ignoreMode) yield this.consumeWhitespace(c);
+                const w = this.consumeWhitespace(c);
+                if (!this.ignoreMode) yield w;
             } else {
                 // otherwise it is not a valid character (for now)
                 throw new ParserError(`Invalid character '${c}'`, this.lineNumber, this.columnNumber);

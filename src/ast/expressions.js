@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny, determineGeneralType } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 import { getOperator } from '../runtime/operators';
@@ -296,7 +296,7 @@ export class UnaryExpression extends ASTNode {
         // resolve the function type of the operator using the type being passed to it
         this.operType = oper.getType(targetType);
         if (this.operType instanceof TUnknown) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_OPERATOR(this.oper, targetType), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_UNARY_OPERATOR(this.oper, targetType), module.path, this.locations.self));
             return this.type = new TUnknown();
         }
         // the return type of the operator type is the type of this expression
@@ -315,13 +315,13 @@ export class BinaryExpression extends ASTNode {
         return node;
     }
 
-    selectAssociativity(a, b) {
+    selectAssociativity(typeChecker, a, b) {
         // default to ours, if the other is none or equal, this won't change, if ours is none and the other isn't, use the other, otherwise use left
-        let ass = a.associativity === 'none' ? (b.associativity === 'none' ? 'left' : b.associativity) : a.associativity;
+        const ass = a.associativity === 'none' ? (b.associativity === 'none' ? 'left' : b.associativity) : a.associativity;
         if (a.associativity === 'left' && b.associativity === 'right' || a.associativity === 'right' && b.associativity === 'left') {
             // conflicting associativity, impossible to resolve precedence
             typeChecker.errors.push(new TypeCheckError(mess.CONFLICTING_ASSOCIATIVITY(a.symbol, b.symbol), module.path, this.locations.self));
-            return;
+            return null;
         }
         return ass;
     }
@@ -365,8 +365,9 @@ export class BinaryExpression extends ASTNode {
             const rightOper = getOperator(this.right.oper, 'infix');
             if (rightOper.precedence < oper.precedence) {
                 this.shiftRightUp();
-            } else if (rightOper.precedence == oper.precedence) {
-                const ass = this.selectAssociativity(oper, rightOper);
+            } else if (rightOper.precedence === oper.precedence) {
+                const ass = this.selectAssociativity(typeChecker, oper, rightOper);
+                if (!ass) return;
                 if (ass === 'left') this.shiftRightUp();
             }
         }
@@ -381,7 +382,8 @@ export class BinaryExpression extends ASTNode {
                 this.right.resolvePrecedence(typeChecker, module);
                 continue;
             } else if (leftOper.precedence === oper.precedence) {
-                const ass = this.selectAssociativity(oper, leftOper);
+                const ass = this.selectAssociativity(typeChecker, oper, leftOper);
+                if (!ass) return;
                 if (ass === 'right') {
                     this.shiftLeftUp();
                     // visit the new parent, which is actually now the current node
@@ -411,7 +413,7 @@ export class BinaryExpression extends ASTNode {
         // resolve the function type of the operator using the types being passed to it
         this.operType = oper.getType(leftType, rightType);
         if (this.operType instanceof TUnknown) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_OPERATOR(this.oper, targetType), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BINARY_OPERATOR(this.oper, leftType, rightType), module.path, this.locations.self));
             return this.type = new TUnknown();
         }
         // the return type of the operator type is the type of this expression

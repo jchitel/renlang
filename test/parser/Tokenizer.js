@@ -17,21 +17,21 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a single-line comment', () => {
-        let [token] = getTokens('// this is a comment');
+        let [token] = getTokens('// this is a comment', true);
         expect(token).to.eql(new Token('COMMENT', 1, 1, '// this is a comment'));
 
-        [token] = getTokens('// this is a comment\n');
+        [token] = getTokens('// this is a comment\n', true);
         expect(token).to.eql(new Token('COMMENT', 1, 1, '// this is a comment\n'));
     });
 
     it('should consume a multi-line comment', () => {
-        let [token] = getTokens('/* this is a comment */');
+        let [token] = getTokens('/* this is a comment */', true);
         expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment */'));
 
-        [token] = getTokens('/* this is a comment');
+        [token] = getTokens('/* this is a comment', true);
         expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment'));
 
-        [token] = getTokens('/* this is a comment\nand another line */');
+        [token] = getTokens('/* this is a comment\nand another line */', true);
         expect(token).to.eql(new Token('COMMENT', 1, 1, '/* this is a comment\nand another line */'));
     });
 

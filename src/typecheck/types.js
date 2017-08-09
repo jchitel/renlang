@@ -146,6 +146,7 @@ export class TStruct extends TType {
         // a type is assignable to this if it has the fields in this and those types are assignable
         // NOTE: this does not mean that t can't have more fields
         for (const k of Object.keys(this.fields)) {
+            if (!t.fields[k]) return false;
             if (!this.fields[k].isAssignableFrom(t.fields[k])) return false;
         }
         return true;
