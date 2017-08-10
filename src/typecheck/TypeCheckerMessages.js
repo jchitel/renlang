@@ -4,3 +4,4 @@ export const NAME_CLASH = name => `A value with name "${name}" is already declar
 export const EXPORT_CLASH = name => `An export with name "${name}" is already declared`;
 export const NOT_DEFINED = name => `Value "${name}" is not defined`;
 export const CIRCULAR_DEPENDENCY = 'Cannot resolve type, circular dependency found';
+export const TYPE_MISMATCH = (actual, expected) => `Type "${actual}" is not assignable to type "${expected}"`;

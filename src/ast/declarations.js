@@ -75,7 +75,7 @@ export class FunctionDeclaration extends ASTNode {
         }
         // type check the function body, passing along the starting symbol table and the return type of the function as the expected type of the body
         const actualReturnType = this.body.resolveType(typeChecker, module, symbolTable);
-        if (!returnType.isAssignableFrom(actualReturnType)) {
+        if (!(returnType instanceof TUnknown) && !returnType.isAssignableFrom(actualReturnType)) {
             typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, returnType), module.path, this.returnType.locations.self));
         }
         return this.type;

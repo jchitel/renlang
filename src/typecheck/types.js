@@ -52,6 +52,16 @@ export class TInteger extends TType {
         // we have an integer type which represents either the same or a subset of this's set
         return true;
     }
+
+    toString() {
+        let str = this.signed ? 'signed ' : 'unsigned ';
+        if (this.size !== Infinity) {
+            str += `${this.size}-bit integer`;
+        } else {
+            str += 'unbounded integer';
+        }
+        return str;
+    }
 }
 
 /**
@@ -77,6 +87,10 @@ export class TFloat extends TType {
         // we have a float type which represents either the same or a subset of this's set
         return true;
     }
+
+    toString() {
+        return `${this.size}-bit float`;
+    }
 }
 
 /**
@@ -90,6 +104,10 @@ export class TChar extends TType {
         // only chars can be assigned to other chars
         return t instanceof TChar;
     }
+
+    toString() {
+        return 'char';
+    }
 }
 
 /**
@@ -102,6 +120,10 @@ export class TBool extends TType {
         if (t instanceof TUnknown) return true;
         // only bools can be assigned to other bools
         return t instanceof TBool;
+    }
+
+    toString() {
+        return 'bool';
     }
 }
 
@@ -127,6 +149,10 @@ export class TTuple extends TType {
         }
         return true;
     }
+
+    toString() {
+        return `(${this.types.map(t => t.toString()).join(', ')})`;
+    }
 }
 
 /**
@@ -151,6 +177,10 @@ export class TStruct extends TType {
         }
         return true;
     }
+
+    toString() {
+        return `{ ${Object.entries(this.fields).map(([k, v]) => `'${v}' ${k}`).join('; ')} }`;
+    }
 }
 
 /**
@@ -169,6 +199,10 @@ export class TArray extends TType {
         if (!(t instanceof TArray)) return false;
         // the base type needs to be assignable
         return this.baseType.isAssignableFrom(t.baseType);
+    }
+
+    toString() {
+        return `${this.baseType}[]`;
     }
 }
 
@@ -229,6 +263,10 @@ export class TFunction extends TType {
         }
         this.returnType = explicitType.returnType;
     }
+
+    toString() {
+        return `(${this.params.map(p => p.toString()).join(', ')}) => ${this.returnType}`;
+    }
 }
 
 /**
@@ -266,6 +304,10 @@ export class TUnion extends TType {
             return false;
         }
     }
+
+    toString() {
+        return this.types.map(t => t.toString()).join(' | ');
+    }
 }
 
 /**
@@ -275,6 +317,10 @@ export class TAny extends TType {
     isAssignableFrom() {
         // all types are assignable to "any"
         return true;
+    }
+
+    toString() {
+        return 'any';
     }
 }
 
@@ -286,6 +332,10 @@ export class TUnknown extends TType {
     isAssignableFrom() {
         // this is never supposed to occur, if it happens it is an application error, not a type checker error
         throw new Error('Attempted to type check un-typable value');
+    }
+
+    toString() {
+        throw new Error('Attempted to display un-typed type');
     }
 }
 
@@ -306,6 +356,10 @@ export class TRecursive extends TType {
         // unknown is assignable to all types
         if (t instanceof TUnknown) return true;
         return this.decl.type.isAssignableFrom(t);
+    }
+
+    toString() {
+        return this.decl.type.toString();
     }
 }
 
