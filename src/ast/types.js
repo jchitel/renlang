@@ -73,7 +73,7 @@ export class IdentifierType extends ASTNode {
 
     resolveType(typeChecker, module) {
         if (!module.types[this.name]) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.name), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_NOT_DEFINED(this.name), module.path, this.locations.self));
             this.type = new TUnknown();
         } else {
             this.type = typeChecker.getType(module, this.name);

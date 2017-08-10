@@ -2,7 +2,7 @@ import { expect } from 'chai';
 
 import * as types from '../../src/ast/types';
 import { Token } from '../../src/parser/Tokenizer';
-import { TInteger, TFloat, TChar, TBool, TTuple, TArray, TFunction, TAny, TUnknown } from '../../src/typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TAny, TUnknown } from '../../src/typecheck/types';
 
 
 const int = new TInteger(32, true);
@@ -16,6 +16,12 @@ function getDummyReducedNode(type, locations = {}) {
     return {
         locations,
         resolveType: () => type,
+    };
+}
+
+function getDummyTypeChecker(type) {
+    return {
+        getType: () => type,
     };
 }
 
@@ -106,6 +112,131 @@ describe('Type Nodes', () => {
 
         it('should throw an error for invalid built-in type', () => {
             expect(() => new types.PrimitiveType('awef', loc).resolveType()).to.throw('Invalid built-in type awef');
+        });
+    });
+
+    describe('IdentifierType', () => {
+        it('should add an error for an undefined type', () => {
+            const type = new types.IdentifierType('myType', loc);
+            const module = { types: {}, path: '/index.ren' };
+            const typeChecker = { errors: [] };
+            const resolved = type.resolveType(typeChecker, module);
+            expect(resolved).to.eql(new TUnknown());
+            expect(typeChecker.errors.length).to.eql(1);
+            expect(typeChecker.errors[0].message).to.eql('Type "myType" is not defined [/index.ren:1:1]');
+        });
+
+        it('should resolve a defined type', () => {
+            const type = new types.IdentifierType('myType', loc);
+            const module = { types: { myType: {} } };
+            const typeChecker = getDummyTypeChecker(int);
+            expect(type.resolveType(typeChecker, module)).to.eql(int);
+        });
+    });
+
+    describe('FunctionType', () => {
+        it('should reduce a function type', () => {
+            const returnTypeLocation = { ...loc, startColumn: 2, endColumn: 2 };
+            const type = new types.FunctionType({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                paramTypes: [getDummyNode()],
+                returnType: getDummyNode({ locations: { self: returnTypeLocation } }),
+            });
+            expect(type.reduce()).to.eql(new types.FunctionType({
+                paramTypes: [{}],
+                returnType: { locations: { self: returnTypeLocation } },
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should resolve a function type', () => {
+            const type = new types.FunctionType({
+                paramTypes: [getDummyReducedNode(int)],
+                returnType: getDummyReducedNode(int),
+            });
+            expect(type.resolveType({}, {})).to.eql(new TFunction([int], int));
+        });
+
+        it('should resolve to unknown for unknown params', () => {
+            const type = new types.FunctionType({
+                paramTypes: [getDummyReducedNode(new TUnknown())],
+                returnType: getDummyReducedNode(int),
+            });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+
+        it('should resolve to unknown for unknown return type', () => {
+            const type = new types.FunctionType({
+                paramTypes: [getDummyReducedNode(int)],
+                returnType: getDummyReducedNode(new TUnknown()),
+            });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+    });
+
+    describe('TupleType', () => {
+        it('should reduce a tuple type', () => {
+            const type = new types.TupleType({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                types: [getDummyNode(), getDummyNode()],
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(type.reduce()).to.eql(new types.FunctionType({
+                types: [{}, {}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should resolve a tuple type', () => {
+            const type = new types.TupleType({
+                types: [getDummyReducedNode(int), getDummyReducedNode(int)],
+            });
+            expect(type.resolveType({}, {})).to.eql(new TTuple([int, int]));
+        });
+
+        it('should resolve to unknown for unknown component type', () => {
+            const type = new types.TupleType({
+                types: [getDummyReducedNode(new TUnknown()), getDummyReducedNode(int)],
+            });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+    });
+
+    describe('StructType', () => {
+        it('should reduce a struct type', () => {
+            const type = new types.StructType({
+                openBraceToken: new Token('LBRACE', 1, 1, '{'),
+                fieldTypes: [getDummyNode()],
+                fieldNameTokens: [new Token('IDENT', 1, 2, 'myField')],
+                closeBraceToken: new Token('RBRACE', 1, 9, '}'),
+            });
+            expect(type.reduce()).to.eql(new types.StructType({
+                fields: [{ type: {}, name: 'myField' }],
+                locations: {
+                    self: { ...loc, endColumn: 9 },
+                    field_myField: { ...loc, startColumn: 2, endColumn: 8 },
+                },
+            }));
+        });
+
+        it('should resolve a struct type', () => {
+            const type = new types.StructType({
+                fields: [{ type: getDummyReducedNode(int), name: 'myField' }],
+            });
+            expect(type.resolveType({}, {})).to.eql(new TStruct({ myField: int }));
+        });
+
+        it('should add an error for duplicate field names', () => {
+            const type = new types.StructType({
+                fields: [
+                    { type: getDummyReducedNode(int), name: 'myField' },
+                    { type: getDummyReducedNode(int), name: 'myField' },
+                ],
+            });
+            const typeChecker = { errors: [] };
+            expect(type.resolveType(typeChecker, {})).to.eql(new TUnknown());
+            expect(typeChecker.errors.length).to.eql(1);
+            expect(typeChecker.errors[0].message).to.eql('A value with name "myField" is already declared');
         });
     });
 });
