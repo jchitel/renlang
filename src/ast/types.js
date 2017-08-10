@@ -159,6 +159,7 @@ export class ArrayType extends ASTNode {
         const baseType = this.baseType.resolveType(typeChecker, module);
         if (baseType instanceof TUnknown) this.type = new TUnknown();
         else this.type = new TArray(baseType);
+        return this.type;
     }
 }
 
@@ -172,7 +173,7 @@ export class UnionType extends ASTNode {
         const right = this.right.reduce();
         if (right instanceof UnionType) node.types = [...node.types, ...right.types];
         else node.types.push(right);
-        node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);
+        node.createAndRegisterLocation('self', left.locations.self, right.locations.self);
         return node;
     }
 

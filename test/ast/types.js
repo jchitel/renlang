@@ -2,7 +2,7 @@ import { expect } from 'chai';
 
 import * as types from '../../src/ast/types';
 import { Token } from '../../src/parser/Tokenizer';
-import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TAny, TUnknown } from '../../src/typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TAny, TUnknown } from '../../src/typecheck/types';
 
 
 const int = new TInteger(32, true);
@@ -232,11 +232,80 @@ describe('Type Nodes', () => {
                     { type: getDummyReducedNode(int), name: 'myField' },
                     { type: getDummyReducedNode(int), name: 'myField' },
                 ],
+                locations: {
+                    field_myField: loc,
+                },
             });
             const typeChecker = { errors: [] };
-            expect(type.resolveType(typeChecker, {})).to.eql(new TUnknown());
+            expect(type.resolveType(typeChecker, { path: '/index.ren' })).to.eql(new TUnknown());
             expect(typeChecker.errors.length).to.eql(1);
-            expect(typeChecker.errors[0].message).to.eql('A value with name "myField" is already declared');
+            expect(typeChecker.errors[0].message).to.eql('A value with name "myField" is already declared [/index.ren:1:1]');
+        });
+
+        it('should resolve to unknown for an unknown field type', () => {
+            const type = new types.StructType({
+                fields: [{ type: getDummyReducedNode(new TUnknown()), name: 'myField' }],
+            });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+    });
+
+    describe('ArrayType', () => {
+        it('should reduce an array type', () => {
+            const type = new types.ArrayType({
+                baseType: getDummyNode({ locations: { self: loc } }),
+                closeBracketToken: new Token('RBRACK', 1, 2, ']'),
+            });
+            expect(type.reduce()).to.eql(new types.ArrayType({
+                baseType: { locations: { self: loc } },
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should resolve an array type', () => {
+            const type = new types.ArrayType({ baseType: getDummyReducedNode(int) });
+            expect(type.resolveType({}, {})).to.eql(new TArray(int));
+        });
+
+        it('should resolve to unknown for an unknown base type', () => {
+            const type = new types.ArrayType({ baseType: getDummyReducedNode(new TUnknown()) });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+    });
+
+    describe('UnionType', () => {
+        it('should reduce a union type', () => {
+            const rightLocation = { ...loc, startColumn: 2, endColumn: 2 };
+            const type = new types.UnionType({
+                left: getDummyNode({ locations: { self: loc } }),
+                right: getDummyNode({ locations: { self: rightLocation } }),
+            });
+            expect(type.reduce()).to.eql(new types.UnionType({
+                types: [{ locations: { self: loc } }, { locations: { self: rightLocation } }],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should reduce deep union types', () => {
+            // these are dummy reduced types
+            const left = new types.UnionType({ types: [{ a: 1 }, { b: 2 }], locations: { self: loc } });
+            const right = new types.UnionType({ types: [{ c: 3 }, { d: 4 }], locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } });
+            // this is the non-reduced type being tested
+            const type = new types.UnionType({ left: getDummyNode(left), right: getDummyNode(right) });
+            expect(type.reduce()).to.eql(new types.UnionType({
+                types: [{ a: 1 }, { b: 2 }, { c: 3 }, { d: 4 }],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should resolve a union type', () => {
+            const type = new types.UnionType({ types: [getDummyReducedNode(int), getDummyReducedNode(int)] });
+            expect(type.resolveType({}, {})).to.eql(new TUnion([int, int]));
+        });
+
+        it('should resolve to unknown for an unknown component type', () => {
+            const type = new types.UnionType({ types: [getDummyReducedNode(int), getDummyReducedNode(new TUnknown())] });
+            expect(type.resolveType({}, {})).to.eql(new TUnknown());
         });
     });
 });
