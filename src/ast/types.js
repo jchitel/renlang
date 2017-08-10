@@ -59,7 +59,7 @@ export class PrimitiveType extends ASTNode {
             case 'bool': this.type = new TBool(); break;
             case 'void': this.type = new TTuple([]); break;
             case 'any': this.type = new TAny(); break;
-            default: throw new Error(`Invalid built-in type ${this.type}`);
+            default: throw new Error(`Invalid built-in type ${this.typeNode}`);
         }
         return this.type;
     }
