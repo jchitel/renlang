@@ -197,6 +197,8 @@ export class TArray extends TType {
         if (t instanceof TUnknown) return true;
         // only arrays can be assigned to other arrays
         if (!(t instanceof TArray)) return false;
+        // omitted base type, just needs to be an array
+        if (this.baseType === null) return true;
         // the base type needs to be assignable
         return this.baseType.isAssignableFrom(t.baseType);
     }

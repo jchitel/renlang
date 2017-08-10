@@ -151,6 +151,10 @@ describe('Typecheck Type Classes', () => {
             expect(new TArray().isAssignableFrom(new TTuple())).to.eql(false);
         });
 
+        it('should be assignable from any array for null base type', () => {
+            expect(new TArray(null).isAssignableFrom(new TArray(new TBool()))).to.eql(true);
+        });
+
         it('should only be assignable if base type is assignable', () => {
             expect(new TArray(new TInteger(1, true)).isAssignableFrom(new TArray(new TInteger(1, false)))).to.eql(false);
             expect(new TArray(new TInteger(2, true)).isAssignableFrom(new TArray(new TInteger(1, false)))).to.eql(true);

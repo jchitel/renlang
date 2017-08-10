@@ -56,7 +56,7 @@ export class Expression extends ASTNode {
     }
 }
 
-export class IntegerLiteral extends ASTNode {
+export class IntegerLiteral extends Expression {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
@@ -87,7 +87,7 @@ export class IntegerLiteral extends ASTNode {
     }
 }
 
-export class FloatLiteral extends ASTNode {
+export class FloatLiteral extends Expression {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
@@ -102,7 +102,7 @@ export class FloatLiteral extends ASTNode {
     }
 }
 
-export class CharLiteral extends ASTNode {
+export class CharLiteral extends Expression {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
@@ -113,7 +113,7 @@ export class CharLiteral extends ASTNode {
     }
 }
 
-export class StringLiteral extends ASTNode {
+export class StringLiteral extends Expression {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
@@ -124,7 +124,7 @@ export class StringLiteral extends ASTNode {
     }
 }
 
-export class BoolLiteral extends ASTNode {
+export class BoolLiteral extends Expression {
     constructor(image, location) {
         super({ value: image === 'true' });
         this.registerLocation('self', location);
@@ -135,7 +135,7 @@ export class BoolLiteral extends ASTNode {
     }
 }
 
-export class IdentifierExpression extends ASTNode {
+export class IdentifierExpression extends Expression {
     constructor(name, location) {
         super({ name });
         this.registerLocation('self', location);
@@ -154,7 +154,7 @@ export class IdentifierExpression extends ASTNode {
     }
 }
 
-export class ArrayLiteral extends ASTNode {
+export class ArrayLiteral extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.items = this.items.map(i => i.reduce());
@@ -174,7 +174,7 @@ export class ArrayLiteral extends ASTNode {
     }
 }
 
-export class TupleLiteral extends ASTNode {
+export class TupleLiteral extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.items = this.items.map(i => i.reduce());
@@ -191,7 +191,7 @@ export class TupleLiteral extends ASTNode {
     }
 }
 
-export class StructLiteral extends ASTNode {
+export class StructLiteral extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.entries = [];
@@ -212,7 +212,7 @@ export class StructLiteral extends ASTNode {
     }
 }
 
-export class LambdaExpression extends ASTNode {
+export class LambdaExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.params = this.paramList.reduce();
@@ -273,7 +273,7 @@ export class LambdaParam extends ASTNode {
     }
 }
 
-export class UnaryExpression extends ASTNode {
+export class UnaryExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.prefix = this.prefix;
@@ -304,7 +304,7 @@ export class UnaryExpression extends ASTNode {
     }
 }
 
-export class BinaryExpression extends ASTNode {
+export class BinaryExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.oper = this.operatorToken.image;
@@ -421,7 +421,7 @@ export class BinaryExpression extends ASTNode {
     }
 }
 
-export class IfElseExpression extends ASTNode {
+export class IfElseExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.condition = this.condition.reduce();
@@ -442,7 +442,7 @@ export class IfElseExpression extends ASTNode {
     }
 }
 
-export class VarDeclaration extends ASTNode {
+export class VarDeclaration extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.name = this.varIdentToken.image;
@@ -465,7 +465,7 @@ export class VarDeclaration extends ASTNode {
     }
 }
 
-export class FunctionApplication extends ASTNode {
+export class FunctionApplication extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.target = this.target.reduce();
@@ -503,7 +503,7 @@ export class FunctionApplication extends ASTNode {
     }
 }
 
-export class FieldAccess extends ASTNode {
+export class FieldAccess extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.target = this.target.reduce();
@@ -531,7 +531,7 @@ export class FieldAccess extends ASTNode {
     }
 }
 
-export class ArrayAccess extends ASTNode {
+export class ArrayAccess extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.target = this.target.reduce();

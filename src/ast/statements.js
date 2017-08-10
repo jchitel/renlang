@@ -2,6 +2,7 @@ import ASTNode from './ASTNode';
 import { TBool, TTuple, TArray, TUnknown, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
+import { Expression } from './expressions';
 
 
 export class Statement extends ASTNode {
@@ -46,8 +47,14 @@ export class Block extends ASTNode {
     resolveType(typeChecker, module, symbolTable) {
         let returnType = null;
         for (const statement of this.statements) {
-            const type = statement.resolveType(typeChecker, module, symbolTable);
-            returnType = determineGeneralType(returnType, type);
+            if (statement instanceof Expression) {
+                // types of expression statements are not used in blocks
+                statement.resolveType(typeChecker, module, symbolTable);
+            } else {
+                // statements may have return types (if they are return statements or contain return statements)
+                const type = statement.resolveType(typeChecker, module, symbolTable);
+                returnType = determineGeneralType(returnType, type);
+            }
         }
         return returnType;
     }
@@ -71,7 +78,7 @@ export class ForStatement extends ASTNode {
     reduce() {
         const node = this._createNewNode();
         node.iterVar = this.iterVar.image;
-        node.registerlocation('iterVar', this.iterVar.getLocation());
+        node.registerLocation('iterVar', this.iterVar.getLocation());
         node.iterableExp = this.iterableExp.reduce();
         node.body = this.body.reduce();
         node.createAndRegisterLocation('self', this.forToken.getLocation(), node.body.locations.self);
@@ -205,7 +212,7 @@ export class ReturnStatement extends ASTNode {
 
     resolveType(typeChecker, module, symbolTable) {
         // no return value, assumed to be ()
-        if (!this.exp) return new TTuple();
+        if (!this.exp) return new TTuple([]);
         // otherwise check the return value
         return this.exp.resolveType(typeChecker, module, symbolTable);
     }
