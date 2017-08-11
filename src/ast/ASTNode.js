@@ -44,9 +44,7 @@ export default class ASTNode {
         this.registerLocation(key, location);
     }
 
-    reduce() {
-        throw new Error('Unimplemented method');
-    }
+    // implement reduce()
 
     /**
      * This method is the meat of the type checking logic.
@@ -55,9 +53,7 @@ export default class ASTNode {
      * If it is an expression it also receives a symbol table and the expected type of the expression (if any).
      * This method MUST set the type property of the node, and it MUST return that type (unless it is a statement).
      */
-    resolveType() {
-        throw new Error('Unimplemented method');
-    }
+    // implement resolveType(typeChecker, module) || resolveType(typeChecker, module, symbolTable)
 
     _createNewNode() {
         return Object.create(Object.getPrototypeOf(this));

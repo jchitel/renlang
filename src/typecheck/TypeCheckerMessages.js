@@ -6,3 +6,6 @@ export const VALUE_NOT_DEFINED = name => `Value "${name}" is not defined`;
 export const TYPE_NOT_DEFINED = name => `Type "${name}" is not defined`;
 export const CIRCULAR_DEPENDENCY = 'Cannot resolve type, circular dependency found';
 export const TYPE_MISMATCH = (actual, expected) => `Type "${actual}" is not assignable to type "${expected}"`;
+export const INVALID_BREAK_STATEMENT = '"break" statement cannot be present outside loop';
+export const INVALID_LOOP_NUM = (actual, expected) => `Invalid loop number ${actual} in loop with depth ${expected}`;
+export const INVALID_CONTINUE_STATEMENT = '"continue" statement cannot be present outside loop';

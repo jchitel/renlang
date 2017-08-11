@@ -144,9 +144,7 @@ export class Operator {
         this.associativity = associativity;
     }
 
-    getType() {
-        throw new Error('Unimplmented method');
-    }
+    // implement getType(operand) || getType(operand1, operand2)
 }
 
 // /////////////////////////////////

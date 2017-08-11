@@ -163,7 +163,7 @@ export class TryCatchStatement extends ASTNode {
             node.catches.push({ param: this.catchParams[i].reduce(), body: this.catchBlocks[i].reduce() });
         }
         if (this.finallyBlock) node.finally = this.finallyBlock.reduce();
-        node.createAndRegisterLocation('self', this.tryToken.getLocation(), node.finally ? node.finally.locations.self : node.catches[node.catches.length - 1].locations.self);
+        node.createAndRegisterLocation('self', this.tryToken.getLocation(), node.finally ? node.finally.locations.self : node.catches[node.catches.length - 1].body.locations.self);
         return node;
     }
 
@@ -174,10 +174,11 @@ export class TryCatchStatement extends ASTNode {
         for (const cat of this.catches) {
             // add the param to the symbol table, type check the catch, remove it
             symbolTable[cat.param.name] = cat.param.type.resolveType(typeChecker, module);
-            const returnType1 = cat.resolveType(typeChecker, module, symbolTable);
+            const returnType1 = cat.body.resolveType(typeChecker, module, symbolTable);
             returnType = determineGeneralType(returnType, returnType1);
             delete symbolTable[cat.param.name];
         }
+        if (!this.finally) return returnType;
         // type check the finally
         const returnType1 = this.finally.resolveType(typeChecker, module, symbolTable);
         return determineGeneralType(returnType, returnType1);
@@ -205,7 +206,7 @@ export class ReturnStatement extends ASTNode {
             node.exp = this.exp.reduce();
             node.createAndRegisterLocation('self', this.returnToken.getLocation(), node.exp.locations.self);
         } else {
-            node.registerlocation('self', this.returnToken.getLocation());
+            node.registerLocation('self', this.returnToken.getLocation());
         }
         return node;
     }
@@ -225,17 +226,18 @@ export class BreakStatement extends ASTNode {
             node.loopNumber = this.loopNumber.value;
             node.createAndRegisterLocation('self', this.breakToken.getLocation(), this.loopNumber.getLocation());
         } else {
-            node.registerlocation('self', this.breakToken.getLocation());
+            node.loopNumber = 0;
+            node.registerLocation('self', this.breakToken.getLocation());
         }
         return node;
     }
 
     resolveType(typeChecker, module, symbolTable) {
         const loopNumber = symbolTable['@@loopNumber'];
-        if (loopNumber < 0) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BREAK_STATEMENT), module.path, this.locations.self);
+        if (!('@@loopNumber' in symbolTable) || loopNumber < 0) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BREAK_STATEMENT, module.path, this.locations.self));
         } else if (this.loopNumber < 0 || this.loopNumber > loopNumber) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_BREAK_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
         }
     }
 }
@@ -245,19 +247,20 @@ export class ContinueStatement extends ASTNode {
         const node = this._createNewNode();
         if (this.loopNumber) {
             node.loopNumber = this.loopNumber.value;
-            node.createAndRegisterLocation('self', this.continueToken.getLocation(), this.continueToken.getLocation());
+            node.createAndRegisterLocation('self', this.continueToken.getLocation(), this.loopNumber.getLocation());
         } else {
-            node.registerlocation('self', this.continueToken.getLocation());
+            node.loopNumber = 0;
+            node.registerLocation('self', this.continueToken.getLocation());
         }
         return node;
     }
 
     resolveType(typeChecker, module, symbolTable) {
         const loopNumber = symbolTable['@@loopNumber'];
-        if (loopNumber < 0) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_CONTINUE_STATEMENT), module.path, this.locations.self);
+        if (!('@@loopNumber' in symbolTable) || loopNumber < 0) {
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_CONTINUE_STATEMENT, module.path, this.locations.self));
         } else if (this.loopNumber < 0 || this.loopNumber > loopNumber) {
-            typeChecker.errors.push(new TypeCheckError(mess.INVALID_CONTINUE_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.INVALID_LOOP_NUM(this.loopNumber, loopNumber), module.path, this.locations.self));
         }
     }
 }

@@ -21,9 +21,7 @@ export class TType {
      * i.e. the following is valid:
      * {variable of type this} = {variable of type t}
      */
-    isAssignableFrom() {
-        throw new Error(`isAssignableFrom() not implemented for class ${this.constructor.name}`);
-    }
+    // implement isAssignableFrom(type)
 }
 
 /**
@@ -204,7 +202,7 @@ export class TArray extends TType {
     }
 
     toString() {
-        return `${this.baseType}[]`;
+        return this.baseType ? `${this.baseType}[]` : '?[]';
     }
 }
 
