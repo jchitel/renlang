@@ -2,7 +2,7 @@ import { expect } from 'chai';
 
 import * as stmts from '../../src/ast/statements';
 import { Token } from '../../src/parser/Tokenizer';
-import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TAny, TUnknown } from '../../src/typecheck/types';
+import { TInteger, TChar, TBool, TTuple, TStruct, TArray, TUnknown } from '../../src/typecheck/types';
 import { Expression } from '../../src/ast/expressions';
 
 
@@ -20,12 +20,6 @@ function getDummyReducedNode(type, fields = {}, symbolTable = null) {
             if (symbolTable) Object.assign(symbolTable, st);
             return type;
         },
-    };
-}
-
-function getDummyTypeChecker(type) {
-    return {
-        getType: () => type,
     };
 }
 

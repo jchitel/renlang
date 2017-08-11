@@ -217,9 +217,9 @@ export class LambdaExpression extends Expression {
         const node = this._createNewNode();
         node.params = this.paramList.reduce();
         node.body = this.body.reduce();
-        // lambda expression start location is complicated because it can either be a '(', a param type, or a param name
+        // lambda expression start location is complicated because it can either be a '(' or a param name
         node.createAndRegisterLocation('self',
-            this.openParenToken ? this.openParenToken.getLocation() : this.params[0].type ? this.params[0].type.locations.self : this.params[0].locations.name,
+            this.openParenToken ? this.openParenToken.getLocation() : this.params[0].locations.name,
             this.body.locations.self);
         return node;
     }
