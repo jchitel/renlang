@@ -1,4 +1,4 @@
-import { TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGenericType } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGeneralType } from '../typecheck/types';
 
 
 /**
@@ -181,10 +181,9 @@ function getSignedUpgradeSize(size) {
  */
 function getSignedNumericUnaryOperatorType(operand) {
     const type = getNumericUnaryOperatorType(operand);
-    if (type instanceof TUnknown || type instanceof TFloat) return type;
+    if (type instanceof TUnknown || operand instanceof TFloat) return type;
     if (!type.returnType.signed) {
-        type.returnType.signed = true;
-        type.returnType.size = getSignedUpgradeSize(type.returnType.size);
+        type.returnType = new TInteger(getSignedUpgradeSize(type.returnType.size), true);
     }
     return type;
 }
@@ -202,7 +201,7 @@ function getSignedNumericUnaryOperatorType(operand) {
  */
 function getNumericBinaryOperatorType(operand1, operand2) {
     // operator only works on numeric types
-    if (!(operand1 instanceof TInteger || operand2 instanceof TFloat) || !(operand2 instanceof TInteger || operand2 instanceof TFloat)) return new TUnknown();
+    if (!(operand1 instanceof TInteger || operand1 instanceof TFloat) || !(operand2 instanceof TInteger || operand2 instanceof TFloat)) return new TUnknown();
     if (operand1 instanceof TFloat && operand2 instanceof TFloat) {
         // both floats, return the larger one
         return new TFunction([operand1, operand2], new TFloat(Math.max(operand1.size, operand2.size)));
@@ -265,7 +264,7 @@ function getComparisonOperatorType(operand1, operand2) {
  */
 function getEqualityOperatorType(operand1, operand2) {
     // two values can be compared for equality as long as they have some type relationship
-    const generic = determineGenericType(operand1, operand2);
+    const generic = determineGeneralType(operand1, operand2);
     if (generic instanceof TAny) return new TUnknown();
     return new TFunction([operand1, operand2], new TBool());
 }
@@ -422,7 +421,7 @@ export class PlusOperator extends Operator {
 
     getType(operand1, operand2) {
         if (operand1 instanceof TArray && operand2 instanceof TArray) {
-            const generic = determineGenericType(operand1.baseType, operand2.baseType);
+            const generic = determineGeneralType(operand1.baseType, operand2.baseType);
             if (!(generic instanceof TAny)) {
                 // array concatenation, as long as the two types have some relationship
                 return new TFunction([operand1, operand2], new TArray(generic));
@@ -529,23 +528,6 @@ export class BitwiseOrOperator extends Operator {
 }
 
 /**
- * Performs bitwise XOR operations for each pair of bits of two unsigned integer types of the same size,
- * OR performs a boolean XOR for two boolean values
- */
-@operator('^', 'infix')
-export class XorOperator extends Operator {
-    constructor() {
-        super('^', 'infix', 7, 'left');
-    }
-
-    getType(operand1, operand2) {
-        const t = getBooleanBinaryOperatorType(operand1, operand2);
-        if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
-        return t;
-    }
-}
-
-/**
  * Performs a boolean AND operation on two boolean values
  */
 @operator('&&', 'infix')
@@ -574,6 +556,23 @@ export class OrOperator extends Operator {
 }
 
 /**
+ * Performs bitwise XOR operations for each pair of bits of two unsigned integer types of the same size,
+ * OR performs a boolean XOR for two boolean values
+ */
+@operator('^', 'infix')
+export class XorOperator extends Operator {
+    constructor() {
+        super('^', 'infix', 7, 'left');
+    }
+
+    getType(operand1, operand2) {
+        const t = getBooleanBinaryOperatorType(operand1, operand2);
+        if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
+        return t;
+    }
+}
+
+/**
  * Assignment form of plus operator, adds a value to a reference to an expression.
  */
 @operator('+=', 'infix')
@@ -584,7 +583,7 @@ export class PlusAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         if (operand1 instanceof TArray && operand2 instanceof TArray) {
-            const generic = determineGenericType(operand1.baseType, operand2.baseType);
+            const generic = determineGeneralType(operand1.baseType, operand2.baseType);
             if (!(generic instanceof TAny)) {
                 // array concatenation, as long as the two types have some relationship
                 return new TFunction([operand1, operand2], new TArray(generic));
@@ -680,22 +679,6 @@ export class BitwiseOrAssignmentOperator extends Operator {
 }
 
 /**
- * Assignment form of XOR operator, performs a XOR on a reference to an expression and stores the result back into the reference.
- */
-@operator('^=', 'infix')
-export class XorAssignmentOperator extends Operator {
-    constructor() {
-        super('^=', 'infix', 0, 'left');
-    }
-
-    getType(operand1, operand2) {
-        const t = getBooleanBinaryOperatorType(operand1, operand2);
-        if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
-        return t;
-    }
-}
-
-/**
  * Assignment form of boolean AND operator, performs a boolean AND on a reference to an expression and stores the result back into the reference.
  */
 @operator('&&=', 'infix')
@@ -720,6 +703,22 @@ export class OrAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         return getBooleanBinaryOperatorType(operand1, operand2);
+    }
+}
+
+/**
+ * Assignment form of XOR operator, performs a XOR on a reference to an expression and stores the result back into the reference.
+ */
+@operator('^=', 'infix')
+export class XorAssignmentOperator extends Operator {
+    constructor() {
+        super('^=', 'infix', 0, 'left');
+    }
+
+    getType(operand1, operand2) {
+        const t = getBooleanBinaryOperatorType(operand1, operand2);
+        if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
+        return t;
     }
 }
 
