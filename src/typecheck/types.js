@@ -52,6 +52,7 @@ export class TInteger extends TType {
     }
 
     toString() {
+        if (this.size === null || this.signed === null) return 'integer';
         let str = this.signed ? 'signed ' : 'unsigned ';
         if (this.size !== Infinity) {
             str += `${this.size}-bit integer`;

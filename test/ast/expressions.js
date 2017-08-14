@@ -2,7 +2,8 @@ import { expect } from 'chai';
 
 import * as exps from '../../src/ast/expressions';
 import { Token } from '../../src/parser/Tokenizer';
-import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TUnknown } from '../../src/typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnknown, TAny } from '../../src/typecheck/types';
+import { operator, Operator } from '../../src/runtime/operators';
 
 
 const int = new TInteger(32, true);
@@ -20,6 +21,23 @@ function getDummyReducedNode(type, fields = {}, symbolTable = null) {
             return type;
         },
     };
+}
+
+function getDummyTypeChecker(type) {
+    return {
+        errors: [],
+        getValueType: () => type,
+    };
+}
+
+function extractNonFunctions(obj) {
+    const clone = Object.create(Object.getPrototypeOf(obj));
+    for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'function') continue;
+        if (typeof v !== 'object' || v === null) clone[k] = v;
+        else clone[k] = extractNonFunctions(v);
+    }
+    return clone;
 }
 
 describe('Expression Nodes', () => {
@@ -40,7 +58,7 @@ describe('Expression Nodes', () => {
 
         it('should reduce to a character literal', () => {
             const exp = new exps.Expression({
-                charLiteralToken: new Token('CHAR_LITERAL', 1, 1, "'a'", 'a'),
+                characterLiteralToken: new Token('CHAR_LITERAL', 1, 1, "'a'", 'a'),
             });
             expect(exp.reduce()).to.eql(new exps.CharLiteral('a', { ...loc, endColumn: 3 }));
         });
@@ -56,7 +74,7 @@ describe('Expression Nodes', () => {
             const exp = new exps.Expression({
                 boolLiteralToken: new Token('TRUE', 1, 1, 'true', true),
             });
-            expect(exp.reduce()).to.eql(new exps.IntegerLiteral(1, loc));
+            expect(exp.reduce()).to.eql(new exps.BoolLiteral('true', { ...loc, endColumn: 4 }));
         });
 
         it('should reduce to an identifier', () => {
@@ -205,150 +223,870 @@ describe('Expression Nodes', () => {
     });
 
     describe('IdentifierExpression', () => {
-        it('should use symbol table to resolve type');
+        it('should use symbol table to resolve type', () => {
+            const symbolTable = { myIdent: int };
+            expect(new exps.IdentifierExpression('myIdent').resolveType({}, {}, symbolTable)).to.eql(int);
+        });
 
-        it('should use module to resolve type');
+        it('should use module to resolve type', () => {
+            const tc = getDummyTypeChecker(int);
+            expect(new exps.IdentifierExpression('myIdent').resolveType(tc, {}, {})).to.eql(int);
+        });
 
-        it('should add error for undefined value');
+        it('should add error for undefined value', () => {
+            const tc = getDummyTypeChecker(undefined);
+            expect(new exps.IdentifierExpression('myIdent', loc).resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Value "myIdent" is not defined [/index.ren:1:1]']);
+        });
     });
 
     describe('ArrayLiteral', () => {
-        it('should reduce array literal');
+        it('should reduce array literal', () => {
+            const array = new exps.ArrayLiteral({
+                openBracketToken: new Token('LBRACK', 1, 1, '['),
+                items: [getDummyNode(), getDummyNode()],
+                closeBracketToken: new Token('RBRACK', 1, 2, ']'),
+            });
+            expect(array.reduce()).to.eql(new exps.ArrayLiteral({
+                items: [{}, {}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
 
-        it('should resolve type of array literal');
+        it('should resolve type of array literal', () => {
+            const array = new exps.ArrayLiteral({
+                items: [getDummyReducedNode(int), getDummyReducedNode(int)],
+            });
+            expect(array.resolveType({}, {}, {})).to.eql(new TArray(int));
+        });
 
-        it('should determine general type for different element types');
+        it('should resolve type of empty array', () => {
+            expect(new exps.ArrayLiteral({ items: [] }).resolveType({}, {}, {})).to.eql(new TArray(new TAny()));
+        });
     });
 
     describe('TupleLiteral', () => {
-        it('should reduce tuple literal');
+        it('should reduce tuple literal', () => {
+            const tuple = new exps.TupleLiteral({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                items: [getDummyNode(), getDummyNode()],
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(tuple.reduce()).to.eql(new exps.TupleLiteral({
+                items: [{}, {}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
 
-        it('should resolve type of tuple literal');
+        it('should resolve type of tuple literal', () => {
+            const tuple = new exps.TupleLiteral({ items: [getDummyReducedNode(int), getDummyReducedNode(new TChar())] });
+            expect(tuple.resolveType({}, {}, {})).to.eql(new TTuple([int, new TChar()]));
+        });
     });
 
     describe('StructLiteral', () => {
-        it('should reduce struct literal');
+        it('should reduce struct literal', () => {
+            const struct = new exps.StructLiteral({
+                openBraceToken: new Token('LBRACE', 1, 1, '{'),
+                keyTokens: [new Token('IDENT', 1, 2, 'field1'), new Token('IDENT', 1, 8, 'field2')],
+                values: [getDummyNode(), getDummyNode()],
+                closeBraceToken: new Token('RBRACE', 1, 14, '}'),
+            });
+            expect(struct.reduce()).to.eql(new exps.StructLiteral({
+                entries: [{ key: 'field1', value: {} }, { key: 'field2', value: {} }],
+                locations: {
+                    self: { ...loc, endColumn: 14 },
+                    key_field1: { ...loc, startColumn: 2, endColumn: 7 },
+                    key_field2: { ...loc, startColumn: 8, endColumn: 13 },
+                },
+            }));
+        });
 
-        it('should resolve type of struct literal');
+        it('should resolve type of struct literal', () => {
+            const struct = new exps.StructLiteral({
+                entries: [{ key: 'field1', value: getDummyReducedNode(int) }, { key: 'field2', value: getDummyReducedNode(new TChar()) }],
+            });
+            expect(struct.resolveType({}, {}, {})).to.eql(new TStruct({ field1: int, field2: new TChar() }));
+        });
     });
 
     describe('LambdaExpression', () => {
-        it('should reduce lambda expression');
+        it('should reduce lambda expression', () => {
+            const lambda = new exps.LambdaExpression({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                paramList: new exps.LambdaParamList({
+                    params: [
+                        new exps.LambdaParam({ type: getDummyNode(), identifierToken: new Token('IDENT', 1, 2, 'p1') }),
+                        new exps.LambdaParam({ identifierToken: new Token('IDENT', 1, 4, 'p2') }),
+                    ],
+                }),
+                body: getDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
+            });
+            expect(lambda.reduce()).to.eql(new exps.LambdaExpression({
+                params: [
+                    new exps.LambdaParam({ typeNode: {}, name: 'p1', locations: { name: { ...loc, startColumn: 2, endColumn: 3 } } }),
+                    new exps.LambdaParam({ name: 'p2', locations: { name: { ...loc, startColumn: 4, endColumn: 5 } } }),
+                ],
+                body: { locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } },
+                locations: { self: { ...loc, endColumn: 6 } },
+            }));
+        });
 
-        it('should handle paren-less single parameter');
+        it('should handle paren-less single parameter', () => {
+            const lambda = new exps.LambdaExpression({
+                paramList: new exps.LambdaParamList({
+                    params: [new exps.LambdaParam({ identifierToken: new Token('IDENT', 1, 1, 'p') })],
+                }),
+                body: getDummyNode({ locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } }),
+            });
+            expect(lambda.reduce()).to.eql(new exps.LambdaExpression({
+                params: [new exps.LambdaParam({ name: 'p', locations: { name: loc } })],
+                body: { locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } },
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
 
-        it('should handle type-less parameters');
+        it('should resolve type of lambda expression', () => {
+            const lambda = new exps.LambdaExpression({
+                params: [
+                    new exps.LambdaParam({ typeNode: getDummyReducedNode(int), name: 'p1' }),
+                    new exps.LambdaParam({ name: 'p2' }),
+                ],
+            });
+            expect(lambda.resolveType({}, {}, {})).to.eql(new TFunction([int, null], null));
+        });
 
-        it('should resolve type of lambda expression');
+        it('should resolve type of lambda expression body', () => {
+            const lambda = new exps.LambdaExpression({
+                params: [
+                    new exps.LambdaParam({ name: 'p1' }),
+                    new exps.LambdaParam({ name: 'p2' }),
+                ],
+                body: getDummyReducedNode(new TBool()),
+                type: new TFunction([int, new TChar()], new TBool()),
+            });
+            const tc = getDummyTypeChecker();
+            lambda.completeResolution(tc, {});
+            expect(tc.errors).to.eql([]);
+        });
 
-        it('should resolve type of lambda expression body');
-
-        it('should error for mismatched lambda body type');
+        it('should error for mismatched lambda body type', () => {
+            const lambda = new exps.LambdaExpression({
+                params: [
+                    new exps.LambdaParam({ name: 'p1' }),
+                    new exps.LambdaParam({ name: 'p2' }),
+                ],
+                body: getDummyReducedNode(int),
+                type: new TFunction([int, new TChar()], new TBool()),
+                locations: { self: loc },
+            });
+            const tc = getDummyTypeChecker();
+            lambda.completeResolution(tc, { path: '/index.ren' });
+            expect(tc.errors.map(e => e.message)).to.eql(['Type "signed 32-bit integer" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
     });
 
     describe('UnaryExpression', () => {
-        it('should reduce prefix expression');
+        it('should reduce prefix expression', () => {
+            const prefix = new exps.UnaryExpression({
+                prefix: true,
+                operatorToken: new Token('OPER', 1, 1, '+'),
+                target: getDummyNode({ locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } }),
+            });
+            expect(prefix.reduce()).to.eql(new exps.UnaryExpression({
+                prefix: true,
+                oper: '+',
+                target: { locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } },
+                locations: {
+                    self: { ...loc, endColumn: 2 },
+                    oper: loc,
+                },
+            }));
+        });
 
-        it('should reduce postfix expression');
+        it('should reduce postfix expression', () => {
+            const postfix = new exps.UnaryExpression({
+                prefix: false,
+                target: getDummyNode({ locations: { self: loc } }),
+                operatorToken: new Token('OPER', 1, 2, '+'),
+            });
+            expect(postfix.reduce()).to.eql(new exps.UnaryExpression({
+                prefix: false,
+                target: { locations: { self: loc } },
+                oper: '+',
+                locations: {
+                    self: { ...loc, endColumn: 2 },
+                    oper: { ...loc, startColumn: 2, endColumn: 2 },
+                },
+            }));
+        });
 
-        it('should resolve type of prefix expression');
+        it('should resolve type of prefix expression', () => {
+            const prefix = new exps.UnaryExpression({
+                prefix: true,
+                target: getDummyReducedNode(new TBool()),
+                oper: '!',
+            });
+            expect(prefix.resolveType({}, {}, {})).to.eql(new TBool());
+        });
 
-        it('should resolve type of postfix expression');
+        it('should resolve type of postfix expression', () => {
+            const postfix = new exps.UnaryExpression({
+                prefix: false,
+                target: getDummyReducedNode(int),
+                oper: '++',
+            });
+            expect(postfix.resolveType({}, {}, {})).to.eql(int);
+        });
 
-        it('should error for non-existent operator');
+        it('should error for non-existent operator', () => {
+            const op = new exps.UnaryExpression({
+                prefix: false,
+                target: getDummyReducedNode(int),
+                oper: '!$%', 
+                locations: { oper: loc },
+            });
+            const tc = getDummyTypeChecker();
+            expect(op.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Value "!$%" is not defined [/index.ren:1:1]']);
+        });
 
-        it('should error for invalid target expression');
+        it('should error for invalid target expression', () => {
+            const op = new exps.UnaryExpression({
+                prefix: true,
+                target: getDummyReducedNode(new TBool()),
+                oper: '-', 
+                locations: { self: loc },
+            });
+            const tc = getDummyTypeChecker();
+            expect(op.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Operator "-" does not operate on type "bool" [/index.ren:1:1]']);
+        });
     });
 
     describe('BinaryExpression', () => {
-        it('should reduce binary expression');
+        it('should reduce binary expression', () => {
+            const binary = new exps.BinaryExpression({
+                left: getDummyNode({ locations: { self: loc } }),
+                operatorToken: new Token('OPER', 1, 2, '+'),
+                right: getDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
+            });
+            expect(binary.reduce()).to.eql(new exps.BinaryExpression({
+                left: { locations: { self: loc } },
+                oper: '+',
+                right: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } },
+                locations: {
+                    self: { ...loc, endColumn: 3 },
+                    oper: { ...loc, startColumn: 2, endColumn: 2 },
+                },
+            }));
+        });
 
-        it('should resolve type of simple binary expression');
+        it('should resolve type of simple binary expression', () => {
+            const binary = new exps.BinaryExpression({
+                left: getDummyReducedNode(int),
+                oper: '+',
+                right: getDummyReducedNode(int),
+            });
+            expect(binary.resolveType({}, {}, {})).to.eql(int);
+        });
 
-        it('should error for non-existent operator');
+        it('should error for non-existent operator', () => {
+            const binary = new exps.BinaryExpression({
+                left: getDummyReducedNode(int),
+                oper: '!!',
+                right: getDummyReducedNode(int),
+                locations: { oper: loc },
+            });
+            const tc = getDummyTypeChecker();
+            expect(binary.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Value "!!" is not defined [/index.ren:1:1]']);
+        });
 
-        it('should error for invalid target expressions');
+        it('should error for invalid target expressions', () => {
+            const binary = new exps.BinaryExpression({
+                left: getDummyReducedNode(new TBool()),
+                oper: '+',
+                right: getDummyReducedNode(new TBool()),
+                locations: { self: loc },
+            });
+            const tc = getDummyTypeChecker();
+            expect(binary.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Operator "+" does not operate on types "bool" and "bool" [/index.ren:1:1]']);
+        });
 
         describe('operator precedence resolution', () => {
-            it('should resolve when right expression has lower precedence');
+            @operator('$<', 'infix')
+            class LeftAssocOperator extends Operator {
+                constructor() {
+                    super('$<', 'infix', 9, 'left');
+                }
+            }
 
-            it('should resolve when right expression has higher precedence');
+            @operator('$>', 'infix')
+            class RightAssocOperator extends Operator {
+                constructor() {
+                    super('$>', 'infix', 9, 'right');
+                }
+            }
 
-            it('should resolve when right expression has left associativity');
+            it('should resolve when right expression has lower precedence', () => {
+                const exp = new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '*',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '+',
+                        right: getDummyReducedNode(int),
+                    }),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                })));
+            });
 
-            it('should resolve when right expression has right associativity');
+            it('should resolve when right expression has higher precedence', () => {
+                const exp = new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '+',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '+',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                })));
+            });
 
-            it('should error when right expression has conflicting associativity');
+            it('should resolve when right expression has left associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '-',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '+',
+                        right: getDummyReducedNode(int),
+                    }),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '-',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                })));
+            });
 
-            it('should resolve when left expression has lower precedence');
+            it('should resolve when right expression has right associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '$>',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '$>',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                })));
+            });
 
-            it('should resolve when left expression has higher precedence');
+            it('should error when right expression has conflicting associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '$<',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                    locations: { self: loc },
+                });
+                const tc = getDummyTypeChecker();
+                expect(exp.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+                expect(tc.errors.map(e => e.message)).to.eql(['Precedence order between operators "$<" and "$>" could not be established because they have conflicting associativity [/index.ren:1:1]']);
+            });
 
-            it('should resolve when left expression has left associativity');
+            it('should resolve when left expression has lower precedence', () => {
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '+',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '*',
+                    right: getDummyReducedNode(int),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '+',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                })));
+            });
 
-            it('should resolve when left expression has right associativity');
+            it('should resolve when left expression has higher precedence', () => {
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '*',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                })));
+            });
 
-            it('should error when left expression has conflicting associativity');
+            it('should resolve when left expression has left associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '-',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '-',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '+',
+                    right: getDummyReducedNode(int),
+                })));
+            });
 
-            it('should handle deeply nested binary expressions');
+            it('should resolve when left expression has right associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(new TFunction([new TBool()], int)),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '$>',
+                    right: getDummyReducedNode(int),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: getDummyReducedNode(int),
+                    oper: '$>',
+                    right: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                })));
+            });
+
+            it('should error when left expression has conflicting associativity', () => {
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '$>',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '$<',
+                    right: getDummyReducedNode(int),
+                    locations: { self: loc },
+                });
+                const tc = getDummyTypeChecker();
+                expect(exp.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+                expect(tc.errors.map(e => e.message)).to.eql(['Precedence order between operators "$<" and "$>" could not be established because they have conflicting associativity [/index.ren:1:1]']);
+            });
+
+            it('should handle deeply nested binary expressions', () => {
+                // 1 + 2 * 4 & 8 == 9 / 6 | 3 - 1 => (1 + (2 * (4 & 8))) == (((9 / (6 | 3)) - 1)
+                // OK, step by step:
+                // first we have the operator -, with nothing on the right, but something on the left
+                // that something is a |, which has a higher precedence than the -, so it's ok and we visit the |
+                // there's nothing on the right, but there is a / on the left, which has a lower precedence, so we need to switch
+                // when we do that we need to visit the new current node, but the previous current, which is now right, doesn't need it (but it would if there was a right child on the left child (BUT WILL THERE BE?))
+                // anyway, now the | is the right child of the /, which is the left child of the -, so far so good.
+                // for the /, the left child is ==, which is lower, so it needs to be switched
+                // again, there is no right child on the ==, so there is really no need to re-check the right after we switch
+                // now we have the -, whose left child is the ==, whose right child is the /, whose right child is the |
+                // now we visit the ==. the right child is /, which is correct
+                // the left child is &, which is correct, now we visit the &
+                // & has no right child, left is *, which is not correct, so we switch: (((() * (n & n)) == (n / (n | n))) - n)
+                // now we have *, right child is & and correct, left is +, so we switch: (((n + (n * (n & n))) == (n / (n | n))) - n)
+                // right child of + is * which is correct, and there is no left
+                // now we revisit *, right child is correct, there is no left
+                // now we should ascend all the way up and revisit -, the left is == which is wrong, so we switch ((n + (n * (n & n))) == ((n / (n | n)) - n))
+                // and it will check a few more times, but it should be correct now
+                // there is definitely something wrong with the implementation
+                const exp = new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: new exps.BinaryExpression({
+                            left: new exps.BinaryExpression({
+                                left: new exps.BinaryExpression({
+                                    left: new exps.BinaryExpression({
+                                        left: new exps.BinaryExpression({
+                                            left: getDummyReducedNode(int),
+                                            oper: '+',
+                                            right: getDummyReducedNode(int),
+                                        }),
+                                        oper: '*',
+                                        right: getDummyReducedNode(int),
+                                    }),
+                                    oper: '&',
+                                    right: getDummyReducedNode(int),
+                                }),
+                                oper: '==',
+                                right: getDummyReducedNode(int),
+                            }),
+                            oper: '/',
+                            right: getDummyReducedNode(int),
+                        }),
+                        oper: '|',
+                        right: getDummyReducedNode(int),
+                    }),
+                    oper: '-',
+                    right: getDummyReducedNode(int),
+                });
+                exp.resolvePrecedence();
+                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
+                    left: new exps.BinaryExpression({
+                        left: getDummyReducedNode(int),
+                        oper: '+',
+                        right: new exps.BinaryExpression({
+                            left: getDummyReducedNode(int),
+                            oper: '*',
+                            right: new exps.BinaryExpression({
+                                left: getDummyReducedNode(int),
+                                oper: '&',
+                                right: getDummyReducedNode(int),
+                            }),
+                        }),
+                    }),
+                    oper: '==',
+                    right: new exps.BinaryExpression({
+                        left: new exps.BinaryExpression({
+                            left: getDummyReducedNode(int),
+                            oper: '/',
+                            right: new exps.BinaryExpression({
+                                left: getDummyReducedNode(int),
+                                oper: '|',
+                                right: getDummyReducedNode(int),
+                            }),
+                        }),
+                        oper: '-',
+                        right: getDummyReducedNode(int),
+                    }),
+                })));
+            });
         });
     });
 
     describe('IfElseExpression', () => {
-        it('should reduce if-else expression');
+        it('should reduce if-else expression', () => {
+            const ifElse = new exps.IfElseExpression({
+                ifToken: new Token('IF', 1, 1, 'if'),
+                condition: getDummyNode(),
+                consequent: getDummyNode(),
+                alternate: getDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
+            });
+            expect(ifElse.reduce()).to.eql(new exps.IfElseExpression({
+                condition: {},
+                consequent: {},
+                alternate: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } },
+                locations: { self: { ...loc, endColumn: 3 } },
+            }));
+        });
 
-        it('should resolve type of if-else expression');
+        it('should resolve type of if-else expression', () => {
+            const ifElse = new exps.IfElseExpression({
+                condition: getDummyReducedNode(new TBool()),
+                consequent: getDummyReducedNode(int),
+                alternate: getDummyReducedNode(int),
+            });
+            expect(ifElse.resolveType({}, {}, {})).to.eql(int);
+        });
 
-        it('should error when condition is not bool');
+        it('should error when condition is not bool', () => {
+            const ifElse = new exps.IfElseExpression({
+                condition: getDummyReducedNode(new TChar(), { locations: { self: loc } }),
+                consequent: getDummyReducedNode(int),
+                alternate: getDummyReducedNode(int),
+            });
+            const tc = getDummyTypeChecker();
+            expect(ifElse.resolveType(tc, { path: '/index.ren' }, {})).to.eql(int);
+            expect(tc.errors.map(e => e.message)).to.eql(['Type "char" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
     });
 
-    describe('VarDeclExpression', () => {
-        it('should reduce var declaration');
+    describe('VarDeclaration', () => {
+        it('should reduce var declaration', () => {
+            const varDecl = new exps.VarDeclaration({
+                varIdentToken: new Token('IDENT', 1, 1, 'myVar'),
+                initialValue: getDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
+            });
+            expect(varDecl.reduce()).to.eql(new exps.VarDeclaration({
+                name: 'myVar',
+                initExp: { locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } },
+                locations: {
+                    name: { ...loc, endColumn: 5 },
+                    self: { ...loc, endColumn: 6 },
+                },
+            }));
+        });
 
-        it('should resolve type of var declaration');
+        it('should resolve type of var declaration', () => {
+            const varDecl = new exps.VarDeclaration({
+                name: 'myVar',
+                initExp: getDummyReducedNode(int),
+            });
+            const tc = getDummyTypeChecker();
+            const symbolTable = {};
+            expect(varDecl.resolveType(tc, {}, symbolTable)).to.eql(int);
+        });
 
-        it('should error when var already exists');
+        it('should error when var already exists', () => {
+            const varDecl = new exps.VarDeclaration({
+                name: 'myVar',
+                initExp: getDummyReducedNode(int),
+                locations: { name: loc },
+            });
+            // clash with symbol table
+            let tc = getDummyTypeChecker();
+            const symbolTable = { myVar: new TBool() };
+            expect(varDecl.resolveType(tc, { path: '/index.ren' }, symbolTable)).to.eql(int);
+            expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myVar" is already declared [/index.ren:1:1]']);
+            // clash with module-scoped symbol
+            tc = getDummyTypeChecker(new TBool());
+            expect(varDecl.resolveType(tc, { path: '/index.ren' }, {})).to.eql(int);
+            expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myVar" is already declared [/index.ren:1:1]']);
+        });
     });
 
     describe('FunctionApplication', () => {
-        it('should reduce function application');
+        it('should reduce function application', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyNode({ locations: { self: loc } }),
+                paramValues: [getDummyNode()],
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(app.reduce()).to.eql(new exps.FunctionApplication({
+                target: { locations: { self: loc } },
+                paramValues: [{}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
 
-        it('should resolve type of function application');
+        it('should resolve type of function application', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(new TFunction([int], new TBool())),
+                paramValues: [getDummyReducedNode(int)],
+            });
+            expect(app.resolveType({}, {}, {})).to.eql(new TBool());
+        });
 
-        it('should return unknown for unknown target type');
+        it('should return unknown for unknown target type', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(new TUnknown()),
+                paramValues: [getDummyReducedNode(int)],
+            });
+            expect(app.resolveType({}, {}, {})).to.eql(new TUnknown());
+        });
 
-        it('should error for non-function target type');
+        it('should error for non-function target type', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(int, { locations: { self: loc } }),
+                paramValues: [getDummyReducedNode(int)],
+            });
+            const tc = getDummyTypeChecker();
+            expect(app.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Cannot invoke a value that is not a function [/index.ren:1:1]']);
+        });
 
-        it('should skip unknown argument values');
+        it('should skip unknown argument values', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(new TFunction([int], new TBool())),
+                paramValues: [getDummyReducedNode(new TUnknown())],
+            });
+            expect(app.resolveType({}, {}, {})).to.eql(new TBool());
+        });
 
-        it('should error for non-assignable argument values');
+        it('should error for non-assignable argument values', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(new TFunction([int], new TBool())),
+                paramValues: [getDummyReducedNode(new TChar(), { locations: { self: loc } })],
+            });
+            const tc = getDummyTypeChecker();
+            expect(app.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Type "char" is not assignable to type "signed 32-bit integer" [/index.ren:1:1]']);
+        });
 
-        it('should handle lambda expression arguments');
+        it('should handle lambda expression arguments', () => {
+            // in this test, we take a lambda with no explicit types and pass it as an argument value
+            // the type should complete resolution, and then the lambda node should complete resolution
+            const paramType = new TFunction([int], new TBool());
+            const lambda = new exps.LambdaExpression({ params: [new exps.LambdaParam({ name: 'p' })], body: getDummyReducedNode(new TBool()) });
+            const functionType = new TFunction([paramType], new TBool());
+            const app = new exps.FunctionApplication({
+                target: getDummyReducedNode(functionType),
+                paramValues: [lambda],
+            });
+            const tc = getDummyTypeChecker();
+            expect(app.resolveType(tc, {}, {})).to.eql(new TBool());
+            expect(tc.errors).to.eql([]);
+            expect(lambda.type).to.eql(paramType);
+        });
     });
 
     describe('FieldAccess', () => {
-        it('should reduce field access');
+        it('should reduce field access', () => {
+            const acc = new exps.FieldAccess({
+                target: getDummyNode({ locations: { self: loc } }),
+                fieldIdentToken: new Token('IDENT', 1, 2, 'myField'),
+            });
+            expect(acc.reduce()).to.eql(new exps.FieldAccess({
+                target: { locations: { self: loc } },
+                field: 'myField',
+                locations: {
+                    self: { ...loc, endColumn: 8 },
+                    field: { ...loc, startColumn: 2, endColumn: 8 },
+                },
+            }));
+        });
 
-        it('should resolve type of field access');
+        it('should resolve type of field access', () => {
+            const acc = new exps.FieldAccess({
+                target: getDummyReducedNode(new TStruct({ field: int })),
+                field: 'field',
+            });
+            expect(acc.resolveType({}, {}, {})).to.eql(int);
+        });
 
-        it('should return unknown for unknown target type');
+        it('should return unknown for unknown target type', () => {
+            const acc = new exps.FieldAccess({
+                target: getDummyReducedNode(new TUnknown()),
+                field: 'field',
+            });
+            expect(acc.resolveType({}, {}, {})).to.eql(new TUnknown());
+        });
 
-        it('should error for non-struct target type');
+        it('should error for non-struct target type', () => {
+            const acc = new exps.FieldAccess({
+                target: getDummyReducedNode(int, { locations: { self: loc } }),
+                field: 'field',
+            });
+            const tc = getDummyTypeChecker();
+            expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Cannot access field of a value that is not a struct [/index.ren:1:1]']);
+        });
 
-        it('should error for undefined field name');
+        it('should error for undefined field name', () => {
+            const acc = new exps.FieldAccess({
+                target: getDummyReducedNode(new TStruct({ field: int })),
+                field: 'feild',
+                locations: { field: loc },
+            });
+            const tc = getDummyTypeChecker();
+            expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Value "feild" is not defined [/index.ren:1:1]']);
+        });
     });
 
     describe('ArrayAccess', () => {
-        it('should reduce array access');
+        it('should reduce array access', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyNode({ locations: { self: loc } }),
+                indexExp: getDummyNode(),
+                closeBracketToken: new Token('RBRACK', 1, 2, ']'),
+            });
+            expect(acc.reduce()).to.eql(new exps.ArrayAccess({
+                target: { locations: { self: loc } },
+                indexExp: {},
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
 
-        it('should resolve type of array access');
+        it('should resolve type of array access', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyReducedNode(new TArray(new TChar())),
+                indexExp: getDummyReducedNode(int),
+            });
+            expect(acc.resolveType({}, {}, {})).to.eql(new TChar());
+        });
 
-        it('should return unknown for unknown target type');
+        it('should return unknown for unknown target type', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyReducedNode(new TUnknown()),
+                indexExp: getDummyReducedNode(int),
+            });
+            expect(acc.resolveType({}, {}, {})).to.eql(new TUnknown());
+        });
 
-        it('should error for non-array target type');
+        it('should error for non-array target type', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyReducedNode(int, { locations: { self: loc } }),
+                indexExp: getDummyReducedNode(int),
+            });
+            const tc = getDummyTypeChecker();
+            expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Cannot access index of a value that is not an array [/index.ren:1:1]']);
+        });
 
-        it('should ignore unknown index type');
+        it('should ignore unknown index type', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyReducedNode(new TArray(new TChar())),
+                indexExp: getDummyReducedNode(new TUnknown()),
+            });
+            expect(acc.resolveType({}, {}, {})).to.eql(new TChar());
+        });
 
-        it('should error for non-integer index type');
+        it('should error for non-integer index type', () => {
+            const acc = new exps.ArrayAccess({
+                target: getDummyReducedNode(new TArray(new TChar())),
+                indexExp: getDummyReducedNode(new TChar(), { locations: { self: loc } }),
+            });
+            const tc = getDummyTypeChecker();
+            expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
+            expect(tc.errors.map(e => e.message)).to.eql(['Type "char" is not assignable to type "integer" [/index.ren:1:1]']);
+        });
     });
 });

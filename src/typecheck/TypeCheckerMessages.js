@@ -9,3 +9,9 @@ export const TYPE_MISMATCH = (actual, expected) => `Type "${actual}" is not assi
 export const INVALID_BREAK_STATEMENT = '"break" statement cannot be present outside loop';
 export const INVALID_LOOP_NUM = (actual, expected) => `Invalid loop number ${actual} in loop with depth ${expected}`;
 export const INVALID_CONTINUE_STATEMENT = '"continue" statement cannot be present outside loop';
+export const INVALID_UNARY_OPERATOR = (oper, type) => `Operator "${oper}" does not operate on type "${type}"`;
+export const INVALID_BINARY_OPERATOR = (oper, left, right) => `Operator "${oper}" does not operate on types "${left}" and "${right}"`;
+export const NOT_INVOKABLE = 'Cannot invoke a value that is not a function';
+export const NOT_STRUCT = 'Cannot access field of a value that is not a struct';
+export const NOT_ARRAY = 'Cannot access index of a value that is not an array';
+export const CONFLICTING_ASSOCIATIVITY = (oper1, oper2) => `Precedence order between operators "${oper1}" and "${oper2}" could not be established because they have conflicting associativity`;

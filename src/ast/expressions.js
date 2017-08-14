@@ -1,8 +1,8 @@
 import ASTNode from './ASTNode';
-import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, determineGeneralType } from '../typecheck/types';
+import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
-import { getOperator } from '../runtime/operators';
+import { getOperator, createOperator } from '../runtime/operators';
 
 
 export class Expression extends ASTNode {
@@ -18,7 +18,7 @@ export class Expression extends ASTNode {
         } else if (this.boolLiteralToken) {
             return new BoolLiteral(this.boolLiteralToken.image, this.boolLiteralToken.getLocation());
         } else if (this.identToken) {
-            return new IdentifierExpression(this.identToken.image, this.identifierToken.getLocation());
+            return new IdentifierExpression(this.identToken.image, this.identToken.getLocation());
         } else if (this.arrayLiteral) {
             return this.arrayLiteral.reduce();
         } else if (this.tupleLiteral) {
@@ -147,7 +147,7 @@ export class IdentifierExpression extends Expression {
             actualType = typeChecker.getValueType(module, this.name);
         }
         if (!actualType) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.name), module.path, this.locations.self));
+            typeChecker.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(this.name), module.path, this.locations.self));
             return this.type = new TUnknown();
         }
         return this.type = actualType;
@@ -163,13 +163,13 @@ export class ArrayLiteral extends Expression {
     }
 
     resolveType(typeChecker, module, symbolTable) {
-        // infer the type of the first item
-        let baseType = this.items[0].resolveType(typeChecker, module, symbolTable);
-        // for all remaining items, make sure there is one base assignable type for them all
-        for (let i = 1; i < this.items.length; ++i) {
-            const type = this.items[i].resolveType(typeChecker, module);
+        // for all items, make sure there is one base assignable type for them all
+        let baseType = null;
+        for (const item of this.items) {
+            const type = item.resolveType(typeChecker, module);
             baseType = determineGeneralType(baseType, type);
         }
+        if (!baseType) baseType = new TAny();
         return this.type = new TArray(baseType);
     }
 }
@@ -219,8 +219,8 @@ export class LambdaExpression extends Expression {
         node.body = this.body.reduce();
         // lambda expression start location is complicated because it can either be a '(' or a param name
         node.createAndRegisterLocation('self',
-            this.openParenToken ? this.openParenToken.getLocation() : this.params[0].locations.name,
-            this.body.locations.self);
+            this.openParenToken ? this.openParenToken.getLocation() : node.params[0].locations.name,
+            node.body.locations.self);
         return node;
     }
 
@@ -242,8 +242,8 @@ export class LambdaExpression extends Expression {
         }
         // type check the function body, passing along the starting symbol table
         const actualReturnType = this.body.resolveType(typeChecker, module, symbolTable);
-        if (!this.returnType.isAssignableFrom(actualReturnType)) {
-            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, this.returnType), module.path, this.locations.self));
+        if (!this.type.returnType.isAssignableFrom(actualReturnType)) {
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, this.type.returnType), module.path, this.locations.self));
         }
     }
 }
@@ -288,13 +288,13 @@ export class UnaryExpression extends Expression {
     resolveType(typeChecker, module, symbolTable) {
         const targetType = this.target.resolveType(typeChecker, module, symbolTable);
         // check if the operator exists
-        const oper = getOperator(this.oper, this.prefix ? 'prefix' : 'suffix');
+        const oper = getOperator(this.oper, this.prefix ? 'prefix' : 'postfix');
         if (!oper) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.oper), module.path, this.locations.oper));
+            typeChecker.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(this.oper), module.path, this.locations.oper));
             return this.type = new TUnknown();
         }
         // resolve the function type of the operator using the type being passed to it
-        this.operType = oper.getType(targetType);
+        this.operType = new oper().getType(targetType);
         if (this.operType instanceof TUnknown) {
             typeChecker.errors.push(new TypeCheckError(mess.INVALID_UNARY_OPERATOR(this.oper, targetType), module.path, this.locations.self));
             return this.type = new TUnknown();
@@ -315,13 +315,14 @@ export class BinaryExpression extends Expression {
         return node;
     }
 
-    selectAssociativity(typeChecker, a, b) {
+    selectAssociativity(typeChecker, module, a, b) {
+        console.log(a.associativity, b.associativity);
         // default to ours, if the other is none or equal, this won't change, if ours is none and the other isn't, use the other, otherwise use left
         const ass = a.associativity === 'none' ? (b.associativity === 'none' ? 'left' : b.associativity) : a.associativity;
         if (a.associativity === 'left' && b.associativity === 'right' || a.associativity === 'right' && b.associativity === 'left') {
             // conflicting associativity, impossible to resolve precedence
             typeChecker.errors.push(new TypeCheckError(mess.CONFLICTING_ASSOCIATIVITY(a.symbol, b.symbol), module.path, this.locations.self));
-            return null;
+            throw new Error('conflict');
         }
         return ass;
     }
@@ -332,9 +333,11 @@ export class BinaryExpression extends Expression {
      */
     shiftRightUp() {
         // clone this node, overwriting the right node with the current right node's left node
-        const clone = Object.assign(this._createNewNode(), { oper: this.oper, left: this.left, right: this.right.left, locations: this.locations });
+        const { right, ...rest } = this;
+        const clone = Object.assign(this._createNewNode(), { ...rest, right: right.left });
         // copy the fields of the right node onto this, overwriting the left node with this new clone
-        Object.assign(this, { oper: this.right.oper, left: clone, right: this.right.right, locations: this.right.locations });
+        const { left, ...rightRest } = right;
+        Object.assign(this, { ...rightRest, left: clone });
     }
 
     /**
@@ -343,9 +346,11 @@ export class BinaryExpression extends Expression {
      */
     shiftLeftUp() {
         // clone this node, overwriting the left node with the current left node's right node
-        const clone = Object.assign(this._createNewNode(), { oper: this.oper, left: this.left.right, right: this.right, locations: this.locations });
+        const { left, ...rest } = this;
+        const clone = Object.assign(this._createNewNode(), { ...rest, left: left.right });
         // copy the fields of the left node onto this, overwriting the right node with this new clone
-        Object.assign(this, { oper: this.left.oper, left: this.left.left, right: clone, locations: this.left.locations });
+        const { right, ...leftRest } = left;
+        Object.assign(this, { ...leftRest, right: clone });
     }
 
     /**
@@ -358,60 +363,71 @@ export class BinaryExpression extends Expression {
      * of operators goes down to the left.
      * We then traverse the tree, shifting it according to the above rules, until it has been completely resolved.
      * TODO: this REALLY needs to be tested, I have no idea if this is going to work.
+     *
+     * Check the right.
+     * If we need to switch, do it, then recurse
+     * If we don't, then check the left.
+     * If we need to switch, do it, then recurse
+     * If we didn't need to switch either, then we recurse on the right, then on the left
      */
     resolvePrecedence(typeChecker, module) {
-        const oper = getOperator(this.oper, 'infix');
+        const oper = createOperator(this.oper, 'infix');
+        // step 1 is to make it so that this current operator is correctly positioned in relation to both the left and the right
         if (this.right instanceof BinaryExpression) {
-            const rightOper = getOperator(this.right.oper, 'infix');
-            if (rightOper.precedence < oper.precedence) {
+            const rightOper = createOperator(this.right.oper, 'infix');
+            console.log('RIGHT:', JSON.stringify(oper), JSON.stringify(rightOper));
+            if (rightOper.precedence < oper.precedence || (rightOper.precedence === oper.precedence && this.selectAssociativity(typeChecker, module, oper, rightOper) === 'left')) {
+                // need to shift right up, then recurse
+                console.log('shifting');
                 this.shiftRightUp();
-            } else if (rightOper.precedence === oper.precedence) {
-                const ass = this.selectAssociativity(typeChecker, oper, rightOper);
-                if (!ass) return;
-                if (ass === 'left') this.shiftRightUp();
-            }
-        }
-        // continue to iterate until we don't need to switch the tree
-        while (this.left instanceof BinaryExpression) {
-            const leftOper = getOperator(this.left.oper, 'infix');
-            if (leftOper.precedence < oper.precedence) {
-                this.shiftLeftUp();
-                // visit the new parent, which is actually now the current node
                 this.resolvePrecedence(typeChecker, module);
-                // finish visiting the original node, which is now the right child
-                this.right.resolvePrecedence(typeChecker, module);
-                continue;
-            } else if (leftOper.precedence === oper.precedence) {
-                const ass = this.selectAssociativity(typeChecker, oper, leftOper);
-                if (!ass) return;
-                if (ass === 'right') {
-                    this.shiftLeftUp();
-                    // visit the new parent, which is actually now the current node
-                    this.resolvePrecedence(typeChecker, module);
-                    // finish visiting the original node, which is now the right child
-                    this.right.resolvePrecedence(typeChecker, module);
-                    continue;
-                }
+                return;
             }
-            // the tree is structured validly, stop looping
-            break;
         }
+        if (this.left instanceof BinaryExpression) {
+            const leftOper = createOperator(this.left.oper, 'infix');
+            console.log('LEFT:', JSON.stringify(leftOper), JSON.stringify(oper));
+            if (leftOper.precedence < oper.precedence || (leftOper.precedence === oper.precedence && this.selectAssociativity(typeChecker, module, oper, leftOper) === 'right')) {
+                // need to shift left up, then recurse
+                console.log('shifting');
+                this.shiftLeftUp();
+                this.resolvePrecedence(typeChecker, module);
+                return;
+            }
+        }
+        // once the node is guaranteed to be correctly positioned with precedence, TODO you were here
+        console.log('no switch needed')
+        if (this.right instanceof BinaryExpression) {
+            console.log('resolving right');
+            this.right.resolvePrecedence(typeChecker, module);
+        }
+        if (this.left instanceof BinaryExpression) {
+            console.log('resolving left');
+            this.left.resolvePrecedence(typeChecker, module);
+        }
+        console.log('done');
     }
 
     resolveType(typeChecker, module, symbolTable) {
-        // resolve the expression based on precedence rules, may mutate tree
-        this.resolvePrecedence(typeChecker, module);
+        try {
+            // resolve the expression based on precedence rules, may mutate tree
+            this.resolvePrecedence(typeChecker, module);
+        } catch (err) {
+            // if this is the case, there was a precedence violation
+            if (err.message === 'conflict') return this.type = new TUnknown();
+            throw err;
+        }
         // resolve the left and right expression types
         const leftType = this.left.resolveType(typeChecker, module, symbolTable);
         const rightType = this.right.resolveType(typeChecker, module, symbolTable);
         // check if the operator exists
         const oper = getOperator(this.oper, 'infix');
         if (!oper) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.oper), module.path, this.locations.oper));
+            typeChecker.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(this.oper), module.path, this.locations.oper));
             return this.type = new TUnknown();
         }
         // resolve the function type of the operator using the types being passed to it
-        this.operType = oper.getType(leftType, rightType);
+        this.operType = new oper().getType(leftType, rightType);
         if (this.operType instanceof TUnknown) {
             typeChecker.errors.push(new TypeCheckError(mess.INVALID_BINARY_OPERATOR(this.oper, leftType, rightType), module.path, this.locations.self));
             return this.type = new TUnknown();
@@ -454,7 +470,7 @@ export class VarDeclaration extends Expression {
 
     resolveType(typeChecker, module, symbolTable) {
         const expType = this.initExp.resolveType(typeChecker, module, symbolTable);
-        if (symbolTable[this.name] || module.getValueType(this.name)) {
+        if (symbolTable[this.name] || typeChecker.getValueType(this.name)) {
             // symbol already exists
             typeChecker.errors.push(new TypeCheckError(mess.NAME_CLASH(this.name), module.path, this.locations.name));
         } else {
@@ -523,7 +539,7 @@ export class FieldAccess extends Expression {
         }
         // verify that the field exists
         if (!structType.fields[this.field]) {
-            typeChecker.errors.push(new TypeCheckError(mess.NOT_DEFINED(this.field), module.path, this.locations.field));
+            typeChecker.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(this.field), module.path, this.locations.field));
             return this.type = new TUnknown();
         }
         // return the type of the field

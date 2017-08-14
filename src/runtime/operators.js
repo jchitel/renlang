@@ -13,7 +13,7 @@ const operators = {
 /**
  * Decorator for operator classes to register them into the operator table
  */
-function operator(symbol, type) {
+export function operator(symbol, type) {
     return (cls) => {
         operators[type][symbol] = cls;
     };
@@ -24,6 +24,12 @@ function operator(symbol, type) {
  */
 export function getOperator(symbol, type) {
     return operators[type][symbol];
+}
+
+export function createOperator(symbol, type) {
+    const cls = getOperator(symbol, type);
+    if (cls) return new cls();
+    return null;
 }
 
 /**
