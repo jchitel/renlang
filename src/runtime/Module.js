@@ -78,7 +78,7 @@ export default class Module {
      */
     parseModule() {
         // read the file
-        const contents = readFile(this.path);
+        const contents = readFile(this.path).toString();
         // parse it
         const parsed = new Parser().parse(contents);
         // reduce it
