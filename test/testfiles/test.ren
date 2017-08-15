@@ -1,0 +1,7 @@
+import from ".": One
+import from "." { myFunc, myType }
+
+func int getOne() => One
+func int getMyFuncOne() => myFunc(getOne())
+
+type mySpecialType = myType | char

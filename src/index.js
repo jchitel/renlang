@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync as readFile } from 'fs';
 import { resolve } from 'path';
 
 import parse from './parser';
@@ -9,7 +9,7 @@ import interpret from './interpreter';
 
 // read contents of specified file
 const path = resolve(process.argv[2]);
-const contents = readFileSync(path);
+const contents = readFile(path).toString();
 // parse them
 const parsed = parse(contents);
 // type check the parsed result

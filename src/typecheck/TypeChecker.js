@@ -68,7 +68,7 @@ export default class TypeChecker {
     resolveTypes() {
         for (const module of this.modules) {
             // types, functions, and constants need to be resolved
-            const toResolve = [...module.type, ...module.functions, ...module.constants].filter(t => !t.imported);
+            const toResolve = [...Object.values(module.types), ...Object.values(module.functions), ...Object.values(module.constants)].filter(t => !t.imported);
             for (const decl of toResolve) {
                 this.resolveType(module, decl);
             }
@@ -109,12 +109,12 @@ export default class TypeChecker {
             // verify that the module exports the name
             if (!imported.exports[name]) {
                 this.errors.push(new TypeCheckError(mess.MODULE_DOESNT_EXPORT_NAME(imp.moduleName, name), module.path, imp.locations[`importName_${name}`]));
-                return;
+                continue;
             }
             // verify that the alias doesn't already exist; imports always come first, so we only need to check imports
             if (module.imports[alias]) {
                 this.errors.push(new TypeCheckError(mess.NAME_CLASH(alias), module.path, imp.locations[`importAlias_${name}`]));
-                return;
+                continue;
             }
             // valid import, create an import entry linking the import to the export
             module.imports[alias] = { moduleId: imported.id, exportName: name, kind: imported.exports[name].kind, ast: imp };
@@ -136,19 +136,11 @@ export default class TypeChecker {
     processType(module, typ) {
         const name = typ.name;
         // handle name clashes
-        if (module.imports[name] || module.types[name]) {
+        if (module.types[name]) {
             this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typ.locations.name));
             return;
         }
-        if (module.functions[name]) {
-            // set the error on whichever comes last
-            const [funcLoc, typeLoc] = [module.functions[name].ast.locations.name, typ.location.name];
-            if (funcLoc.startLine < typeLoc.startLine || (funcLoc.startLine === typeLoc.startLine && funcLoc.startColumn < typeLoc.startColumn)) {
-                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
-            } else {
-                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
-            }
-        }
+        if (module.functions[name]) this.addNameClash(name, module.path, module.functions[name].ast.locations.name, typ.locations.name);
         module.types[name] = { ast: typ };
     }
 
@@ -160,19 +152,11 @@ export default class TypeChecker {
     processFunction(module, func) {
         const name = func.name;
         // handle name clashes
-        if (module.imports[name] || module.functions[name]) {
+        if (module.functions[name]) {
             this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, func.locations.name));
             return;
         }
-        if (module.types[name]) {
-            // set the error on whichever comes last
-            const [typeLoc, funcLoc] = [module.types[name].ast.locations.name, func.location.name];
-            if (typeLoc.startLine < funcLoc.startLine || (typeLoc.startLine === funcLoc.startLine && typeLoc.startColumn < funcLoc.startColumn)) {
-                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
-            } else {
-                this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
-            }
-        }
+        if (module.types[name]) this.addNameClash(name, module.path, module.types[name].ast.locations.name, func.locations.name);
         module.functions[name] = { ast: func };
     }
 
@@ -182,45 +166,29 @@ export default class TypeChecker {
      * and organize the exported value into the module's symbol tables.
      */
     processExport(module, exp) {
-        const { name, exportedValue } = exp;
+        const { name, value } = exp;
         // exports are in their own scope (unless they are expressions, which is handled below) so we only need to check expressions
         if (module.exports[name]) {
             this.errors.push(new TypeCheckError(mess.EXPORT_CLASH(name), module.path, exp.locations.name));
             return;
         }
         // determine the kind and match it with a value
-        if (exportedValue) {
+        if (value) {
             // inline export, the value will need to be added to the module
-            if (exportedValue instanceof AST.TypeDeclaration) {
-                module.exports[name] = { kind: 'type', valueName: exportedValue.name };
-                this.processType(module, exportedValue);
-            } else if (exportedValue instanceof AST.FunctionDeclaration) {
-                module.exports[name] = { kind: 'func', valueName: exportedValue.name };
-                this.processFunction(module, exportedValue);
+            if (value instanceof AST.TypeDeclaration) {
+                module.exports[name] = { kind: 'type', valueName: value.name };
+                this.processType(module, value);
+            } else if (value instanceof AST.FunctionDeclaration) {
+                module.exports[name] = { kind: 'func', valueName: value.name };
+                this.processFunction(module, value);
             } else {
                 // otherwise it's an expression, and the value is available in the module, check for name clashes
-                if (module.imports[name]) {
+                if (module.constants[name]) {
                     this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, exp.locations.name));
                     return;
                 }
-                if (module.types[name]) {
-                    // set the error on whichever comes last
-                    const [typeLoc, expLoc] = [module.types[name].ast.locations.name, exp.location.name];
-                    if (typeLoc.startLine < expLoc.startLine || (typeLoc.startLine === expLoc.startLine && typeLoc.startColumn < expLoc.startColumn)) {
-                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, expLoc));
-                    } else {
-                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, typeLoc));
-                    }
-                }
-                if (module.functions[name]) {
-                    // set the error on whichever comes last
-                    const [funcLoc, expLoc] = [module.functions[name].ast.locations.name, exp.location.name];
-                    if (funcLoc.startLine < expLoc.startLine || (funcLoc.startLine === expLoc.startLine && funcLoc.startColumn < expLoc.startColumn)) {
-                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, expLoc));
-                    } else {
-                        this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, funcLoc));
-                    }
-                }
+                if (module.types[name]) this.addNameClash(name, module.path, module.types[name].ast.locations.name, exp.locations.name);
+                else if (module.functions[name]) this.addNameClash(name, module.path, module.functions[name].ast.locations.name, exp.locations.name);
                 module.exports[name] = { kind: 'expr', valueName: name };
                 // expose it on a special constants table
                 module.constants[name] = { ast: exp };
@@ -236,8 +204,17 @@ export default class TypeChecker {
                 module.exports[name] = { kind: 'func', valueName: name };
             } else {
                 // exporting a non-declared value
-                this.errors.push(new TypeCheckError(mess.NOT_DEFINED(name), module.path, exp.locations.name));
+                this.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(name), module.path, exp.locations.name));
             }
+        }
+    }
+
+    addNameClash(name, path, loc1, loc2) {
+        // set the error on whichever comes last
+        if (loc1.startLine < loc2.startLine || (loc1.startLine === loc2.startLine && loc1.startColumn < loc2.startColumn)) {
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), path, loc2));
+        } else {
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), path, loc1));
         }
     }
 
@@ -254,13 +231,13 @@ export default class TypeChecker {
      * To prevent double resolution, we track which ones have already been resolved.
      */
     resolveType(module, decl) {
-        if (decl.type) return decl.type; // resolved already
+        if (decl.ast.type) return decl.ast.type; // resolved already
         if (decl.resolving) {
             // type recursion is handled in getType(), so this will only happen for recursively defined constants
             this.errors.push(new TypeCheckError(mess.CIRCULAR_DEPENDENCY, module.path, decl.ast.locations.self));
             // set the type to Unknown so that this error only occurs once
-            decl.type = new TUnknown();
-            return decl.type;
+            decl.ast.type = new TUnknown();
+            return decl.ast.type;
         }
         if (decl.ast instanceof AST.FunctionDeclaration) {
             // function declarations can be recursive, and they always contain their type right in their declaration
@@ -271,7 +248,7 @@ export default class TypeChecker {
             decl.ast.resolveType(this, module);
             decl.resolving = false;
         }
-        return decl.type;
+        return decl.ast.type;
     }
 
     /**
@@ -291,7 +268,7 @@ export default class TypeChecker {
             return this.getType(importedModule, exp.valueName);
         } else {
             // the type was declared in this module, return it if it has already been type checked
-            if (type.type) return type.type;
+            if (type.ast.type) return type.ast.type;
             // if the type is resolving, we have a recursive type, return the recursive reference because we don't have an actual type yet
             if (type.resolving) return new TRecursive(type);
             // otherwise resolve it and return the resolved type
@@ -314,10 +291,10 @@ export default class TypeChecker {
             const importedModule = this.modules[imp.moduleId];
             const exp = importedModule.exports[imp.exportName];
             // get the value from that module, recursively so that we can handle forwarded imports
-            return this.getValue(importedModule, exp.valueName);
+            return this.getValueType(importedModule, exp.valueName);
         } else {
             // the value was declared in this module, return it if it has already been type checked
-            if (value.type) return value.type;
+            if (value.ast.type) return value.ast.type;
             // otherwise resolve it and return the resolved type
             return this.resolveType(module, value);
         }

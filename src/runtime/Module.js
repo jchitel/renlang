@@ -34,18 +34,18 @@ export default class Module {
     resolvePath(path) {
         // if it is a relative path, resolve the relation and determine if it exists
         if (path.startsWith('.')) {
-            const resolved = resolve(this.path, path);
+            const resolved = resolve(dirname(this.path), path);
             return this._resolveDirectPath(resolved);
         }
         // otherwise, it is a package import
         let dir = dirname(this.path);
         while (dir) {
             // we want to check the path '{currentModuleDir}/packages/{importPath}' for a valid module
-            const resolved = this._resolveDirectPath(path.join(dir, 'packages', path));
+            const resolved = this._resolveDirectPath(join(dir, 'packages', path));
             // valid path, use it
             if (resolved) return resolved;
             // if it didn't exist, we want to continue to check parent directories until we reach the fs root
-            if (dir === dirname(dir)) return null;
+            if (dir === dirname(dir)) break;
             dir = dirname(dir);
         }
         return null;

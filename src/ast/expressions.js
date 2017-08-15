@@ -389,7 +389,6 @@ export class BinaryExpression extends Expression {
     }
 
     shouldPopOperator(nextToken, stackToken) {
-        console.log(nextToken, stackToken);
         const nextOper = createOperator(nextToken.image, 'infix');
         const stackOper = createOperator(stackToken.image, 'infix');
         return stackOper.precedence >= nextOper.precedence && ['left', 'none'].includes(stackOper.associativity);

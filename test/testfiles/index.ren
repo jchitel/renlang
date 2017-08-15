@@ -1,0 +1,3 @@
+export default 1
+export myFunc = func int myFunc(int p) => p
+export myType = type myType = int | bool
