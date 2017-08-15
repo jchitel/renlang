@@ -62,6 +62,10 @@ export class IntegerLiteral extends Expression {
         this.registerLocation('self', location);
     }
 
+    reduce() {
+        return this;
+    }
+
     resolveType() {
         return this.estimateType();
     }
@@ -93,6 +97,10 @@ export class FloatLiteral extends Expression {
         this.registerLocation('self', location);
     }
 
+    reduce() {
+        return this;
+    }
+
     resolveType() {
         return this.estimateType();
     }
@@ -108,6 +116,10 @@ export class CharLiteral extends Expression {
         this.registerLocation('self', location);
     }
 
+    reduce() {
+        return this;
+    }
+
     resolveType() {
         return this.type = new TChar();
     }
@@ -117,6 +129,10 @@ export class StringLiteral extends Expression {
     constructor(value, location) {
         super({ value });
         this.registerLocation('self', location);
+    }
+
+    reduce() {
+        return this;
     }
 
     resolveType() {
@@ -130,6 +146,10 @@ export class BoolLiteral extends Expression {
         this.registerLocation('self', location);
     }
 
+    reduce() {
+        return this;
+    }
+
     resolveType() {
         return this.type = new TBool();
     }
@@ -139,6 +159,10 @@ export class IdentifierExpression extends Expression {
     constructor(name, location) {
         super({ name });
         this.registerLocation('self', location);
+    }
+
+    reduce() {
+        return this;
     }
 
     resolveType(typeChecker, module, symbolTable) {
@@ -166,7 +190,7 @@ export class ArrayLiteral extends Expression {
         // for all items, make sure there is one base assignable type for them all
         let baseType = null;
         for (const item of this.items) {
-            const type = item.resolveType(typeChecker, module);
+            const type = item.resolveType(typeChecker, module, symbolTable);
             baseType = determineGeneralType(baseType, type);
         }
         if (!baseType) baseType = new TAny();
@@ -306,117 +330,72 @@ export class UnaryExpression extends Expression {
 
 export class BinaryExpression extends Expression {
     reduce() {
-        const node = this._createNewNode();
-        node.oper = this.operatorToken.image;
-        node.registerLocation('oper', this.operatorToken.getLocation());
-        node.left = this.left.reduce();
-        node.right = this.right.reduce();
-        node.createAndRegisterLocation('self', node.left.locations.self, node.right.locations.self);
-        return node;
-    }
-
-    selectAssociativity(typeChecker, module, a, b) {
-        console.log(a.associativity, b.associativity);
-        // default to ours, if the other is none or equal, this won't change, if ours is none and the other isn't, use the other, otherwise use left
-        const ass = a.associativity === 'none' ? (b.associativity === 'none' ? 'left' : b.associativity) : a.associativity;
-        if (a.associativity === 'left' && b.associativity === 'right' || a.associativity === 'right' && b.associativity === 'left') {
-            // conflicting associativity, impossible to resolve precedence
-            typeChecker.errors.push(new TypeCheckError(mess.CONFLICTING_ASSOCIATIVITY(a.symbol, b.symbol), module.path, this.locations.self));
-            throw new Error('conflict');
-        }
-        return ass;
-    }
-
-    /**
-     * Shift the expression tree so that this node is moved to the current right node's left child,
-     * and the right node's left child becomes this node's right child
-     */
-    shiftRightUp() {
-        // clone this node, overwriting the right node with the current right node's left node
-        const { right, ...rest } = this;
-        const clone = Object.assign(this._createNewNode(), { ...rest, right: right.left });
-        // copy the fields of the right node onto this, overwriting the left node with this new clone
-        const { left, ...rightRest } = right;
-        Object.assign(this, { ...rightRest, left: clone });
-    }
-
-    /**
-     * Shift the expression tree so that this node is moved to the current left node's right child,
-     * and the left node's right child becomes this node's left child
-     */
-    shiftLeftUp() {
-        // clone this node, overwriting the left node with the current left node's right node
-        const { left, ...rest } = this;
-        const clone = Object.assign(this._createNewNode(), { ...rest, left: left.right });
-        // copy the fields of the left node onto this, overwriting the right node with this new clone
-        const { right, ...leftRest } = left;
-        Object.assign(this, { ...leftRest, right: clone });
-    }
-
-    /**
-     * Resolve the precedence of this binary operator if it has children that are also binary operators.
-     * This is a complicated bit of logic that is based on two rules:
-     * - operators with higher precedence get pushed down in the tree
-     * - operators with the same precedence get pushed left for left associativity and right for right associativity
-     * This is attempted by starting at the top node of a tree of binary expressions,
-     * which will initially be a fully left-associative structure, where the full chain
-     * of operators goes down to the left.
-     * We then traverse the tree, shifting it according to the above rules, until it has been completely resolved.
-     * TODO: this REALLY needs to be tested, I have no idea if this is going to work.
-     *
-     * Check the right.
-     * If we need to switch, do it, then recurse
-     * If we don't, then check the left.
-     * If we need to switch, do it, then recurse
-     * If we didn't need to switch either, then we recurse on the right, then on the left
-     */
-    resolvePrecedence(typeChecker, module) {
-        const oper = createOperator(this.oper, 'infix');
-        // step 1 is to make it so that this current operator is correctly positioned in relation to both the left and the right
-        if (this.right instanceof BinaryExpression) {
-            const rightOper = createOperator(this.right.oper, 'infix');
-            console.log('RIGHT:', JSON.stringify(oper), JSON.stringify(rightOper));
-            if (rightOper.precedence < oper.precedence || (rightOper.precedence === oper.precedence && this.selectAssociativity(typeChecker, module, oper, rightOper) === 'left')) {
-                // need to shift right up, then recurse
-                console.log('shifting');
-                this.shiftRightUp();
-                this.resolvePrecedence(typeChecker, module);
-                return;
+        // convert the current binary expression tree to a list
+        const items = this.toList();
+        // Shunting-yard algorithm to resolve precedence
+        const expStack = [];
+        const operStack = [];
+        while (items.length) {
+            const item = items.shift();
+            if (item instanceof Expression) {
+                expStack.push(item);
+            } else {
+                while (operStack.length && this.shouldPopOperator(item, operStack[operStack.length - 1])) {
+                    const right = expStack.pop();
+                    const left = expStack.pop();
+                    const oper = operStack.pop();
+                    const exp = new BinaryExpression({ left, oper: oper.image, right });
+                    exp.registerLocation('oper', oper.getLocation());
+                    exp.createAndRegisterLocation('self', left.locations.self, right.locations.self);
+                    expStack.push(exp);
+                }
+                operStack.push(item);
             }
         }
-        if (this.left instanceof BinaryExpression) {
-            const leftOper = createOperator(this.left.oper, 'infix');
-            console.log('LEFT:', JSON.stringify(leftOper), JSON.stringify(oper));
-            if (leftOper.precedence < oper.precedence || (leftOper.precedence === oper.precedence && this.selectAssociativity(typeChecker, module, oper, leftOper) === 'right')) {
-                // need to shift left up, then recurse
-                console.log('shifting');
-                this.shiftLeftUp();
-                this.resolvePrecedence(typeChecker, module);
-                return;
+        // empty the operator stack
+        while (operStack.length) {
+            const right = expStack.pop();
+            const left = expStack.pop();
+            const oper = operStack.pop();
+            const exp = new BinaryExpression({ left, oper: oper.image, right });
+            exp.registerLocation('oper', oper.getLocation());
+            exp.createAndRegisterLocation('self', left.locations.self, right.locations.self);
+            expStack.push(exp);
+        }
+        // final expression tree is the only element left on the exp stack
+        return expStack[0];
+    }
+
+    toList() {
+        const items = [];
+        // the tree is left-associative, so we assemble the list from right to left
+        let right = this.right.reduce();
+        let operToken = this.operatorToken;
+        // if the left is binary, don't reduce it because that's what we're doing
+        let left = this.left.binary ? this.left.binary : this.left.reduce();
+        while (true) {
+            items.unshift(right);
+            items.unshift(operToken);
+            if (left instanceof BinaryExpression) {
+                right = left.right.reduce();
+                operToken = left.operatorToken;
+                left = left.left.binary ? left.left.binary : left.left.reduce();
+            } else {
+                items.unshift(left);
+                break;
             }
         }
-        // once the node is guaranteed to be correctly positioned with precedence, TODO you were here
-        console.log('no switch needed')
-        if (this.right instanceof BinaryExpression) {
-            console.log('resolving right');
-            this.right.resolvePrecedence(typeChecker, module);
-        }
-        if (this.left instanceof BinaryExpression) {
-            console.log('resolving left');
-            this.left.resolvePrecedence(typeChecker, module);
-        }
-        console.log('done');
+        return items;
+    }
+
+    shouldPopOperator(nextToken, stackToken) {
+        console.log(nextToken, stackToken);
+        const nextOper = createOperator(nextToken.image, 'infix');
+        const stackOper = createOperator(stackToken.image, 'infix');
+        return stackOper.precedence >= nextOper.precedence && ['left', 'none'].includes(stackOper.associativity);
     }
 
     resolveType(typeChecker, module, symbolTable) {
-        try {
-            // resolve the expression based on precedence rules, may mutate tree
-            this.resolvePrecedence(typeChecker, module);
-        } catch (err) {
-            // if this is the case, there was a precedence violation
-            if (err.message === 'conflict') return this.type = new TUnknown();
-            throw err;
-        }
         // resolve the left and right expression types
         const leftType = this.left.resolveType(typeChecker, module, symbolTable);
         const rightType = this.right.resolveType(typeChecker, module, symbolTable);

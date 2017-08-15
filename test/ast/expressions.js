@@ -443,7 +443,7 @@ describe('Expression Nodes', () => {
             const op = new exps.UnaryExpression({
                 prefix: false,
                 target: getDummyReducedNode(int),
-                oper: '!$%', 
+                oper: '!$%',
                 locations: { oper: loc },
             });
             const tc = getDummyTypeChecker();
@@ -455,7 +455,7 @@ describe('Expression Nodes', () => {
             const op = new exps.UnaryExpression({
                 prefix: true,
                 target: getDummyReducedNode(new TBool()),
-                oper: '-', 
+                oper: '-',
                 locations: { self: loc },
             });
             const tc = getDummyTypeChecker();
@@ -466,15 +466,13 @@ describe('Expression Nodes', () => {
 
     describe('BinaryExpression', () => {
         it('should reduce binary expression', () => {
-            const binary = new exps.BinaryExpression({
-                left: getDummyNode({ locations: { self: loc } }),
-                operatorToken: new Token('OPER', 1, 2, '+'),
-                right: getDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
-            });
+            const left = new exps.IntegerLiteral(1, loc);
+            const right = new exps.IntegerLiteral(2, { ...loc, startColumn: 3, endColumn: 3 });
+            const binary = new exps.BinaryExpression({ left, operatorToken: new Token('OPER', 1, 2, '+'), right });
             expect(binary.reduce()).to.eql(new exps.BinaryExpression({
-                left: { locations: { self: loc } },
+                left,
                 oper: '+',
-                right: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } },
+                right,
                 locations: {
                     self: { ...loc, endColumn: 3 },
                     oper: { ...loc, startColumn: 2, endColumn: 2 },
@@ -517,306 +515,181 @@ describe('Expression Nodes', () => {
 
         describe('operator precedence resolution', () => {
             @operator('$<', 'infix')
-            class LeftAssocOperator extends Operator {
+            class LeftAssocOperator extends Operator { // eslint-disable-line no-unused-vars
                 constructor() {
                     super('$<', 'infix', 9, 'left');
                 }
             }
 
             @operator('$>', 'infix')
-            class RightAssocOperator extends Operator {
+            class RightAssocOperator extends Operator { // eslint-disable-line no-unused-vars
                 constructor() {
                     super('$>', 'infix', 9, 'right');
                 }
             }
 
-            it('should resolve when right expression has lower precedence', () => {
-                const exp = new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '*',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '+',
-                        right: getDummyReducedNode(int),
-                    }),
-                });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+            function assembleBinary({ left, oper, right }, nest = true) {
+                if (nest) {
+                    return new exps.Expression({
+                        binary: new exps.BinaryExpression({
+                            left,
+                            operatorToken: new Token('OPER', 1, 1, oper),
+                            right,
+                        }),
+                    });
+                } else {
+                    return new exps.BinaryExpression({
+                        left,
+                        oper,
+                        right,
+                        locations: { self: loc, oper: { ...loc, endColumn: oper.length } },
+                    });
+                }
+            }
+
+            it('should resolve when precedence order is correct', () => {
+                const exp = assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '*',
-                        right: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(2, loc),
                     }),
                     oper: '+',
-                    right: getDummyReducedNode(int),
-                })));
-            });
-
-            it('should resolve when right expression has higher precedence', () => {
-                const exp = new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '+',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+                    right: new exps.IntegerLiteral(3, loc),
+                });
+                expect(exp.reduce()).to.eql(assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '*',
-                        right: getDummyReducedNode(int),
-                    }),
-                });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(2, loc),
+                    }, false),
                     oper: '+',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '*',
-                        right: getDummyReducedNode(int),
-                    }),
-                })));
+                    right: new exps.IntegerLiteral(3, loc),
+                }, false));
             });
 
-            it('should resolve when right expression has left associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '-',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+            it('should resolve when precedence order is incorrect', () => {
+                const exp = assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '+',
-                        right: getDummyReducedNode(int),
-                    }),
-                });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '-',
-                        right: getDummyReducedNode(int),
-                    }),
-                    oper: '+',
-                    right: getDummyReducedNode(int),
-                })));
-            });
-
-            it('should resolve when right expression has right associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '$>',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '$>',
-                        right: getDummyReducedNode(int),
-                    }),
-                });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '$>',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '$>',
-                        right: getDummyReducedNode(int),
-                    }),
-                })));
-            });
-
-            it('should error when right expression has conflicting associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
-                    oper: '$<',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '$>',
-                        right: getDummyReducedNode(int),
-                    }),
-                    locations: { self: loc },
-                });
-                const tc = getDummyTypeChecker();
-                expect(exp.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
-                expect(tc.errors.map(e => e.message)).to.eql(['Precedence order between operators "$<" and "$>" could not be established because they have conflicting associativity [/index.ren:1:1]']);
-            });
-
-            it('should resolve when left expression has lower precedence', () => {
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '+',
-                        right: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(2, loc),
                     }),
                     oper: '*',
-                    right: getDummyReducedNode(int),
+                    right: new exps.IntegerLiteral(3, loc),
                 });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
+                expect(exp.reduce()).to.eql(assembleBinary({
+                    left: new exps.IntegerLiteral(1, loc),
                     oper: '+',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+                    right: assembleBinary({
+                        left: new exps.IntegerLiteral(2, loc),
                         oper: '*',
-                        right: getDummyReducedNode(int),
-                    }),
-                })));
+                        right: new exps.IntegerLiteral(3, loc),
+                    }, false),
+                }, false));
             });
 
-            it('should resolve when left expression has higher precedence', () => {
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '*',
-                        right: getDummyReducedNode(int),
-                    }),
-                    oper: '+',
-                    right: getDummyReducedNode(int),
-                });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '*',
-                        right: getDummyReducedNode(int),
-                    }),
-                    oper: '+',
-                    right: getDummyReducedNode(int),
-                })));
-            });
-
-            it('should resolve when left expression has left associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+            it('should resolve when associativity order is correct', () => {
+                const exp = assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '-',
-                        right: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(2, loc),
                     }),
                     oper: '+',
-                    right: getDummyReducedNode(int),
+                    right: new exps.IntegerLiteral(3, loc),
                 });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+                expect(exp.reduce()).to.eql(assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '-',
-                        right: getDummyReducedNode(int),
-                    }),
+                        right: new exps.IntegerLiteral(2, loc),
+                    }, false),
                     oper: '+',
-                    right: getDummyReducedNode(int),
-                })));
+                    right: new exps.IntegerLiteral(3, loc),
+                }, false));
             });
 
-            it('should resolve when left expression has right associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(new TFunction([new TBool()], int)),
+            it('should resolve when associativity order is incorrect', () => {
+                const exp = assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '$>',
-                        right: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(2, loc),
                     }),
                     oper: '$>',
-                    right: getDummyReducedNode(int),
+                    right: new exps.IntegerLiteral(3, loc),
                 });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: getDummyReducedNode(int),
+                expect(exp.reduce()).to.eql(assembleBinary({
+                    left: new exps.IntegerLiteral(1, loc),
                     oper: '$>',
-                    right: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+                    right: assembleBinary({
+                        left: new exps.IntegerLiteral(2, loc),
                         oper: '$>',
-                        right: getDummyReducedNode(int),
-                    }),
-                })));
-            });
-
-            it('should error when left expression has conflicting associativity', () => {
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
-                        oper: '$>',
-                        right: getDummyReducedNode(int),
-                    }),
-                    oper: '$<',
-                    right: getDummyReducedNode(int),
-                    locations: { self: loc },
-                });
-                const tc = getDummyTypeChecker();
-                expect(exp.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
-                expect(tc.errors.map(e => e.message)).to.eql(['Precedence order between operators "$<" and "$>" could not be established because they have conflicting associativity [/index.ren:1:1]']);
+                        right: new exps.IntegerLiteral(3, loc),
+                    }, false),
+                }, false));
             });
 
             it('should handle deeply nested binary expressions', () => {
-                // 1 + 2 * 4 & 8 == 9 / 6 | 3 - 1 => (1 + (2 * (4 & 8))) == (((9 / (6 | 3)) - 1)
-                // OK, step by step:
-                // first we have the operator -, with nothing on the right, but something on the left
-                // that something is a |, which has a higher precedence than the -, so it's ok and we visit the |
-                // there's nothing on the right, but there is a / on the left, which has a lower precedence, so we need to switch
-                // when we do that we need to visit the new current node, but the previous current, which is now right, doesn't need it (but it would if there was a right child on the left child (BUT WILL THERE BE?))
-                // anyway, now the | is the right child of the /, which is the left child of the -, so far so good.
-                // for the /, the left child is ==, which is lower, so it needs to be switched
-                // again, there is no right child on the ==, so there is really no need to re-check the right after we switch
-                // now we have the -, whose left child is the ==, whose right child is the /, whose right child is the |
-                // now we visit the ==. the right child is /, which is correct
-                // the left child is &, which is correct, now we visit the &
-                // & has no right child, left is *, which is not correct, so we switch: (((() * (n & n)) == (n / (n | n))) - n)
-                // now we have *, right child is & and correct, left is +, so we switch: (((n + (n * (n & n))) == (n / (n | n))) - n)
-                // right child of + is * which is correct, and there is no left
-                // now we revisit *, right child is correct, there is no left
-                // now we should ascend all the way up and revisit -, the left is == which is wrong, so we switch ((n + (n * (n & n))) == ((n / (n | n)) - n))
-                // and it will check a few more times, but it should be correct now
-                // there is definitely something wrong with the implementation
-                const exp = new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: new exps.BinaryExpression({
-                            left: new exps.BinaryExpression({
-                                left: new exps.BinaryExpression({
-                                    left: new exps.BinaryExpression({
-                                        left: new exps.BinaryExpression({
-                                            left: getDummyReducedNode(int),
+                const exp = assembleBinary({
+                    left: assembleBinary({
+                        left: assembleBinary({
+                            left: assembleBinary({
+                                left: assembleBinary({
+                                    left: assembleBinary({
+                                        left: assembleBinary({
+                                            left: new exps.IntegerLiteral(1, loc),
                                             oper: '+',
-                                            right: getDummyReducedNode(int),
+                                            right: new exps.IntegerLiteral(2, loc),
                                         }),
                                         oper: '*',
-                                        right: getDummyReducedNode(int),
+                                        right: new exps.IntegerLiteral(3, loc),
                                     }),
                                     oper: '&',
-                                    right: getDummyReducedNode(int),
+                                    right: new exps.IntegerLiteral(4, loc),
                                 }),
                                 oper: '==',
-                                right: getDummyReducedNode(int),
+                                right: new exps.IntegerLiteral(5, loc),
                             }),
                             oper: '/',
-                            right: getDummyReducedNode(int),
+                            right: new exps.IntegerLiteral(6, loc),
                         }),
                         oper: '|',
-                        right: getDummyReducedNode(int),
+                        right: new exps.IntegerLiteral(7, loc),
                     }),
                     oper: '-',
-                    right: getDummyReducedNode(int),
+                    right: new exps.IntegerLiteral(8, loc),
                 });
-                exp.resolvePrecedence();
-                expect(extractNonFunctions(exp)).to.eql(extractNonFunctions(new exps.BinaryExpression({
-                    left: new exps.BinaryExpression({
-                        left: getDummyReducedNode(int),
+                expect(exp.reduce()).to.eql(assembleBinary({
+                    left: assembleBinary({
+                        left: new exps.IntegerLiteral(1, loc),
                         oper: '+',
-                        right: new exps.BinaryExpression({
-                            left: getDummyReducedNode(int),
+                        right: assembleBinary({
+                            left: new exps.IntegerLiteral(2, loc),
                             oper: '*',
-                            right: new exps.BinaryExpression({
-                                left: getDummyReducedNode(int),
+                            right: assembleBinary({
+                                left: new exps.IntegerLiteral(3, loc),
                                 oper: '&',
-                                right: getDummyReducedNode(int),
-                            }),
-                        }),
-                    }),
+                                right: new exps.IntegerLiteral(4, loc),
+                            }, false),
+                        }, false),
+                    }, false),
                     oper: '==',
-                    right: new exps.BinaryExpression({
-                        left: new exps.BinaryExpression({
-                            left: getDummyReducedNode(int),
+                    right: assembleBinary({
+                        left: assembleBinary({
+                            left: new exps.IntegerLiteral(5, loc),
                             oper: '/',
-                            right: new exps.BinaryExpression({
-                                left: getDummyReducedNode(int),
+                            right: assembleBinary({
+                                left: new exps.IntegerLiteral(6, loc),
                                 oper: '|',
-                                right: getDummyReducedNode(int),
-                            }),
-                        }),
+                                right: new exps.IntegerLiteral(7, loc),
+                            }, false),
+                        }, false),
                         oper: '-',
-                        right: getDummyReducedNode(int),
-                    }),
-                })));
+                        right: new exps.IntegerLiteral(8, loc),
+                    }, false),
+                }, false));
             });
         });
     });
