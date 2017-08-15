@@ -54,6 +54,10 @@ export class Expression extends ASTNode {
     resolveType(typeChecker, module, symbolTable) {
         return this.type = this.parenthesized.resolveType(typeChecker, module, symbolTable);
     }
+
+    transform(translator, func) {
+        return this.parenthesized.transform(translator, func);
+    }
 }
 
 export class IntegerLiteral extends Expression {
@@ -89,6 +93,12 @@ export class IntegerLiteral extends Expression {
         }
         return this.type = new TInteger(size, signed);
     }
+
+    transform(translator, func) {
+        const ref = new CreateReference(this.value);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class FloatLiteral extends Expression {
@@ -108,6 +118,12 @@ export class FloatLiteral extends Expression {
     estimateType() {
         return this.type = new TFloat(64); // TODO: add this logic
     }
+
+    transform(translator, func) {
+        const ref = new CreateReference(this.value);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class CharLiteral extends Expression {
@@ -122,6 +138,12 @@ export class CharLiteral extends Expression {
 
     resolveType() {
         return this.type = new TChar();
+    }
+
+    transform(translator, func) {
+        const ref = new CreateReference(this.value);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -138,6 +160,12 @@ export class StringLiteral extends Expression {
     resolveType() {
         return this.type = new TArray(new TChar());
     }
+
+    transform(translator, func) {
+        const ref = new CreateReference(this.value);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class BoolLiteral extends Expression {
@@ -152,6 +180,12 @@ export class BoolLiteral extends Expression {
 
     resolveType() {
         return this.type = new TBool();
+    }
+
+    transform(translator, func) {
+        const ref = new CreateReference(this.value);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -176,6 +210,13 @@ export class IdentifierExpression extends Expression {
         }
         return this.type = actualType;
     }
+
+    transform(translator, func) {
+        // TODO func needs scope variables during transformation
+        const ref = translator.referenceIdentifier(this.name);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class ArrayLiteral extends Expression {
@@ -196,6 +237,16 @@ export class ArrayLiteral extends Expression {
         if (!baseType) baseType = new TAny();
         return this.type = new TArray(baseType);
     }
+
+    transform(translator, func) {
+        const refs = [];
+        for (const item of this.items) {
+            refs.push(item.transform(translator, func));
+        }
+        const ref = new ArrayRef(refs);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class TupleLiteral extends Expression {
@@ -212,6 +263,16 @@ export class TupleLiteral extends Expression {
             itemTypes.push(item.resolveType(typeChecker, module, symbolTable));
         }
         return this.type = new TTuple(itemTypes);
+    }
+
+    transform(translator, func) {
+        const refs = [];
+        for (const item of this.items) {
+            refs.push(item.transform(translator, func));
+        }
+        const ref = new TupleRef(refs);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -233,6 +294,16 @@ export class StructLiteral extends Expression {
             fields[key] = value.resolveType(typeChecker, module, symbolTable);
         }
         return this.type = new TStruct(fields);
+    }
+
+    transform(translator, func) {
+        const refs = {};
+        for (const { key, value } of this.entries) {
+            refs[key] = value.transform(translator, func);
+        }
+        const ref = new StructRef(refs);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -269,6 +340,12 @@ export class LambdaExpression extends Expression {
         if (!this.type.returnType.isAssignableFrom(actualReturnType)) {
             typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(actualReturnType, this.type.returnType), module.path, this.locations.self));
         }
+    }
+
+    transform(translator, func) {
+        const ref = translator.lambda(this);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -325,6 +402,13 @@ export class UnaryExpression extends Expression {
         }
         // the return type of the operator type is the type of this expression
         return this.type = this.operType.returnType;
+    }
+
+    transform(translator, func) {
+        const targetRef = this.target.transform(translator, func);
+        const ref = new UnaryOperatorRef(this.oper, targetRef);
+        func.instructions.push(ref);
+        return ref;
     }
 }
 
@@ -413,6 +497,14 @@ export class BinaryExpression extends Expression {
         // the return type of the operator type is the type of this expression
         return this.type = this.operType.returnType;
     }
+
+    transform(translator, func) {
+        const leftRef = this.left.transform(translator, func);
+        const rightRef = this.right.transform(translator, func);
+        const ref = new BinaryOperatorRef(leftRef, this.oper, rightRef);
+        func.instructions.push(ref);
+        return ref;
+    }
 }
 
 export class IfElseExpression extends Expression {
@@ -433,6 +525,10 @@ export class IfElseExpression extends Expression {
         const type = this.consequent.resolveType(typeChecker, module, symbolTable);
         const altType = this.alternate.resolveType(typeChecker, module, symbolTable);
         return this.type = determineGeneralType(type, altType);
+    }
+
+    transform(translator, func) {
+        // TODO implement
     }
 }
 
@@ -456,6 +552,10 @@ export class VarDeclaration extends Expression {
             symbolTable[this.name] = expType;
         }
         return this.type = expType;
+    }
+
+    transform(translator, func) {
+        // TODO implement
     }
 }
 
@@ -495,6 +595,10 @@ export class FunctionApplication extends Expression {
         // resulting expression type is the return type of the function type
         return this.type = funcType.returnType;
     }
+
+    transform(translator, func) {
+        // TODO implement
+    }
 }
 
 export class FieldAccess extends Expression {
@@ -523,6 +627,10 @@ export class FieldAccess extends Expression {
         // return the type of the field
         return structType.fields[this.field];
     }
+
+    transform(translator, func) {
+        // TODO implement
+    }
 }
 
 export class ArrayAccess extends Expression {
@@ -549,5 +657,9 @@ export class ArrayAccess extends Expression {
         }
         // type is the base type of the array
         return this.type = arrayType.baseType;
+    }
+
+    transform(translator, func) {
+        // TODO implement
     }
 }
