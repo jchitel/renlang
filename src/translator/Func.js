@@ -7,6 +7,8 @@ export default class Func {
         this.id = id;
         this.ast = moduleFunction.ast;
         this.instructions = [];
+        this.nextReferenceId = 0;
+        this.scope = {};
     }
 
     transformBody(translator) {
@@ -17,5 +19,24 @@ export default class Func {
         } else {
             body.transform(translator, this);
         }
+    }
+
+    newReference() {
+        return this.nextReferenceId++;
+    }
+
+    addInstruction(instr) {
+        this.instructions.push(instr);
+        return instr;
+    }
+
+    addRefInstruction(callback) {
+        const ref = this.newReference();
+        this.addInstruction(callback(ref));
+        return ref;
+    }
+
+    nextInstrNum() {
+        return this.instructions.length;
     }
 }

@@ -5,6 +5,7 @@ export default class Instruction { }
  */
 export class ParamToScope extends Instruction {
     constructor(index, name) {
+        super();
         this.index = index;
         this.name = name;
     }
@@ -17,6 +18,7 @@ export class ParamToScope extends Instruction {
  */
 export class Return extends Instruction {
     constructor(ref) {
+        super();
         this.ref = ref;
     }
 }
@@ -40,6 +42,7 @@ export class Noop extends Instruction {}
  */
 export class CreateReference extends Instruction {
     constructor(initialValue) {
+        super();
         this.initialValue = initialValue;
     }
 }
@@ -58,6 +61,7 @@ export class CreateReference extends Instruction {
  */
 export class InteropReference extends Instruction {
     constructor(references, operation) {
+        super();
         this.references = references;
         this.operation = operation;
     }
@@ -69,6 +73,7 @@ export class InteropReference extends Instruction {
  */
 export class FalseBranch extends Instruction {
     constructor(reference, target) {
+        super();
         this.reference = reference;
         this.target = target;
     }
@@ -80,6 +85,7 @@ export class FalseBranch extends Instruction {
  */
 export class TrueBranch extends Instruction {
     constructor(reference, target) {
+        super();
         this.reference = reference;
         this.target = target;
     }
@@ -91,6 +97,7 @@ export class TrueBranch extends Instruction {
  */
 export class AddToScope extends Instruction {
     constructor(name, initialValue) {
+        super();
         this.name = name;
         this.initialValue = initialValue;
     }
@@ -101,6 +108,7 @@ export class AddToScope extends Instruction {
  */
 export class RemoveFromScope extends Instruction {
     constructor(name) {
+        super();
         this.name = name;
     }
 }
@@ -112,6 +120,7 @@ export class RemoveFromScope extends Instruction {
  */
 export class ReferenceMutate extends Instruction {
     constructor(ref, mutator) {
+        super();
         this.ref = ref;
         this.mutator = mutator;
     }
@@ -122,6 +131,7 @@ export class ReferenceMutate extends Instruction {
  */
 export class Jump extends Instruction {
     constructor(target) {
+        super();
         this.target = target;
     }
 }

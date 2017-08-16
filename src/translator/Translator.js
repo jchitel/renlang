@@ -1,5 +1,5 @@
 import Func from './Func';
-import { ParamToScope, Return } from './instructions';
+import { ParamToScope } from './instructions';
 import { TInteger, TChar, TTuple, TArray } from '../typecheck/types';
 
 
