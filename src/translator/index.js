@@ -1,6 +1,6 @@
 import Translator from './Translator';
 
 
-export default translate(modules) {
+export default function translate(modules) {
     return new Translator().translate(modules);
 }

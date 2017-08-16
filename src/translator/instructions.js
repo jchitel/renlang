@@ -1,14 +1,22 @@
+/**
+ * Represents an IR instruction for the JS implementation of the Ren interpreter.
+ * There are 4 types of instructions:
+ * 1. Reference instructions: actual logical instructions that store resulting values into references
+ * 2. Scope instructions: instructions responsible for managing the scope stack and creating variables
+ * 3. Branch/jump instructions: instructions that change the instruction counter
+ * 4. Misc instructions: instructions that have special behavior that doesn't fit into the above categories
+ */
 export default class Instruction { }
 
+// ////////////////////
+// MISC INSTRUCTIONS //
+// ////////////////////
+
 /**
- * An instruction that copies a function parameter into the function scope
+ * An instruction that does nothing, useful for jump targets
  */
-export class ParamToScope extends Instruction {
-    constructor(index, name) {
-        super();
-        this.index = index;
-        this.name = name;
-    }
+export class Noop extends Instruction {
+    execute() {}
 }
 
 /**
@@ -21,95 +29,354 @@ export class Return extends Instruction {
         super();
         this.ref = ref;
     }
-}
 
-/**
- * An instruction that does nothing, useful for jump targets
- */
-export class Noop extends Instruction {}
-
-/**
- * All values at runtime have two types: scope variables
- * and references. Scope variables have names and are
- * accessible from code, they are simply variables in the
- * language. References are internal variables that
- * are only accessible by the runtime.
- *
- * The CreateReference instruction creates a new reference
- * and initializes it to the provided value. References
- * are only accessible via a Reference instance or a
- * CreateReference instance, so they must be held onto.
- */
-export class CreateReference extends Instruction {
-    constructor(initialValue) {
-        super();
-        this.initialValue = initialValue;
+    execute(interp) {
+        // TODO
+        // we need to somehow access the location of the function call reference
+        // perhaps function calls should store that reference
     }
 }
 
 /**
- * The InteropReference instruction creates a reference
- * that is the result of a JS operation on a variable
- * amount of other references.
- * The references parameter is a list of reference instances.
- * The operation parameter is a JS function that will receive
- * the reference instances in the order that they are specified
- * in the references array.
- * When the reference is created, the reference instances are
- * passed into the operation function, and the return value
- * will be used as the value of the function.
+ * An instruction that takes a reference to an exception and switches to an error context
+ * where all frames are popped off until:
+ * a) we reach the top level of the function, in which case we pop off the function frame and repeat at the caller
+ * b) we reach a try frame, in which case a matching catch type will switch back to normal context in the catch block
+ * c) if no try frames match the exception type, we will eventually reach the top level of the program, where the error is exposed to stderr.
+ */
+export class Throw extends Instruction {
+    constructor(ref) {
+        super();
+        this.ref = ref;
+    }
+
+    execute(interp) {
+        interp.error = interp.references[this.ref];
+        // TODO
+        // we need to implement the error context
+    }
+}
+
+/**
+ * An instruction that has a "loopNumber" n, where n loop frames will be popped
+ * and we pick up after the outside of the resulting loop.
+ */
+export class Break extends Instruction {
+    constructor(loopNumber) {
+        super();
+        this.loopNumber = loopNumber;
+    }
+
+    execute(interp) {
+        // TODO
+        // iterating until the loop number, we need to pop off loop frames
+        // then we need to jump to the end of the loop we land on
+    }
+}
+
+/**
+ * An instruction that has a "loopNumber" n, where n loop frames will be popped
+ * and we pick up at the next iteration of the resulting loop.
+ */
+export class Continue extends Instruction {
+    constructor(loopNumber) {
+        super();
+        this.loopNumber = loopNumber;
+    }
+
+    execute(interp) {
+        // TODO
+        // iterating until the loop number, we need to pop off loop frames
+        // then we need to jump to the start of the loop we land on
+    }
+}
+
+/**
+ * Sets the value of a constant to the value of a reference.
+ */
+export class ConstSet extends Instruction {
+    constructor(constRef, ref) {
+        super();
+        this.constRef = constRef;
+        this.ref = ref;
+    }
+
+    execute(interp) {
+        interp.constants[this.constRef] = interp.references[this.ref].value;
+    }
+}
+
+// /////////////////////////
+// REFERENCE INSTRUCTIONS //
+// /////////////////////////
+
+/**
+ * Sets the value of a reference to an integer value
+ */
+export class SetIntegerRef extends Instruction {
+    constructor(ref, value) {
+        super();
+        this.ref = ref;
+        this.value = value;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RInteger(this.value);
+    }
+}
+
+/**
+ * Sets the value of a reference to a float value
+ */
+export class SetFloatRef extends Instruction {
+    constructor(ref, value) {
+        super();
+        this.ref = ref;
+        this.value = value;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RFloat(this.value);
+    }
+}
+
+/**
+ * Sets the value of a reference to a char value
+ */
+export class SetCharRef extends Instruction {
+    constructor(ref, value) {
+        super();
+        this.ref = ref;
+        this.value = value;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RChar(this.value);
+    }
+}
+
+/**
+ * Sets the value of a reference to a bool value
+ */
+export class SetBoolRef extends Instruction {
+    constructor(ref, value) {
+        super();
+        this.ref = ref;
+        this.value = value;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RBool(this.value);
+    }
+}
+
+/**
+ * Sets the value of a reference to a tuple value,
+ * where each of the value refs is a reference to each item in the tuple.
+ */
+export class SetTupleRef extends Instruction {
+    constructor(ref, valueRefs) {
+        super();
+        this.ref = ref;
+        this.valueRefs = valueRefs;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RTuple(this.valueRefs);
+    }
+}
+
+/**
+ * Sets the value of a reference to an array value,
+ * where each of the value refs is a reference to each item in the array.
+ */
+export class SetArrayRef extends Instruction {
+    constructor(ref, valueRefs) {
+        super();
+        this.ref = ref;
+        this.valueRefs = valueRefs;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RArray(this.valueRefs);
+    }
+}
+
+/**
+ * Sets the value of a reference to a struct value,
+ * where each of the value refs is a reference to each value in the struct, keyed by field name.
+ */
+export class SetStructRef extends Instruction {
+    constructor(ref, valueRefs) {
+        super();
+        this.ref = ref;
+        this.valueRefs = valueRefs;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = new RStruct(this.valueRefs);
+    }
+}
+
+/**
+ * Sets the value of a reference to the value of the function parameter at the specified index.
+ */
+export class ParamRef extends Instruction {
+    constructor(index, ref) {
+        super();
+        this.index = index;
+        this.ref = ref;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = interp.currentFuncFrame.params[this.index];
+    }
+}
+
+/**
+ * Sets the value of a reference to the current error value, which is only available when leaving an error context,
+ * which happens when an exception reaches a try-catch with a matching type.
+ */
+export class ErrorRef extends Instruction {
+    constructor(ref) {
+        super();
+        this.ref = ref;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = interp.error;
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of a unary operator expression,
+ * where targetRef is a reference to the value of the target expression.
+ */
+export class UnaryOperatorRef extends Instruction {
+    constructor(ref, operator, targetRef, prefix) {
+        super();
+        this.ref = ref;
+        this.operator = operator;
+        this.targetRef = targetRef;
+        this.prefix = prefix;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = createOperator(this.operator, this.prefix ? 'prefix' : 'postfix').execute(interp, this.targetRef);
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of a binary operator expression,
+ * where leftRef and rightRef are references to the values of the left and right target expressions.
+ */
+export class BinaryOperatorRef extends Instruction {
+    constructor(ref, leftRef, operator, rightRef) {
+        super();
+        this.ref = ref;
+        this.leftRef = leftRef;
+        this.operator = operator;
+        this.rightRef = rightRef;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = createOperator(this.operator, 'infix').execute(interp, this.leftRef, this.rightRef);
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of a function call,
+ * where targetRef is a reference to the function being called,
+ * and the paramRefs are references to the values of the parameters.
+ */
+export class FunctionCallRef extends Instruction {
+    constructor(ref, targetRef, paramRefs) {
+        super();
+        this.ref = ref;
+        this.targetRef = targetRef;
+        this.paramRefs = paramRefs;
+    }
+
+    execute(interp) {
+        const funcRef = interp.references[this.targetRef];
+        const func = interp.functions[funcRef];
+        const funcFrame = new FunctionFrame(func, this.paramRefs);
+        interp.stack.push(funcFrame);
+        // execute the function
+        interp.executeFunction(func, funcFrame);
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of a field access,
+ * where targetRef is a reference to a struct value, and field
+ * is the name of the field to access.
+ */
+export class FieldAccessRef extends Instruction {
+    constructor(ref, targetRef, field) {
+        super();
+        this.ref = ref;
+        this.targetRef = targetRef;
+        this.field = field;
+    }
+
+    execute(interp) {
+        const struct = interp.references[this.targetRef];
+        interp.references[this.ref] = struct.getField(this.field);
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of an array access,
+ * where targetRef is a reference to an array value, and indexRef
+ * is a reference to an integer value to use as the index of the expression.
+ */
+export class ArrayAccessRef extends Instruction {
+    constructor(ref, targetRef, indexRef) {
+        super();
+        this.ref = ref;
+        this.targetRef = targetRef;
+        this.indexRef = indexRef;
+    }
+
+    execute(interp) {
+        const array = interp.references[this.targetRef];
+        const index = interp.references[this.indexRef];
+        interp.references[this.ref] = array.getIndex(index);
+    }
+}
+
+/**
+ * Sets the value of a reference to the value of a constant.
+ */
+export class ConstRef extends Instruction {
+    constructor(ref, constRef) {
+        super();
+        this.ref = ref;
+        this.constRef = constRef;
+    }
+
+    execute(interp) {
+        interp.references[this.ref] = interp.constants[this.constRef];
+    }
+}
+
+/**
+ * Sets the value of a reference to the result of a JS operation.
+ * The inRefs parameter is an array of reference ids to use in the operation.
+ * The operation parameter will receive the corresponding references as parameters
+ * and should return the value to set as the reference value.
  */
 export class InteropReference extends Instruction {
-    constructor(references, operation) {
+    constructor(ref, inRefs, operation) {
         super();
-        this.references = references;
+        this.ref = ref;
+        this.inRefs = inRefs;
         this.operation = operation;
     }
-}
 
-/**
- * If the reference evaluates to falsy, jumps to the target.
- * Otherwise just passes through to the next instruction.
- */
-export class FalseBranch extends Instruction {
-    constructor(reference, target) {
-        super();
-        this.reference = reference;
-        this.target = target;
-    }
-}
-
-/**
- * If the reference evaluates to truthy, jumps to the target.
- * Otherwise just passes through to the next instruction.
- */
-export class TrueBranch extends Instruction {
-    constructor(reference, target) {
-        super();
-        this.reference = reference;
-        this.target = target;
-    }
-}
-
-/**
- * Adds a variable to the scope of the function.
- * The initial value can be either a value or a reference.
- */
-export class AddToScope extends Instruction {
-    constructor(name, initialValue) {
-        super();
-        this.name = name;
-        this.initialValue = initialValue;
-    }
-}
-
-/**
- * Removes a variable from the scope of the function.
- */
-export class RemoveFromScope extends Instruction {
-    constructor(name) {
-        super();
-        this.name = name;
+    execute(interp) {
+        interp.references[this.ref] = this.operation(this.inRefs.map(r => interp.references[r]));
     }
 }
 
@@ -124,6 +391,128 @@ export class ReferenceMutate extends Instruction {
         this.ref = ref;
         this.mutator = mutator;
     }
+
+    execute(interp) {
+        interp.references[this.ref] = this.mutator(interp.references[this.ref]);
+    }
+}
+
+// /////////////////////
+// SCOPE INSTRUCTIONS //
+// /////////////////////
+
+/**
+ * Adds a variable to the current scope.
+ * All variables point to a reference.
+ */
+export class AddToScope extends Instruction {
+    constructor(name, ref) {
+        super();
+        this.name = name;
+        this.ref = ref;
+    }
+
+    execute(interp) {
+        interp.setScopeValue(this.name, interp.references[this.ref]);
+    }
+}
+
+/**
+ * Pushes a standard scope frame onto the scope stack.
+ * Standard frames simply store variables declared within them.
+ */
+export class PushScopeFrame extends Instruction {
+    constructor() {
+        super();
+    }
+
+    execute(interp) {
+        interp.stack.push(new ScopeFrame());
+    }
+}
+
+/**
+ * Pops a frame off the scope stack.
+ */
+export class PopFrame extends Instruction {
+    constructor() {
+        super();
+    }
+
+    execute(interp) {
+        interp.stack.pop();
+    }
+}
+
+/**
+ * Pushes a loop scope frame onto the scope stack.
+ * These are extensions of standard frames that also
+ * provide semantics for break and continue statements.
+ */
+export class PushLoopFrame extends Instruction {
+    constructor() {
+        super();
+    }
+
+    execute(interp) {
+        interp.stack.push(new LoopFrame());
+    }
+}
+
+/**
+ * Pushes a try scope frame onto the scope stack.
+ * Try frames don't store variables, but provide an error catching mechanism.
+ * The error context will pop the stack looking for these,
+ * and check the catches array looking for types matching the errors.
+ */
+export class PushTryFrame extends Instruction {
+    constructor(catches, fin) {
+        super();
+        this.catches = catches;
+        this.finally = fin;
+    }
+
+    execute(interp) {
+        interp.stack.push(new TryFrame(this.catches, this.finally));
+    }
+}
+
+// /////////////////
+// BRANCHES/JUMPS //
+// /////////////////
+
+/**
+ * If the reference evaluates to falsy, jumps to the target.
+ * Otherwise just passes through to the next instruction.
+ */
+export class FalseBranch extends Instruction {
+    constructor(ref, target) {
+        super();
+        this.ref = ref;
+        this.target = target;
+    }
+
+    execute(interp) {
+        const ref = interp.references[this.ref];
+        if (!ref) interp.ic = this.target - 1;
+    }
+}
+
+/**
+ * If the reference evaluates to truthy, jumps to the target.
+ * Otherwise just passes through to the next instruction.
+ */
+export class TrueBranch extends Instruction {
+    constructor(ref, target) {
+        super();
+        this.ref = ref;
+        this.target = target;
+    }
+
+    execute(interp) {
+        const ref = interp.references[this.ref];
+        if (ref) interp.ic = this.target - 1;
+    }
 }
 
 /**
@@ -133,5 +522,25 @@ export class Jump extends Instruction {
     constructor(target) {
         super();
         this.target = target;
+    }
+
+    execute(interp) {
+        interp.ic = this.target - 1;
+    }
+}
+
+/**
+ * Special branch that will branch only if the specified constant has been initialized.
+ * This is used to build constant wrapper functions.
+ */
+export class ConstBranch extends Instruction {
+    constructor(constRef, target) {
+        super();
+        this.constRef = constRef;
+        this.target = target;
+    }
+
+    execute(interp) {
+        if (this.constRef in interp.constants) interp.ic = this.target - 1;
     }
 }

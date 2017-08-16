@@ -10,7 +10,6 @@ import {
     FalseBranch,
     TrueBranch,
     AddToScope,
-    RemoveFromScope,
     ReferenceMutate,
     Jump,
     PushTryFrame,
@@ -19,6 +18,12 @@ import {
     Throw,
     Return,
     SetTupleRef,
+    PushScopeFrame,
+    PopScopeFrame,
+    PushLoopFrame,
+    PopLoopFrame,
+    Break,
+    Continue,
 } from '../translator/instructions';
 
 
@@ -76,10 +81,12 @@ export class Block extends Statement {
         return returnType;
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
+        func.addInstruction(new PushScopeFrame());
         for (const statement of this.statements) {
-            statement.transform(translator, func);
+            statement.translate(translator, func);
         }
+        func.addInstruction(new PopScopeFrame());
     }
 }
 
@@ -96,7 +103,7 @@ export class Noop extends Statement {
     // noop, nothing to check
     resolveType() {}
 
-    transform(translator, func) {
+    translate(translator, func) {
         func.addInstruction(new INoop());
     }
 }
@@ -132,33 +139,29 @@ export class ForStatement extends Statement {
         return returnType;
     }
 
-    transform(translator, func) {
-        // the iterable expression needs to be evaluated, then stored in some reference
-        const iterableRef = this.iterableExp.transform(translator, func);
-        // then we need to create a new integer reference i initialized to 0
-        const iRef = func.addRefInstruction(ref => new SetIntegerRef(ref, 0));
-        // then we verify that i is less than the length of the iterable
+    /**
+     * These are probably the most complex node, because they abstract a lot of runtime constructs.
+     * Effectively we convert the loop to a classical for loop, because all of the iterables will just be arrays.
+     */
+    translate(translator, func) {
+        // initialize iterable and i
+        const iterableRef = this.iterableExp.translate(translator, func);
+        const iRef = func.addRefInstruction(translator, ref => new SetIntegerRef(ref, 0));
+        func.addInstruction(new PushLoopFrame());
+        // check if we should enter the loop, branching if we shouldn't
         const checkInstructionNumber = func.nextInstrNum();
-        func.pushLoopStart(checkInstructionNumber);
-        const checkRef = func.addRefInstruction(ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => i.value < iter.value.length));
-        // if it is, we add a scope variable with the name of the iterVar, and initialize it to the array index operation on the iterable using i
-        // add a branch that will jump to after the loop if the less-than operation is false
+        const checkRef = func.addRefInstruction(translator, ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => i.value < iter.value.length));
         const branch = func.addInstruction(new FalseBranch(checkRef));
-        // otherwise, we create a new scope variable for the iterator variable, setting it to the result of an array index operation
-        const iterRef = func.addRefInstruction(ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => iter.value[i.value]));
+        // loop body, start by adding the iterator variable to the scope, and remove it when we're done
+        const iterRef = func.addRefInstruction(translator, ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => iter.value[i.value]));
         func.addInstruction(new AddToScope(this.iterVar, iterRef));
-        // then we insert the body instructions
-        this.body.transform(translator, func);
-        // remove the iterator variable from the scope
-        func.addInstruction(new RemoveFromScope(this.iterVar));
-        // then we insert an increment to i
+        this.body.translate(translator, func);
+        // increment i and jump back to the condition expression
         func.addInstruction(new ReferenceMutate(iRef, i => i + 1));
-        // then we insert a jump to the instruction where we check i against the array length
         func.addInstruction(new Jump(checkInstructionNumber));
-        // then we insert a noop to be the target of the jump at the top of the loop
+        // insert noop as target of the loop
         branch.target = func.nextInstrNum();
-        func.pushLoopEnd(branch.target); // TODO how to give access to this from break/continue
-        func.addInstruction(new INoop());
+        func.addInstruction(new PopLoopFrame());
     }
 }
 
@@ -185,19 +188,20 @@ export class WhileStatement extends Statement {
         return returnType;
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
+        func.addInstruction(new PushLoopFrame());
         // store the condition value into a reference
         const conditionInstructionNumber = func.nextInstrNum();
-        const conditionRef = this.conditionExp.transform(translator, func);
+        const conditionRef = this.conditionExp.translate(translator, func);
         // branch if the condition is false
         const branch = func.addInstruction(new FalseBranch(conditionRef));
         // insert the body instructions
-        this.body.transform(translator, func);
+        this.body.translate(translator, func);
         // jump to the check instruction
         func.addInstruction(new Jump(conditionInstructionNumber));
         // add a false branch target noop
         branch.target = func.nextInstrNum();
-        func.addInstruction(new INoop());
+        func.addInstruction(new PopLoopFrame());
     }
 }
 
@@ -224,15 +228,17 @@ export class DoWhileStatement extends Statement {
         return returnType;
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
+        func.addInstruction(new PushLoopFrame());
         // save the branch location
         const startInstructionNumber = func.nextInstrNum();
         // insert the body instructions
-        this.body.transform(translator, func);
+        this.body.translate(translator, func);
         // store the condition value into a reference
-        const conditionRef = this.conditionExp.transform(translator, func);
+        const conditionRef = this.conditionExp.translate(translator, func);
         // branch if the condition is true
         func.addInstruction(new TrueBranch(conditionRef, startInstructionNumber));
+        func.addInstruction(new PopLoopFrame());
     }
 }
 
@@ -266,11 +272,11 @@ export class TryCatchStatement extends Statement {
         return determineGeneralType(returnType, returnType1);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         // insert a try frame
         const tryFrame = func.addInstruction(new PushTryFrame([]));
         // insert try body
-        this.try.transform(translator, func);
+        this.try.translate(translator, func);
         // remove the try frame
         func.addInstruction(new PopTryFrame());
         // insert jump to either finally or after the finally
@@ -280,12 +286,13 @@ export class TryCatchStatement extends Statement {
             // save the instruction number to the try frame
             tryFrame.catches.push({ instructionNumber: func.nextInstrNum(), type: param.type });
             // add the catch parameter to the scope
-            const errRef = func.addRefInstruction(ref => new ErrorRef(ref));
+            func.addInstruction(new PushScopeFrame());
+            const errRef = func.addRefInstruction(translator, ref => new ErrorRef(ref));
             func.addInstruction(new AddToScope(param.name, errRef));
             // insert the catch body
-            body.transform(translator, func);
-            // remove the catch parameter
-            func.addInstruction(new RemoveFromScope(param.name));
+            body.translate(translator, func);
+            // pop the scope containing the err variable
+            func.addInstruction(new PopScopeFrame());
             // use same jump as try
             func.addInstruction(jump);
         }
@@ -295,7 +302,7 @@ export class TryCatchStatement extends Statement {
             tryFrame.finally = { start: func.nextInstrNum() };
             jump.target = func.nextInstrNum();
             // insert finally body
-            this.finally.transform(translator, func);
+            this.finally.translate(translator, func);
             // insert noop for end of finally
             tryFrame.finally.end = func.nextInstrNum();
             func.addInstruction(new INoop());
@@ -320,9 +327,9 @@ export class ThrowStatement extends Statement {
         this.exp.resolveType(typeChecker, module, symbolTable);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         // save expression to ref
-        const throwRef = this.exp.transform(translator, func);
+        const throwRef = this.exp.translate(translator, func);
         // add throw instruction
         func.addInstruction(new Throw(throwRef));
     }
@@ -347,13 +354,13 @@ export class ReturnStatement extends Statement {
         return this.exp.resolveType(typeChecker, module, symbolTable);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         // save expression to ref
         let returnRef;
         if (this.exp) {
-            returnRef = this.exp.transform(translator, func);
+            returnRef = this.exp.translate(translator, func);
         } else {
-            returnRef = func.addRefInstruction(ref => new SetTupleRef(ref, []));
+            returnRef = func.addRefInstruction(translator, ref => new SetTupleRef(ref, []));
         }
         // add return expression
         func.addInstruction(new Return(returnRef));
@@ -382,8 +389,8 @@ export class BreakStatement extends Statement {
         }
     }
 
-    transform(translator, func) {
-        // TODO: need loop end logic
+    translate(translator, func) {
+        func.addInstruction(new Break(this.loopNumber));
     }
 }
 
@@ -409,7 +416,7 @@ export class ContinueStatement extends Statement {
         }
     }
 
-    transform(translator, func) {
-        // TODO: need loop start logic
+    translate(translator, func) {
+        func.addInstruction(new Continue(this.loopNumber));
     }
 }

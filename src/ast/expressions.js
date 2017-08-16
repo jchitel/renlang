@@ -17,9 +17,9 @@ import {
     Jump,
     Noop,
     AddToScope,
-    FunctionCall,
-    FieldAccess as IFieldAccess,
-    ArrayAccess as IArrayAccess,
+    FunctionCallRef,
+    FieldAccessRef,
+    ArrayAccessRef,
 } from '../translator/instructions';
 
 
@@ -73,8 +73,8 @@ export class Expression extends ASTNode {
         return this.type = this.parenthesized.resolveType(typeChecker, module, symbolTable);
     }
 
-    transform(translator, func) {
-        return this.parenthesized.transform(translator, func);
+    translate(translator, func) {
+        return this.parenthesized.translate(translator, func);
     }
 }
 
@@ -112,8 +112,8 @@ export class IntegerLiteral extends Expression {
         return this.type = new TInteger(size, signed);
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => new SetIntegerRef(ref, this.value));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => new SetIntegerRef(ref, this.value));
     }
 }
 
@@ -135,8 +135,8 @@ export class FloatLiteral extends Expression {
         return this.type = new TFloat(64); // TODO: add this logic
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => new SetFloatRef(ref, this.value));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => new SetFloatRef(ref, this.value));
     }
 }
 
@@ -154,8 +154,8 @@ export class CharLiteral extends Expression {
         return this.type = new TChar();
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => new SetCharRef(ref, this.value));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => new SetCharRef(ref, this.value));
     }
 }
 
@@ -173,8 +173,8 @@ export class StringLiteral extends Expression {
         return this.type = new TArray(new TChar());
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => new SetArrayRef(ref, this.value));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => new SetArrayRef(ref, this.value));
     }
 }
 
@@ -192,8 +192,8 @@ export class BoolLiteral extends Expression {
         return this.type = new TBool();
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => new SetBoolRef(ref, this.value));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => new SetBoolRef(ref, this.value));
     }
 }
 
@@ -219,7 +219,7 @@ export class IdentifierExpression extends Expression {
         return this.type = actualType;
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         // func.scope contains a name-ref map for scope variables
         if (func.scope[this.name]) return func.scope[this.name];
         // otherwise we need the translator to resolve a module-scope reference
@@ -246,12 +246,12 @@ export class ArrayLiteral extends Expression {
         return this.type = new TArray(baseType);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         const refs = [];
         for (const item of this.items) {
-            refs.push(item.transform(translator, func));
+            refs.push(item.translate(translator, func));
         }
-        return func.addRefInstruction(ref => new SetArrayRef(ref, refs));
+        return func.addRefInstruction(translator, ref => new SetArrayRef(ref, refs));
     }
 }
 
@@ -271,12 +271,12 @@ export class TupleLiteral extends Expression {
         return this.type = new TTuple(itemTypes);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         const refs = [];
         for (const item of this.items) {
-            refs.push(item.transform(translator, func));
+            refs.push(item.translate(translator, func));
         }
-        return func.addRefInstruction(ref => new SetTupleRef(ref, refs));
+        return func.addRefInstruction(translator, ref => new SetTupleRef(ref, refs));
     }
 }
 
@@ -300,12 +300,12 @@ export class StructLiteral extends Expression {
         return this.type = new TStruct(fields);
     }
 
-    transform(translator, func) {
+    translate(translator, func) {
         const refs = {};
         for (const { key, value } of this.entries) {
-            refs[key] = value.transform(translator, func);
+            refs[key] = value.translate(translator, func);
         }
-        return func.addRefInstruction(ref => new SetStructRef(ref, refs));
+        return func.addRefInstruction(translator, ref => new SetStructRef(ref, refs));
     }
 }
 
@@ -344,8 +344,8 @@ export class LambdaExpression extends Expression {
         }
     }
 
-    transform(translator, func) {
-        return func.addRefInstruction(ref => translator.lambda(this, ref));
+    translate(translator, func) {
+        return func.addRefInstruction(translator, ref => translator.lambda(this, ref));
     }
 }
 
@@ -404,9 +404,9 @@ export class UnaryExpression extends Expression {
         return this.type = this.operType.returnType;
     }
 
-    transform(translator, func) {
-        const targetRef = this.target.transform(translator, func);
-        return func.addRefInstruction(ref => new UnaryOperatorRef(ref, this.oper, targetRef));
+    translate(translator, func) {
+        const targetRef = this.target.translate(translator, func);
+        return func.addRefInstruction(translator, ref => new UnaryOperatorRef(ref, this.oper, targetRef));
     }
 }
 
@@ -496,10 +496,10 @@ export class BinaryExpression extends Expression {
         return this.type = this.operType.returnType;
     }
 
-    transform(translator, func) {
-        const leftRef = this.left.transform(translator, func);
-        const rightRef = this.right.transform(translator, func);
-        return func.addRefInstruction(ref => new BinaryOperatorRef(ref, leftRef, this.oper, rightRef));
+    translate(translator, func) {
+        const leftRef = this.left.translate(translator, func);
+        const rightRef = this.right.translate(translator, func);
+        return func.addRefInstruction(translator, ref => new BinaryOperatorRef(ref, leftRef, this.oper, rightRef));
     }
 }
 
@@ -523,13 +523,13 @@ export class IfElseExpression extends Expression {
         return this.type = determineGeneralType(type, altType);
     }
 
-    transform(translator, func) {
-        const conditionRef = this.condition.transform(translator, func);
+    translate(translator, func) {
+        const conditionRef = this.condition.translate(translator, func);
         const branch = func.addInstruction(new FalseBranch(conditionRef));
-        this.consequent.transform(translator, func);
+        this.consequent.translate(translator, func);
         const jump = func.addInstruction(new Jump());
         branch.target = func.nextInstrNum();
-        this.alternate.transform(translator, func);
+        this.alternate.translate(translator, func);
         jump.target = func.nextInstrNum();
         func.addInstruction(new Noop());
     }
@@ -557,9 +557,10 @@ export class VarDeclaration extends Expression {
         return this.type = expType;
     }
 
-    transform(translator, func) {
-        const initRef = this.initExp.transform(translator, func);
+    translate(translator, func) {
+        const initRef = this.initExp.translate(translator, func);
         func.addInstruction(new AddToScope(this.name, initRef));
+        func.scope[this.name] = initRef;
         return initRef;
     }
 }
@@ -601,10 +602,10 @@ export class FunctionApplication extends Expression {
         return this.type = funcType.returnType;
     }
 
-    transform(translator, func) {
-        const targetRef = this.target.transform(translator, func);
-        const paramRefs = this.paramValues.map(p => p.transform(translator, func));
-        return func.addRefInstruction(ref => new FunctionCall(ref, targetRef, paramRefs));
+    translate(translator, func) {
+        const targetRef = this.target.translate(translator, func);
+        const paramRefs = this.paramValues.map(p => p.translate(translator, func));
+        return func.addRefInstruction(translator, ref => new FunctionCallRef(ref, targetRef, paramRefs));
     }
 }
 
@@ -635,9 +636,9 @@ export class FieldAccess extends Expression {
         return structType.fields[this.field];
     }
 
-    transform(translator, func) {
-        const targetRef = this.target.transform(translator, func);
-        return func.addRefInstruction(ref => new IFieldAccess(ref, targetRef, this.field));
+    translate(translator, func) {
+        const targetRef = this.target.translate(translator, func);
+        return func.addRefInstruction(translator, ref => new FieldAccessRef(ref, targetRef, this.field));
     }
 }
 
@@ -667,9 +668,9 @@ export class ArrayAccess extends Expression {
         return this.type = arrayType.baseType;
     }
 
-    transform(translator, func) {
-        const targetRef = this.target.transform(translator, func);
-        const indexRef = this.indexExp.transform(translator, func);
-        return func.addRefInstruction(ref => new IArrayAccess(ref, targetRef, indexRef));
+    translate(translator, func) {
+        const targetRef = this.target.translate(translator, func);
+        const indexRef = this.indexExp.translate(translator, func);
+        return func.addRefInstruction(translator, ref => new ArrayAccessRef(ref, targetRef, indexRef));
     }
 }
