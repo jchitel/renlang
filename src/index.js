@@ -16,7 +16,7 @@ const parsed = parse(contents);
 const checked = typecheck(parsed, path);
 // translate the type checker result to IR
 const translated = translate(checked);
-// execute the IR in the interpreter and get the result of the program
-const result = interpret(translated, process.argv.slice(3));
-// write the result to stdout
-process.stdout.write(result);
+// execute the IR in the interpreter and get the exit code of the program
+const exitCode = interpret(translated, process.argv.slice(3));
+// exit the process
+process.exit(exitCode);

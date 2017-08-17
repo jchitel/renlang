@@ -17,8 +17,8 @@ export default class Func {
         this.moduleId = moduleId;
         // the list of instructions that make up this function
         this.instructions = [];
-        // the scope table (just for the translation process, not the runtime table)
-        this.scope = {};
+        // the scope stack (just for the translation process, not the runtime table)
+        this.scope = [{}];
     }
 
     /**
@@ -69,5 +69,58 @@ export default class Func {
      */
     nextInstrNum() {
         return this.instructions.length;
+    }
+
+    /**
+     * Get the reference of a scope variable
+     */
+    getFromScope(name) {
+        let scope;
+        for (let i = 0; i < this.scope.length; ++i) {
+            if (name in this.scope[i]) {
+                scope = this.scope[i];
+                break;
+            }
+        }
+        if (!scope) scope = this.scope[this.scope.length - 1];
+        return scope[name];
+    }
+
+    /**
+     * Sets the reference of a variable on the current scope (or a parent scope if the name exists)
+     * and add a corresponding instruction for that operation
+     */
+    addToScope(name, ref, inst) {
+        this.addInstruction(inst);
+        let scope;
+        for (let i = 0; i < this.scope.length; ++i) {
+            if (name in this.scope[i]) {
+                scope = this.scope[i];
+                break;
+            }
+        }
+        if (!scope) scope = this.scope[this.scope.length - 1];
+        scope[name] = ref;
+        return inst;
+    }
+
+    /**
+     * Push a new scope onto the scope stack,
+     * and add a corresponding instruction for that operation
+     */
+    pushScope(inst) {
+        this.addInstruction(inst);
+        this.scope.push({});
+        return inst;
+    }
+
+    /**
+     * Pop a scope off of the scope stack,
+     * and add a corresponding instruction for that operation
+     */
+    popScope(inst) {
+        this.addInstruction(inst);
+        this.scope.pop();
+        return inst;
     }
 }

@@ -220,8 +220,8 @@ export class IdentifierExpression extends Expression {
     }
 
     translate(translator, func) {
-        // func.scope contains a name-ref map for scope variables
-        if (func.scope[this.name]) return func.scope[this.name];
+        // check to see if the name matches a variable in the current scope
+        if (func.getFromScope(this.name) !== undefined) return func.getFromScope(this.name);
         // otherwise we need the translator to resolve a module-scope reference
         return func.addInstruction(ref => translator.referenceIdentifier(ref, this.name));
     }
@@ -559,7 +559,7 @@ export class VarDeclaration extends Expression {
 
     translate(translator, func) {
         const initRef = this.initExp.translate(translator, func);
-        func.addInstruction(new AddToScope(this.name, initRef));
+        func.addToScope(this.name, initRef, new AddToScope(this.name, initRef));
         func.scope[this.name] = initRef;
         return initRef;
     }

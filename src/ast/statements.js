@@ -13,15 +13,13 @@ import {
     ReferenceMutate,
     Jump,
     PushTryFrame,
-    PopTryFrame,
+    PopFrame,
     ErrorRef,
     Throw,
     Return,
     SetTupleRef,
     PushScopeFrame,
-    PopScopeFrame,
     PushLoopFrame,
-    PopLoopFrame,
     Break,
     Continue,
 } from '../runtime/instructions';
@@ -82,11 +80,11 @@ export class Block extends Statement {
     }
 
     translate(translator, func) {
-        func.addInstruction(new PushScopeFrame());
+        func.pushScope(new PushScopeFrame());
         for (const statement of this.statements) {
             statement.translate(translator, func);
         }
-        func.addInstruction(new PopScopeFrame());
+        func.popScope(new PopFrame());
     }
 }
 
@@ -147,21 +145,21 @@ export class ForStatement extends Statement {
         // initialize iterable and i
         const iterableRef = this.iterableExp.translate(translator, func);
         const iRef = func.addRefInstruction(translator, ref => new SetIntegerRef(ref, 0));
-        func.addInstruction(new PushLoopFrame());
+        func.pushScope(new PushLoopFrame());
         // check if we should enter the loop, branching if we shouldn't
         const checkInstructionNumber = func.nextInstrNum();
         const checkRef = func.addRefInstruction(translator, ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => i.value < iter.value.length));
         const branch = func.addInstruction(new FalseBranch(checkRef));
         // loop body, start by adding the iterator variable to the scope, and remove it when we're done
         const iterRef = func.addRefInstruction(translator, ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => iter.value[i.value]));
-        func.addInstruction(new AddToScope(this.iterVar, iterRef));
+        func.addToScope(this.iterVar, iterRef, new AddToScope(this.iterVar, iterRef));
         this.body.translate(translator, func);
         // increment i and jump back to the condition expression
         func.addInstruction(new ReferenceMutate(iRef, i => i + 1));
         func.addInstruction(new Jump(checkInstructionNumber));
         // insert noop as target of the loop
         branch.target = func.nextInstrNum();
-        func.addInstruction(new PopLoopFrame());
+        func.popScope(new PopFrame());
     }
 }
 
@@ -189,7 +187,7 @@ export class WhileStatement extends Statement {
     }
 
     translate(translator, func) {
-        func.addInstruction(new PushLoopFrame());
+        func.pushScope(new PushLoopFrame());
         // store the condition value into a reference
         const conditionInstructionNumber = func.nextInstrNum();
         const conditionRef = this.conditionExp.translate(translator, func);
@@ -201,7 +199,7 @@ export class WhileStatement extends Statement {
         func.addInstruction(new Jump(conditionInstructionNumber));
         // add a false branch target noop
         branch.target = func.nextInstrNum();
-        func.addInstruction(new PopLoopFrame());
+        func.popScope(new PopLoopFrame());
     }
 }
 
@@ -229,7 +227,7 @@ export class DoWhileStatement extends Statement {
     }
 
     translate(translator, func) {
-        func.addInstruction(new PushLoopFrame());
+        func.pushScope(new PushLoopFrame());
         // save the branch location
         const startInstructionNumber = func.nextInstrNum();
         // insert the body instructions
@@ -238,7 +236,7 @@ export class DoWhileStatement extends Statement {
         const conditionRef = this.conditionExp.translate(translator, func);
         // branch if the condition is true
         func.addInstruction(new TrueBranch(conditionRef, startInstructionNumber));
-        func.addInstruction(new PopLoopFrame());
+        func.popScope(new PopLoopFrame());
     }
 }
 
@@ -274,25 +272,25 @@ export class TryCatchStatement extends Statement {
 
     translate(translator, func) {
         // insert a try frame
-        const tryFrame = func.addInstruction(new PushTryFrame([]));
+        const tryFrame = func.pushScope(new PushTryFrame([]));
         // insert try body
         this.try.translate(translator, func);
         // remove the try frame
-        func.addInstruction(new PopTryFrame());
+        func.popScope(new PopFrame());
         // insert jump to either finally or after the finally
         const jump = func.addInstruction(new Jump());
         // iterate each catch
         for (const { param, body } of this.catches) {
             // save the instruction number to the try frame
-            tryFrame.catches.push({ instructionNumber: func.nextInstrNum(), type: param.type });
+            tryFrame.catches.push({ ic: func.nextInstrNum(), type: param.type });
             // add the catch parameter to the scope
-            func.addInstruction(new PushScopeFrame());
+            func.pushScope(new PushScopeFrame());
             const errRef = func.addRefInstruction(translator, ref => new ErrorRef(ref));
-            func.addInstruction(new AddToScope(param.name, errRef));
+            func.addToScope(param.name, errRef, new AddToScope(param.name, errRef));
             // insert the catch body
             body.translate(translator, func);
             // pop the scope containing the err variable
-            func.addInstruction(new PopScopeFrame());
+            func.popScope(new PopScopeFrame());
             // use same jump as try
             func.addInstruction(jump);
         }
