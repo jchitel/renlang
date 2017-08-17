@@ -24,7 +24,7 @@ import {
     PopLoopFrame,
     Break,
     Continue,
-} from '../translator/instructions';
+} from '../runtime/instructions';
 
 
 export class Statement extends ASTNode {

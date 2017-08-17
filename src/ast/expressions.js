@@ -20,7 +20,7 @@ import {
     FunctionCallRef,
     FieldAccessRef,
     ArrayAccessRef,
-} from '../translator/instructions';
+} from '../runtime/instructions';
 
 
 export class Expression extends ASTNode {

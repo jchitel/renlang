@@ -1,5 +1,5 @@
 import { Expression } from '../ast/expressions';
-import { Return } from './instructions';
+import { Return } from '../runtime/instructions';
 
 
 /**

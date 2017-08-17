@@ -1,4 +1,4 @@
-import { FunctionFrame } from './frames';
+import { FunctionFrame, TryFrame } from './frames';
 import RArray from '../runtime/Array';
 import RString from '../runtime/String';
 
@@ -38,6 +38,18 @@ export default class Interpreter {
     }
 
     setScopeValue(name, value) {
-        // TODO
+        let frame;
+        for (let i = this.stack.length - 1; i >= 0; --i) {
+            // skip try frames
+            if (this.stack[i] instanceof TryFrame) continue;
+            // the first frame we set should be the first normal-type frame
+            if (!frame) frame = this.stack[i];
+            // if the specified name is in the frame, use this one instead
+            if (name in this.stack[i]) {
+                frame = this.stack[i];
+                break;
+            }
+        }
+        frame.scope[name] = value;
     }
 }

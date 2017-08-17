@@ -1,3 +1,14 @@
+import RInteger from './Integer';
+import RFloat from './Float';
+import RChar from './Char';
+import RBool from './Bool';
+import RArray from './Array';
+import RTuple from './Tuple';
+import RStruct from './Struct';
+import { createOperator } from './operators';
+import { FunctionFrame, ScopeFrame, LoopFrame, TryFrame } from '../interpreter/frames';
+
+
 /**
  * Represents an IR instruction for the JS implementation of the Ren interpreter.
  * There are 4 types of instructions:

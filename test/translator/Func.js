@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import Func from '../../src/translator/Func';
 import Translator from '../../src/translator/Translator';
 import { Expression } from '../../src/ast/expressions';
-import { Return } from '../../src/translator/instructions';
+import { Return } from '../../src/runtime/instructions';
 
 
 describe('Func', () => {
