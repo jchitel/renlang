@@ -1,6 +1,7 @@
 import { FunctionFrame, TryFrame } from './frames';
 import RArray from '../runtime/Array';
 import RString from '../runtime/String';
+import RTuple from '../runtime/Tuple';
 
 
 export default class Interpreter {
@@ -139,6 +140,9 @@ export default class Interpreter {
                         this.funcFrame = funcFrame;
                         return;
                     }
+                }
+                if (frame.finally) {
+                    frame.executeFinally(this);
                 }
             } else if (frame instanceof FunctionFrame) {
                 // get the caller function frame and add this function to the stack trace

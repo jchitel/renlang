@@ -295,6 +295,12 @@ export class UnaryPlusOperator extends Operator {
     getType(operand) {
         return getSignedNumericUnaryOperatorType(operand);
     }
+
+    execute(interp, ref) {
+        const value = interp.references[ref];
+        // TODO: when runtime values have types, implement this correctly
+        return value;
+    }
 }
 
 /**
@@ -308,6 +314,12 @@ export class UnaryMinusOperator extends Operator {
 
     getType(operand) {
         return getSignedNumericUnaryOperatorType(operand);
+    }
+
+    execute(interp, ref) {
+        const value = interp.references[ref];
+        // TODO: when runtime values have types, implement this correctly
+        return -value;
     }
 }
 
@@ -323,6 +335,10 @@ export class NotOperator extends Operator {
     getType(operand) {
         if (!(operand instanceof TBool)) return new TUnknown();
         return new TFunction([operand], operand);
+    }
+
+    execute(interp, ref) {
+        return !interp.references[ref];
     }
 }
 
@@ -340,6 +356,10 @@ export class BitwiseNotOperator extends Operator {
         if (!(operand instanceof TInteger && !operand.signed)) return new TUnknown();
         return new TFunction([operand], operand);
     }
+
+    execute(interp, ref) {
+        return ~interp.references[ref]; // eslint-disable-line no-bitwise
+    }
 }
 
 /**
@@ -356,6 +376,10 @@ export class PrefixIncrementOperator extends Operator {
     getType(operand) {
         return getNumericUnaryOperatorType(operand);
     }
+
+    execute(interp, ref) {
+        return ++interp.references[ref];
+    }
 }
 
 /**
@@ -371,6 +395,10 @@ export class PrefixDecrementOperator extends Operator {
 
     getType(operand) {
         return getNumericUnaryOperatorType(operand);
+    }
+
+    execute(interp, ref) {
+        return --interp.references[ref];
     }
 }
 
@@ -392,6 +420,10 @@ export class PostfixIncrementOperator extends Operator {
     getType(operand) {
         return getNumericUnaryOperatorType(operand);
     }
+
+    execute(interp, ref) {
+        return interp.references[ref]++;
+    }
 }
 
 /**
@@ -407,6 +439,10 @@ export class PostfixDecrementOperator extends Operator {
 
     getType(operand) {
         return getNumericUnaryOperatorType(operand);
+    }
+
+    execute(interp, ref) {
+        return interp.references[ref]--;
     }
 }
 
@@ -436,6 +472,10 @@ export class PlusOperator extends Operator {
         // otherwise assume it is a numeric operation
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] + interp.references[rightRef];
+    }
 }
 
 /**
@@ -450,6 +490,10 @@ export class MinusOperator extends Operator {
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] - interp.references[rightRef];
+    }
 }
 
 /**
@@ -463,6 +507,10 @@ export class MultiplyOperator extends Operator {
 
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] * interp.references[rightRef];
     }
 }
 
@@ -486,6 +534,10 @@ export class DivideOperator extends Operator {
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] / interp.references[rightRef];
+    }
 }
 
 /**
@@ -503,6 +555,10 @@ export class ModuloOperator extends Operator {
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] % interp.references[rightRef];
+    }
 }
 
 /**
@@ -516,6 +572,10 @@ export class BitwiseAndOperator extends Operator {
 
     getType(operand1, operand2) {
         return getBitwiseBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] & interp.references[rightRef]; // eslint-disable-line no-bitwise
     }
 }
 
@@ -531,6 +591,10 @@ export class BitwiseOrOperator extends Operator {
     getType(operand1, operand2) {
         return getBitwiseBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] | interp.references[rightRef]; // eslint-disable-line no-bitwise
+    }
 }
 
 /**
@@ -545,6 +609,10 @@ export class AndOperator extends Operator {
     getType(operand1, operand2) {
         return getBooleanBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] && interp.references[rightRef];
+    }
 }
 
 /**
@@ -558,6 +626,10 @@ export class OrOperator extends Operator {
 
     getType(operand1, operand2) {
         return getBooleanBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] || interp.references[rightRef];
     }
 }
 
@@ -575,6 +647,10 @@ export class XorOperator extends Operator {
         const t = getBooleanBinaryOperatorType(operand1, operand2);
         if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
         return t;
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] ^ interp.references[rightRef]; // eslint-disable-line no-bitwise
     }
 }
 
@@ -598,6 +674,10 @@ export class PlusAssignmentOperator extends Operator {
         // otherwise assume it is a numeric operation
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] += interp.references[rightRef];
+    }
 }
 
 /**
@@ -611,6 +691,10 @@ export class MinusAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] -= interp.references[rightRef];
     }
 }
 
@@ -626,6 +710,10 @@ export class MultiplyAssignmentOperator extends Operator {
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] *= interp.references[rightRef];
+    }
 }
 
 /**
@@ -639,6 +727,10 @@ export class DivideAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] /= interp.references[rightRef];
     }
 }
 
@@ -654,6 +746,10 @@ export class ModuloAssignmentOperator extends Operator {
     getType(operand1, operand2) {
         return getNumericBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] %= interp.references[rightRef];
+    }
 }
 
 /**
@@ -667,6 +763,10 @@ export class BitwiseAndAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         return getBitwiseBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] &= interp.references[rightRef]; // eslint-disable-line no-bitwise
     }
 }
 
@@ -682,6 +782,10 @@ export class BitwiseOrAssignmentOperator extends Operator {
     getType(operand1, operand2) {
         return getBitwiseBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] |= interp.references[rightRef]; // eslint-disable-line no-bitwise
+    }
 }
 
 /**
@@ -696,6 +800,10 @@ export class AndAssignmentOperator extends Operator {
     getType(operand1, operand2) {
         return getBooleanBinaryOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] = (interp.references[leftRef] && interp.references[rightRef]);
+    }
 }
 
 /**
@@ -709,6 +817,10 @@ export class OrAssignmentOperator extends Operator {
 
     getType(operand1, operand2) {
         return getBooleanBinaryOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] = (interp.references[leftRef] || interp.references[rightRef]);
     }
 }
 
@@ -726,6 +838,10 @@ export class XorAssignmentOperator extends Operator {
         if (t instanceof TUnknown) return getBitwiseBinaryOperatorType(operand1, operand2);
         return t;
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] ^= interp.references[rightRef]; // eslint-disable-line no-bitwise
+    }
 }
 
 /**
@@ -739,6 +855,10 @@ export class LessThanOperator extends Operator {
 
     getType(operand1, operand2) {
         return getComparisonOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] < interp.references[rightRef];
     }
 }
 
@@ -754,6 +874,10 @@ export class GreaterThanOperator extends Operator {
     getType(operand1, operand2) {
         return getComparisonOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] > interp.references[rightRef];
+    }
 }
 
 /**
@@ -767,6 +891,10 @@ export class LessThanOrEqualToOperator extends Operator {
 
     getType(operand1, operand2) {
         return getComparisonOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] <= interp.references[rightRef];
     }
 }
 
@@ -782,6 +910,10 @@ export class GreaterThanOrEqualToOperator extends Operator {
     getType(operand1, operand2) {
         return getComparisonOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        return interp.references[leftRef] >= interp.references[rightRef];
+    }
 }
 
 /**
@@ -796,6 +928,11 @@ export class EqualsOperator extends Operator {
     getType(operand1, operand2) {
         return getEqualityOperatorType(operand1, operand2);
     }
+
+    execute(interp, leftRef, rightRef) {
+        // TODO: more equality logic
+        return interp.references[leftRef] === interp.references[rightRef];
+    }
 }
 
 /**
@@ -809,6 +946,11 @@ export class NotEqualOperator extends Operator {
 
     getType(operand1, operand2) {
         return getEqualityOperatorType(operand1, operand2);
+    }
+
+    execute(interp, leftRef, rightRef) {
+        // TODO: more equality logic
+        return interp.references[leftRef] !== interp.references[rightRef];
     }
 }
 
@@ -840,5 +982,9 @@ export class ApplyOperator extends Operator {
             // and the operator will return a new function with the remaining parameters
             return new TFunction([operand1, operand2], new TFunction(params, operand1.returnType));
         }
+    }
+
+    execute(interp, leftRef, rightRef) {
+        // TODO: implement once values have types
     }
 }

@@ -145,7 +145,7 @@ export class ForStatement extends Statement {
         // initialize iterable and i
         const iterableRef = this.iterableExp.translate(translator, func);
         const iRef = func.addRefInstruction(translator, ref => new SetIntegerRef(ref, 0));
-        func.pushScope(new PushLoopFrame());
+        const loopFrame = func.pushScope(new PushLoopFrame(func.nextInstrNum() + 1));
         // check if we should enter the loop, branching if we shouldn't
         const checkInstructionNumber = func.nextInstrNum();
         const checkRef = func.addRefInstruction(translator, ref => new InteropReference(ref, [iterableRef, iRef], (iter, i) => i.value < iter.value.length));
@@ -159,6 +159,7 @@ export class ForStatement extends Statement {
         func.addInstruction(new Jump(checkInstructionNumber));
         // insert noop as target of the loop
         branch.target = func.nextInstrNum();
+        loopFrame.end = branch.target;
         func.popScope(new PopFrame());
     }
 }
@@ -187,7 +188,7 @@ export class WhileStatement extends Statement {
     }
 
     translate(translator, func) {
-        func.pushScope(new PushLoopFrame());
+        const loopFrame = func.pushScope(new PushLoopFrame(func.nextInstrNum() + 1));
         // store the condition value into a reference
         const conditionInstructionNumber = func.nextInstrNum();
         const conditionRef = this.conditionExp.translate(translator, func);
@@ -199,7 +200,8 @@ export class WhileStatement extends Statement {
         func.addInstruction(new Jump(conditionInstructionNumber));
         // add a false branch target noop
         branch.target = func.nextInstrNum();
-        func.popScope(new PopLoopFrame());
+        loopFrame.end = branch.target;
+        func.popScope(new PopFrame());
     }
 }
 
@@ -227,7 +229,7 @@ export class DoWhileStatement extends Statement {
     }
 
     translate(translator, func) {
-        func.pushScope(new PushLoopFrame());
+        const loopFrame = func.pushScope(new PushLoopFrame(func.nextInstrNum() + 1));
         // save the branch location
         const startInstructionNumber = func.nextInstrNum();
         // insert the body instructions
@@ -236,7 +238,8 @@ export class DoWhileStatement extends Statement {
         const conditionRef = this.conditionExp.translate(translator, func);
         // branch if the condition is true
         func.addInstruction(new TrueBranch(conditionRef, startInstructionNumber));
-        func.popScope(new PopLoopFrame());
+        loopFrame.end = func.nextInstrNum();
+        func.popScope(new PopFrame());
     }
 }
 
@@ -290,7 +293,7 @@ export class TryCatchStatement extends Statement {
             // insert the catch body
             body.translate(translator, func);
             // pop the scope containing the err variable
-            func.popScope(new PopScopeFrame());
+            func.popScope(new PopFrame());
             // use same jump as try
             func.addInstruction(jump);
         }

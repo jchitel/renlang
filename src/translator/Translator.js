@@ -4,7 +4,7 @@ import { TInteger, TChar, TTuple, TArray } from '../typecheck/types';
 
 
 /**
- * Control class responsible for enumerating all used functions in a program 
+ * Control class responsible for enumerating all used functions in a program
  * and translating all of them to instructions.
  */
 export default class Translator {

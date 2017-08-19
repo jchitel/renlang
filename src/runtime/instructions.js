@@ -42,9 +42,18 @@ export class Return extends Instruction {
     }
 
     execute(interp) {
-        // TODO
-        // we need to somehow access the location of the function call reference
-        // perhaps function calls should store that reference
+        // set return value
+        interp.returnValue = interp.references[this.ref];
+        // pop off all frames until the function frame
+        while (!(interp.stack[interp.stack.length - 1] instanceof FunctionFrame)) {
+            const frame = interp.stack[interp.stack.length - 1];
+            if (frame instanceof TryFrame) {
+                frame.executeFinally(interp);
+            }
+            interp.stack.pop();
+        }
+        // set the ic to the last instruction
+        interp.ic = interp.functions[interp.func].instructions.length - 1;
     }
 }
 
@@ -62,9 +71,10 @@ export class Throw extends Instruction {
     }
 
     execute(interp) {
+        // set the error
         interp.error = interp.references[this.ref];
-        // TODO
-        // we need to implement the error context
+        // move to error context, interpreter will handle the rest
+        interp.errorContext = true;
     }
 }
 
@@ -79,9 +89,21 @@ export class Break extends Instruction {
     }
 
     execute(interp) {
-        // TODO
-        // iterating until the loop number, we need to pop off loop frames
-        // then we need to jump to the end of the loop we land on
+        // pop all frames until the first loop frame
+        while (!(interp.stack[interp.stack.length - 1] instanceof LoopFrame)) {
+            interp.stack.pop();
+        }
+        // pop n loop frames until n == loopNumber
+        let loops = 0;
+        while (true) {
+            if (interp.stack[interp.stack.length - 1] instanceof LoopFrame) {
+                if (loops === this.loopNumber) break;
+                else ++loops;
+            }
+            interp.stack.pop();
+        }
+        // jump to end of loop
+        interp.ic = interp.stack[interp.stack.length - 1].end;
     }
 }
 
@@ -96,9 +118,21 @@ export class Continue extends Instruction {
     }
 
     execute(interp) {
-        // TODO
-        // iterating until the loop number, we need to pop off loop frames
-        // then we need to jump to the start of the loop we land on
+        // pop all frames until the first loop frame
+        while (!(interp.stack[interp.stack.length - 1] instanceof LoopFrame)) {
+            interp.stack.pop();
+        }
+        // pop n loop frames until n == loopNumber
+        let loops = 0;
+        while (true) {
+            if (interp.stack[interp.stack.length - 1] instanceof LoopFrame) {
+                if (loops === this.loopNumber) break;
+                else ++loops;
+            }
+            interp.stack.pop();
+        }
+        // jump to start of loop
+        interp.ic = interp.stack[interp.stack.length - 1].start;
     }
 }
 
@@ -309,12 +343,20 @@ export class FunctionCallRef extends Instruction {
     }
 
     execute(interp) {
-        const funcRef = interp.references[this.targetRef];
-        const func = interp.functions[funcRef];
-        const funcFrame = new FunctionFrame(func, this.paramRefs);
+        // get function id from references
+        const func = interp.references[this.targetRef];
+        // get parameter values
+        const params = this.paramRefs.map(p => interp.references[p]);
+        // create new function frame with return info
+        const funcFrame = new FunctionFrame(func, params, this.ref, interp.func, interp.funcFrame, interp.ic);
+        // push the frame on the stack
         interp.stack.push(funcFrame);
-        // execute the function
-        interp.executeFunction(func, funcFrame);
+        // the current function id is now the callee function
+        interp.func = func;
+        // function frame is the one we just pushed
+        interp.funcFrame = interp.stack.length - 1;
+        // start at the beginning of the function
+        interp.ic = 0;
     }
 }
 

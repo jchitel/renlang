@@ -31,7 +31,13 @@ export class FunctionFrame extends ScopeFrame {
  * A loop frame, exactly the same as a scope frame, but is special to handle
  * breaks and continues
  */
-export class LoopFrame extends ScopeFrame {}
+export class LoopFrame extends ScopeFrame {
+    constructor(start, end) {
+        super();
+        this.start = start;
+        this.end = end;
+    }
+}
 
 /**
  * A try frame, contains information about a try-catch block for catching errors
@@ -41,5 +47,11 @@ export class TryFrame extends ScopeFrame {
         super();
         this.catches = catches;
         this.finally = fin;
+    }
+
+    executeFinally(interp) {
+        for (let i = this.finally.start; i < this.finally.end; ++i) {
+            interp.functions[interp.func].instructions[i].execute(interp);
+        }
     }
 }
