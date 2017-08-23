@@ -1,0 +1,29 @@
+import from "fs/io" { readFile }
+import from "fs/path" { resolve }
+
+import from "./parser": parse
+import from "./typecheck": typecheck
+import from "./translator": translate
+import from "./interpreter": interpreter
+
+
+func int main(string[] args) => {
+    // read contents of specified file
+    path = resolve(args[1])
+    contents = toString(readFile(path))
+    // parse them
+    parsed = parse(contents)
+    // typecheck the parsed result
+    checked = typecheck(parsed, path)
+    // translate the typechecker result to IR
+    translated = translate(checked)
+    // execute the IR in the interpreter and get the exit code of the program
+    return interpret(translated, sliceStart(args, 2))
+}
+
+/**
+ * TODO:
+ * - func string toString(any value) (prelude)
+ * - func T[] sliceStart(T[] array, int startIndex) (prelude)
+ * - func T[] slice(T[] array, int startIndex, int endIndex) (prelude)
+ */
