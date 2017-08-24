@@ -4,6 +4,7 @@ import * as stmts from '../../src/ast/statements';
 import { Token } from '../../src/parser/Tokenizer';
 import { TInteger, TChar, TBool, TTuple, TStruct, TArray, TUnknown } from '../../src/typecheck/types';
 import { Expression } from '../../src/ast/expressions';
+import * as inst from '../../src/runtime/instructions';
 
 
 const int = new TInteger(32, true);
@@ -21,6 +22,62 @@ function getDummyReducedNode(type, fields = {}, symbolTable = null) {
             return type;
         },
     };
+}
+
+function getUntranslatedNode(inst, fields = {}) {
+    return {
+        ...fields,
+        translate: (tr, fn) => { fn.addInstruction(inst) },
+    };
+}
+
+function getUntranslatedExp(ref, fields = {}) {
+    return {
+        ...fields,
+        translate: () => ref,
+    };
+}
+
+function getDummyFunc(fields = {}) {
+    const fn = {
+        inum: 0,
+        instrs: [],
+        scope: [{}],
+        ...fields,
+        addInstruction: i => {
+            fn.instrs.push(i);
+            return i;
+        },
+        addRefInstruction: (tr, cb) => {
+            fn.instrs.push(cb(fn.inum));
+            return fn.inum++;
+        },
+        addToScope: (name, ref, i) => {
+            fn.scope[name] = ref;
+            return fn.addInstruction(i);
+        },
+        getFromScope: name => fn.scope[name],
+        nextInstrNum: () => fn.instrs.length,
+        pushScope: (i) => {
+            fn.scope.push({});
+            return fn.addInstruction(i);
+        },
+        popScope: (i) => {
+            fn.scope.pop();
+            return fn.addInstruction(i);
+        }
+    };
+    return fn;
+}
+
+function getDummyTranslator() {
+    const tr = {
+        refId: 0,
+        referenceIdentifier: (ref, name) => ({ ref, name }),
+        lambda: (fn, ref) => ({ fn, ref }),
+        newReference: () => tr.refId++,
+    };
+    return tr;
 }
 
 describe('Statement Nodes', () => {
@@ -131,12 +188,33 @@ describe('Statement Nodes', () => {
             const block = new stmts.Block({ statements: [exp, getDummyReducedNode(null)] });
             expect(block.resolveType({}, {}, {})).to.eql(null);
         });
+
+        it('should translate a block', () => {
+            const stm = new stmts.Block({
+                statements: [getUntranslatedNode({ i: 1 }), getUntranslatedNode({ i: 2 })],
+            });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.PushScopeFrame(),
+                { i: 1 },
+                { i: 2 },
+                new inst.PopFrame(),
+            ]);
+        });
     });
 
     describe('Noop', () => {
         it('should resolve to falsy type', () => {
             const noop = new stmts.Noop(loc, loc);
             expect(noop.resolveType({}, {}, {})).to.eql(undefined);
+        });
+
+        it('should translate noop', () => {
+            const stm = new stmts.Noop(loc, loc);
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([new inst.Noop()]);
         });
     });
 
@@ -207,6 +285,37 @@ describe('Statement Nodes', () => {
             // verify the resulting symbol table
             expect(symbolTable).to.eql({ '@@loopNumber': 1 });
         });
+
+        it('should translate for loop', () => {
+            const stm = new stmts.ForStatement({
+                iterVar: 'myIter',
+                iterableExp: getUntranslatedExp(0),
+                body: getUntranslatedNode({ i: 'body' }),
+            });
+            const fn = getDummyFunc({ inum: 1 });
+            stm.translate({}, fn);
+            expect(fn.instrs.slice(0, 2)).to.eql([
+                new inst.SetIntegerRef(1, 0),
+                new inst.PushLoopFrame(2, 9),
+            ]);
+            expect(fn.instrs[2] instanceof inst.InteropReference).to.eql(true);
+            expect(fn.instrs[2].ref).to.eql(2);
+            expect(fn.instrs[2].inRefs).to.eql([0, 1]);
+            expect(fn.instrs[3]).to.eql(new inst.FalseBranch(2, 9));
+            expect(fn.instrs[4] instanceof inst.InteropReference).to.eql(true);
+            expect(fn.instrs[4].ref).to.eql(3);
+            expect(fn.instrs[4].inRefs).to.eql([0, 1]);
+            expect(fn.instrs.slice(5, 7)).to.eql([
+                new inst.AddToScope('myIter', 3),
+                { i: 'body' },
+            ]);
+            expect(fn.instrs[7] instanceof inst.ReferenceMutate).to.eql(true);
+            expect(fn.instrs[7].ref).to.eql(1);
+            expect(fn.instrs.slice(8)).to.eql([
+                new inst.Jump(2),
+                new inst.PopFrame(),
+            ]);
+        });
     });
 
     describe('WhileStatement', () => {
@@ -264,6 +373,22 @@ describe('Statement Nodes', () => {
             expect(bodySymbolTable).to.eql({ '@@loopNumber': 2 });
             // verify the resulting symbol table
             expect(symbolTable).to.eql({ '@@loopNumber': 1 });
+        });
+
+        it('should translate a while statement', () => {
+            const stm = new stmts.WhileStatement({
+                conditionExp: getUntranslatedExp(0),
+                body: getUntranslatedNode({ i: 'body' }),
+            });
+            const fn = getDummyFunc({ inum: 1 });
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.PushLoopFrame(1, 4),
+                new inst.FalseBranch(0, 4),
+                { i: 'body' },
+                new inst.Jump(1),
+                new inst.PopFrame(),
+            ]);
         });
     });
 
@@ -324,6 +449,21 @@ describe('Statement Nodes', () => {
             // verify the resulting symbol table
             expect(symbolTable).to.eql({ '@@loopNumber': 1 });
         });
+
+        it('should translate a do-while statement', () => {
+            const stm = new stmts.DoWhileStatement({
+                body: getUntranslatedNode({ i: 'body' }),
+                conditionExp: getUntranslatedExp(0),
+            });
+            const fn = getDummyFunc({ inum: 1 });
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.PushLoopFrame(1, 3),
+                { i: 'body' },
+                new inst.TrueBranch(0, 1),
+                new inst.PopFrame(),
+            ]);
+        });
     });
 
     describe('TryCatchStatement', () => {
@@ -379,6 +519,72 @@ describe('Statement Nodes', () => {
             });
             expect(t.resolveType({}, {}, {})).to.eql(int);
         });
+
+        it('should translate try-catch statement', () => {
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const stm = new stmts.TryCatchStatement({
+                try: getUntranslatedNode({ i: 'try' }),
+                catches: [
+                    { param: { name: 'err', type: getDummyReducedNode(errType, { type: errType }) }, body: getUntranslatedNode({ i: 'catch' }) },
+                    { param: { name: 'err2', type: getDummyReducedNode(errType, { type: errType }) }, body: getUntranslatedNode({ i: 'catch2' }) },
+                ],
+            });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.PushTryFrame([{ ic: 4, type: errType }, { ic: 10, type: errType }]),
+                { i: 'try' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(0),
+                new inst.AddToScope('err', 0),
+                { i: 'catch' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(1),
+                new inst.AddToScope('err2', 1),
+                { i: 'catch2' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                new inst.Noop(),
+            ]);
+        });
+
+        it('should translate try-catch-finally statement', () => {
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const stm = new stmts.TryCatchStatement({
+                try: getUntranslatedNode({ i: 'try' }),
+                catches: [
+                    { param: { name: 'err', type: getDummyReducedNode(errType, { type: errType }) }, body: getUntranslatedNode({ i: 'catch' }) },
+                    { param: { name: 'err2', type: getDummyReducedNode(errType, { type: errType }) }, body: getUntranslatedNode({ i: 'catch2' }) },
+                ],
+                finally: getUntranslatedNode({ i: 'finally' }),
+            });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.PushTryFrame([{ ic: 4, type: errType }, { ic: 10, type: errType }], { start: 16, end: 17 }),
+                { i: 'try' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(0),
+                new inst.AddToScope('err', 0),
+                { i: 'catch' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(1),
+                new inst.AddToScope('err2', 1),
+                { i: 'catch2' },
+                new inst.PopFrame(),
+                new inst.Jump(16),
+                { i: 'finally' },
+                new inst.Noop(),
+            ]);
+        });
     });
 
     describe('ThrowStatement', () => {
@@ -395,6 +601,15 @@ describe('Statement Nodes', () => {
 
         it('should resolve type of throw statement', () => {
             expect(new stmts.ThrowStatement({ exp: getDummyReducedNode(int) }).resolveType({}, {}, {})).to.eql(undefined);
+        });
+
+        it('should translate throw statement', () => {
+            const stm = new stmts.ThrowStatement({
+                exp: getUntranslatedExp(0),
+            });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([new inst.Throw(0)]);
         });
     });
 
@@ -427,6 +642,23 @@ describe('Statement Nodes', () => {
         it('should resolve type of non-void return statement', () => {
             const r = new stmts.ReturnStatement({ exp: getDummyReducedNode(int) });
             expect(r.resolveType({}, {}, {})).to.eql(int);
+        });
+
+        it('should translate non-void return statement', () => {
+            const stm = new stmts.ReturnStatement({ exp: getUntranslatedExp(0) });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([new inst.Return(0)]);
+        });
+
+        it('should translate void return statement', () => {
+            const stm = new stmts.ReturnStatement({});
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([
+                new inst.SetTupleRef(0, []),
+                new inst.Return(0),
+            ]);
         });
     });
 
@@ -468,6 +700,13 @@ describe('Statement Nodes', () => {
             (new stmts.BreakStatement({ loopNumber: 5, locations: { self: loc } })).resolveType(typeChecker, { path: '/index.ren' }, { '@@loopNumber': 3 });
             expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number 5 in loop with depth 3 [/index.ren:1:1]']);
         });
+
+        it('should translate break statement', () => {
+            const stm = new stmts.BreakStatement({ loopNumber: 2 });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([new inst.Break(2)]);
+        });
     });
 
     describe('ContinueStatement', () => {
@@ -507,6 +746,13 @@ describe('Statement Nodes', () => {
             const typeChecker = { errors: [] };
             (new stmts.ContinueStatement({ loopNumber: 5, locations: { self: loc } })).resolveType(typeChecker, { path: '/index.ren' }, { '@@loopNumber': 3 });
             expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number 5 in loop with depth 3 [/index.ren:1:1]']);
+        });
+
+        it('should translate continue statement', () => {
+            const stm = new stmts.ContinueStatement({ loopNumber: 2 });
+            const fn = getDummyFunc();
+            stm.translate({}, fn);
+            expect(fn.instrs).to.eql([new inst.Continue(2)]);
         });
     });
 });

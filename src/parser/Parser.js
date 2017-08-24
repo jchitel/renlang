@@ -361,12 +361,12 @@ export default class Parser {
     tryArrayType(baseType) {
         const [peek1, peek2] = this.tokenizer.peek(0, 2);
         if (peek1.type !== 'LBRACK' || peek2.type !== 'RBRACK') return false;
-        const [arrayLeftBracketToken, arrayRightBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
+        const [openBracketToken, closeBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
         return new AST.ArrayType({
             baseType,
-            arrayLeftBracketToken,
-            arrayRightBracketToken,
-        }, [baseType, arrayLeftBracketToken, arrayRightBracketToken]);
+            openBracketToken,
+            closeBracketToken,
+        }, [baseType, openBracketToken, closeBracketToken]);
     }
 
     tryUnionType(left) {

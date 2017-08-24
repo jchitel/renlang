@@ -75,14 +75,13 @@ export default class Func {
      * Get the reference of a scope variable
      */
     getFromScope(name) {
-        let scope;
-        for (let i = 0; i < this.scope.length; ++i) {
+        let scope = this.scope[this.scope.length - 1];
+        for (let i = this.scope.length - 1; i >= 0; --i) {
             if (name in this.scope[i]) {
                 scope = this.scope[i];
                 break;
             }
         }
-        if (!scope) scope = this.scope[this.scope.length - 1];
         return scope[name];
     }
 
@@ -92,14 +91,13 @@ export default class Func {
      */
     addToScope(name, ref, inst) {
         this.addInstruction(inst);
-        let scope;
-        for (let i = 0; i < this.scope.length; ++i) {
+        let scope = this.scope[this.scope.length - 1];
+        for (let i = this.scope.length - 1; i >= 0; --i) {
             if (name in this.scope[i]) {
                 scope = this.scope[i];
                 break;
             }
         }
-        if (!scope) scope = this.scope[this.scope.length - 1];
         scope[name] = ref;
         return inst;
     }

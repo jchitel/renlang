@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import Func from '../../src/translator/Func';
 import Translator from '../../src/translator/Translator';
 import { Expression } from '../../src/ast/expressions';
-import { Return } from '../../src/runtime/instructions';
+import { Return, AddToScope, PushScopeFrame, PopFrame } from '../../src/runtime/instructions';
 
 
 describe('Func', () => {
@@ -56,5 +56,52 @@ describe('Func', () => {
         expect(func.nextInstrNum()).to.eql(0);
         func.addInstruction(new Return(1));
         expect(func.nextInstrNum()).to.eql(1);
+    });
+
+    it('should get from deep scope', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        func.scope = [{}, { myVar: 2 }, {}, { myVar: 3 }, {}, {}];
+        expect(func.getFromScope('myVar')).to.eql(3);
+    });
+
+    it('should get from scope without variable', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        func.scope = [{}, {}, {}, {}, {}, { someVar: 4 }];
+        expect(func.getFromScope('myVar')).to.eql(undefined);
+    });
+
+    it('should set in deep scope', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        func.scope = [{}, { myVar: 2 }, {}, { myVar: 3 }, {}, {}];
+        const inst = new AddToScope('myVar', 5);
+        expect(func.addToScope('myVar', 5, inst)).to.eql(inst);
+        expect(func.instructions).to.eql([inst]);
+        expect(func.scope).to.eql([{}, { myVar: 2 }, {}, { myVar: 5 }, {}, {}]);
+    });
+
+    it('should set in scope without variable', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        func.scope = [{}, {}, {}, {}, {}, { someVar: 4 }];
+        const inst = new AddToScope('myVar', 5);
+        expect(func.addToScope('myVar', 5, inst)).to.eql(inst);
+        expect(func.instructions).to.eql([inst]);
+        expect(func.scope).to.eql([{}, {}, {}, {}, {}, { someVar: 4, myVar: 5 }]);
+    });
+
+    it('should push a frame', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        const inst = new PushScopeFrame();
+        expect(func.pushScope(inst)).to.eql(inst);
+        expect(func.instructions).to.eql([inst]);
+        expect(func.scope).to.eql([{}, {}]);
+    });
+
+    it('should pop a frame', () => {
+        const func = new Func(0, { ast: {} }, 0);
+        func.scope = [{}, {}];
+        const inst = new PopFrame();
+        expect(func.popScope(inst)).to.eql(inst);
+        expect(func.instructions).to.eql([inst]);
+        expect(func.scope).to.eql([{}]);
     });
 });

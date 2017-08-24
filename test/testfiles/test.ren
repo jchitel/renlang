@@ -5,3 +5,5 @@ func int getOne() => One
 func int getMyFuncOne() => myFunc(getOne())
 
 type mySpecialType = myType | char
+
+func int main(string[] args) => getMyFuncOne() - 1

@@ -138,7 +138,7 @@ export class ForStatement extends Statement {
     }
 
     /**
-     * These are probably the most complex node, because they abstract a lot of runtime constructs.
+     * This is probably the most complex node, because it abstracts a lot of runtime constructs.
      * Effectively we convert the loop to a classical for loop, because all of the iterables will just be arrays.
      */
     translate(translator, func) {
@@ -285,7 +285,7 @@ export class TryCatchStatement extends Statement {
         // iterate each catch
         for (const { param, body } of this.catches) {
             // save the instruction number to the try frame
-            tryFrame.catches.push({ ic: func.nextInstrNum(), type: param.type });
+            tryFrame.catches.push({ ic: func.nextInstrNum(), type: param.type.type });
             // add the catch parameter to the scope
             func.pushScope(new PushScopeFrame());
             const errRef = func.addRefInstruction(translator, ref => new ErrorRef(ref));

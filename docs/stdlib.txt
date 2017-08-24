@@ -1,0 +1,61 @@
+
+Ok, so now that we have a working translator step, the next step is the interpreter.
+But it's kinda hard to test a lot of that without a standard library.
+So now it's time to work on that.
+
+Here are the high level components that need to be included:
+- implementations of built-in type operations:
+  - arrays:
+    - setting index values (REQUIRES ARRAY SET STATEMENT)
+    - creating dynamically sized arrays (REQUIRES GENERICS)
+    - other common operations (pretty much all of which REQUIRE GENERICS)
+  - structs:
+    - setting values (REQUIRES FIELD SET STATEMENT)
+    - other common operations (copy, etc.)
+  - tuples:
+    - extracting values (REQUIRES OVERLOADS or DESTRUCTURING)
+- simple operations
+  - truthy (true if the value satisfies truthy rules, false otherwise)
+    - a value is truthy if it does not represent nothing, i.e. a non-empty array, tuple, or struct, and any number/char that is not 0 or NaN, the true value
+  - chr (return the character represented by a number)
+  - flt (convert a value to a floating point value)
+- functional/transformer operations (REQUIRES GENERICS)
+  - map
+  - filter
+  - reduce
+  - flatMap
+  - all/any (true if all/any elements satisfy the predicate)
+- streams (REQUIRES GENERICS)
+- starting new processes
+- invoking CLI commands
+- IO
+  - File IO (abstractions for files)
+  - CLI IO (abstractions for CLI)
+    - format
+    - print
+    - input
+    - readChar
+  - Network IO (abstractions for network)
+- errors/exceptions
+- event-based programming
+  - runtime setup of JS event queue
+  - task/wait functionality
+- File system
+  - path manipulation
+- Web
+  - HTTP abstractions
+  - API library
+- OS
+  - OS resolution
+  - low-level operation access
+- Math
+  - abs
+  - complex (creates a complex number struct)
+  - divmod (does division and modulo at the same time, returning a tuple of both values)
+  - floor/ceil
+- Data structures (REQUIRES GENERICS)
+  - maps
+  - lists
+  - sets
+- logging
+- regex

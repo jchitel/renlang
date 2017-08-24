@@ -263,6 +263,18 @@ export class SetStructRef extends Instruction {
     }
 }
 
+export class SetFunctionRef extends Instruction {
+    constructor(ref, functionId) {
+        super();
+        this.ref = ref;
+        this.functionId = functionId;
+    }
+
+    execute(interp) {
+        // TODO
+    }
+}
+
 /**
  * Sets the value of a reference to the value of the function parameter at the specified index.
  */
@@ -450,6 +462,21 @@ export class ReferenceMutate extends Instruction {
     }
 }
 
+/**
+ * Copies one reference value into another reference.
+ */
+export class CopyRef extends Instruction {
+    constructor(srcRef, destRef) {
+        super();
+        this.srcRef = srcRef;
+        this.destRef = destRef;
+    }
+
+    execute(interp) {
+        interp.references[this.destRef] = interp.references[this.srcRef];
+    }
+}
+
 // /////////////////////
 // SCOPE INSTRUCTIONS //
 // /////////////////////
@@ -503,8 +530,10 @@ export class PopFrame extends Instruction {
  * provide semantics for break and continue statements.
  */
 export class PushLoopFrame extends Instruction {
-    constructor() {
+    constructor(start, end) {
         super();
+        this.start = start;
+        this.end = end;
     }
 
     execute(interp) {

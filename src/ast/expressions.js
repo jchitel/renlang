@@ -20,6 +20,7 @@ import {
     FunctionCallRef,
     FieldAccessRef,
     ArrayAccessRef,
+    CopyRef,
 } from '../runtime/instructions';
 
 
@@ -223,7 +224,7 @@ export class IdentifierExpression extends Expression {
         // check to see if the name matches a variable in the current scope
         if (func.getFromScope(this.name) !== undefined) return func.getFromScope(this.name);
         // otherwise we need the translator to resolve a module-scope reference
-        return func.addRefInstruction(translator, ref => translator.referenceIdentifier(ref, this.name));
+        return func.addRefInstruction(translator, ref => translator.referenceIdentifier(ref, this.name, func.moduleId));
     }
 }
 
@@ -524,14 +525,23 @@ export class IfElseExpression extends Expression {
     }
 
     translate(translator, func) {
+        // get new reference id for result of expression
+        const ref = translator.newReference();
+        // if condition
         const conditionRef = this.condition.translate(translator, func);
         const branch = func.addInstruction(new FalseBranch(conditionRef));
-        this.consequent.translate(translator, func);
+        // evaluate consequent, copy into result, jump
+        const csqRef = this.consequent.translate(translator, func);
+        func.addInstruction(new CopyRef(csqRef, ref));
         const jump = func.addInstruction(new Jump());
+        // evaluate alternate, copy into result
         branch.target = func.nextInstrNum();
-        this.alternate.translate(translator, func);
+        const altRef = this.alternate.translate(translator, func);
+        func.addInstruction(new CopyRef(altRef, ref));
         jump.target = func.nextInstrNum();
         func.addInstruction(new Noop());
+        // return result reference
+        return ref;
     }
 }
 
@@ -560,7 +570,6 @@ export class VarDeclaration extends Expression {
     translate(translator, func) {
         const initRef = this.initExp.translate(translator, func);
         func.addToScope(this.name, initRef, new AddToScope(this.name, initRef));
-        func.scope[this.name] = initRef;
         return initRef;
     }
 }

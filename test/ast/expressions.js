@@ -44,10 +44,17 @@ function getDummyFunc(scope = {}, fields = {}) {
         instrs: [],
         scope,
         ...fields,
-        addInstruction: i => fn.instrs.push(i),
+        addInstruction: i => {
+            fn.instrs.push(i);
+            return i;
+        },
         addRefInstruction: (tr, cb) => {
             fn.instrs.push(cb(fn.inum));
             return fn.inum++;
+        },
+        addToScope: (name, ref, i) => {
+            fn.scope[name] = ref;
+            return fn.addInstruction(i);
         },
         getFromScope: name => fn.scope[name],
         nextInstrNum: () => fn.instrs.length,
@@ -56,10 +63,13 @@ function getDummyFunc(scope = {}, fields = {}) {
 }
 
 function getDummyTranslator() {
-    return {
+    const tr = {
+        refId: 0,
         referenceIdentifier: (ref, name) => ({ ref, name }),
         lambda: (fn, ref) => ({ fn, ref }),
+        newReference: () => tr.refId++,
     };
+    return tr;
 }
 
 describe('Expression Nodes', () => {
@@ -874,7 +884,21 @@ describe('Expression Nodes', () => {
         });
 
         it('should translate if expression', () => {
-            // TODO: need to save result to reference
+            const exp = new exps.IfElseExpression({
+                condition: getUntranslatedNode(1),
+                consequent: getUntranslatedNode(2),
+                alternate: getUntranslatedNode(3),
+            });
+            const fn = getDummyFunc({}, { inum: 4 });
+            const tr = getDummyTranslator();
+            expect(exp.translate(tr, fn)).to.eql(0);
+            expect(fn.instrs).to.eql([
+                new inst.FalseBranch(1, 3), // condition (ref 1) branch to alternate (inum 3)
+                new inst.CopyRef(2, 0),     // copy consequent (ref 2) to result (ref 0)
+                new inst.Jump(4),           // jump to after alternate (inum 4)
+                new inst.CopyRef(3, 0),     // copy alternate (ref 3) to result (ref 0)
+                new inst.Noop(),            // noop target for post-consequent jump
+            ]);
         });
     });
 
@@ -919,6 +943,17 @@ describe('Expression Nodes', () => {
             tc = getDummyTypeChecker(new TBool());
             expect(varDecl.resolveType(tc, { path: '/index.ren' }, {})).to.eql(int);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myVar" is already declared [/index.ren:1:1]']);
+        });
+
+        it('should translate VarDeclaration', () => {
+            const exp = new exps.VarDeclaration({
+                name: 'myVar',
+                initExp: getUntranslatedNode(2),
+            });
+            const fn = getDummyFunc();
+            expect(exp.translate({}, fn)).to.eql(2);
+            expect(fn.instrs).to.eql([new inst.AddToScope('myVar', 2)]);
+            expect(fn.scope).to.eql({ myVar: 2 });
         });
     });
 
@@ -995,6 +1030,16 @@ describe('Expression Nodes', () => {
             expect(tc.errors).to.eql([]);
             expect(lambda.type).to.eql(paramType);
         });
+
+        it('should translate function application', () => {
+            const exp = new exps.FunctionApplication({
+                target: getUntranslatedNode(0),
+                paramValues: [getUntranslatedNode(1), getUntranslatedNode(2)],
+            });
+            const fn = getDummyFunc({}, { inum: 3 });
+            expect(exp.translate({}, fn)).to.eql(3);
+            expect(fn.instrs).to.eql([new inst.FunctionCallRef(3, 0, [1, 2])]);
+        });
     });
 
     describe('FieldAccess', () => {
@@ -1048,6 +1093,16 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker();
             expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
             expect(tc.errors.map(e => e.message)).to.eql(['Value "feild" is not defined [/index.ren:1:1]']);
+        });
+
+        it('should translate field access', () => {
+            const exp = new exps.FieldAccess({
+                target: getUntranslatedNode(0),
+                field: 'myField',
+            });
+            const fn = getDummyFunc({}, { inum: 1 });
+            expect(exp.translate({}, fn)).to.eql(1);
+            expect(fn.instrs).to.eql([new inst.FieldAccessRef(1, 0, 'myField')]);
         });
     });
 
@@ -1107,6 +1162,16 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker();
             expect(acc.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
             expect(tc.errors.map(e => e.message)).to.eql(['Type "char" is not assignable to type "integer" [/index.ren:1:1]']);
+        });
+
+        it('should translate array access', () => {
+            const exp = new exps.ArrayAccess({
+                target: getUntranslatedNode(0),
+                indexExp: getUntranslatedNode(1),
+            });
+            const fn = getDummyFunc({}, { inum: 2 });
+            expect(exp.translate({}, fn)).to.eql(2);
+            expect(fn.instrs).to.eql([new inst.ArrayAccessRef(2, 0, 1)]);
         });
     });
 });
