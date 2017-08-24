@@ -1,0 +1,21 @@
+OVERLOADS
+
+NEW SYNTACTIC FEATURES:
+
+- None
+
+NEW SEMANTIC FEATURES:
+
+- Functions can have the same name, so long as the return types are the same
+- Functions will now be stored with a unique id, and a lookup table will point names to lists of ids
+- Anytime a function is used, its name is used to look up the list of overloads, and the arguments are used to determine the correct id, if applicable
+- The most specific argument types are attempted first, in argument order
+- If no assignable function with the right number of arguments is found, it's an error
+- Function references are stored by id for the next step
+- Exported functions will store the list of exported ids
+- Imported functions will import that list
+
+TRANSFORMATION:
+
+- The typechecking step stores the correct function id in the module for lookup
+- Nothing else in the process needs to change

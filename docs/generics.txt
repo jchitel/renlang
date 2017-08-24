@@ -1,0 +1,61 @@
+GENERICS
+
+- Any type or function can be generic, meaning that it has at least one type parameter.
+- Type parameters are declared between triangle brackets:
+  - Types: `type MyType<{params}>` or `class MyClass<{params}>`
+  - Functions: `func {type} myFunc<{Tparams}>({params}) => {body}`
+- Type parameters, like regular parameters, add their names to their scope.
+- Generic types can use their type parameters in their type definitions.
+- Generic classes can use their type parameters in any of their field types, function signatures, and logic.
+- Generic functions can use their type parameters in their signatures and logic.
+- When using generic types, the type parameters must be specified.
+- When using generic functions, the type parameters are omitted because they can be inferred.
+- Function return types can only use type parameters if the parameters use them as well, as the type cannot be inferred otherwise.
+- Any time a generic is used, a copy is *not* created, but that particular instance of usage has the type parameter filled with whatever type is used.
+- Generics allow for extremely complex type logic, for example a type can use itself as a type parameter in the type of a containing element.
+- There is also the concept of covariance (+), contravariance (-), and invariance (default):
+  - If a generic type has a covariant type parameter, then assignability between two instances of the type follows the same assignability rules as the type arguments.
+    - Ex: a read-only list or a function return type, any read-only value
+  - If a generic type has a contravariant type parameter, then assignability between two instances follows the opposite rules as the arguments.
+    - Ex: a write-only value or a function parameter type, any write-only value
+  - If a generic type has an invariant type parameter (default), then the only type assignable to an instance is the same instance.
+    - Ex: a read-write list or array, any read-write value
+- Constraints can also be specified on the type parameters:
+  - The type must be assignable to a specific type (T to {type})
+  - The type must be assignable from a specific type (T from {type})
+
+NEW SYNTACTIC FEATURES:
+
+New Tokens:
+-----------
+ASS_FROM ::= -:
+
+New NonTerminals:
+-----------------
+TypeParamList ::= LT TypeParam (COMMA TypeParam)* GT
+TypeParam ::= VarianceOp? IDENT (TypeParamConstraint Type)?
+TypeParamConstraint ::= COLON | ASS_FROM
+VarianceOp ::= PLUS | MINUS
+TypeArgList ::= LT Type (COMMA Type)* GT
+
+Extended NonTerminals:
+----------------------
+TypeDeclaration ::= TYPE IDENT TypeParamList? EQUALS Type
+Type ::= IDENT TypeArgList?
+FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW (Expression | Block)
+
+NEW SEMANTIC FEATURES:
+
+- Types and functions can now have type parameters, which impact type checking for them
+- Anytime a generic function is used, the generic arguments are inferred from the parameters of the function
+- If a return type uses a type parameter, the type for each instance is inferred
+- Each invocation of a generic function has a resolved type that will not be generic
+- Usages of generic types require explicit type arguments
+- Each usage of a generic type has a resolved generic type
+- Any usage of a type parameter has to be checked against type parameter constraints, as well as type arguments against the constraints
+- Assignability between generic types depends on the variance of the type parameters
+
+TRANSFORMATION:
+
+- Generic information is preserved at runtime, but it is for the most part not used
+- No instructions require generic information, it is only exposed with calls to reflection APIs

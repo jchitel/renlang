@@ -1,0 +1,27 @@
+INTERFACES
+
+NEW SYNTACTIC FEATURES:
+
+New Tokens:
+-----------
+INTERFACE ::= interface
+
+New NonTerminals:
+-----------------
+InterfaceDeclaration ::= INTERFACE IDENT TypeParamList? LBRACE InterfaceMember* RBRACE
+InterfaceMember ::= (Type IDENT) | (Type IDENT TypeParamList? ParameterList)
+
+Extended NonTerminals:
+----------------------
+Program ::= ImportDeclaration* (FunctionDeclaration | TypeDeclaration | InterfaceDeclaration | ExportDeclaration)*
+ExportDeclaration ::= EXPORT DEFAULT InterfaceDeclaration
+                    | EXPORT InterfaceDeclaration
+
+NEW SEMANTIC FEATURES:
+
+- Interfaces are a new kind of type associated with a name, closely related to structs
+- Any type with a matching field/method structure is assignable to the interface
+
+TRANSFORMATION:
+
+- Being types, interfaces are not used during the transformation stage
