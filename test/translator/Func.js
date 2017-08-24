@@ -13,7 +13,7 @@ describe('Func', () => {
         expect(func.ast).to.eql({});
         expect(func.moduleId).to.eql(0);
         expect(func.instructions).to.eql([]);
-        expect(func.scope).to.eql({});
+        expect(func.scope).to.eql([{}]);
     });
 
     it('should translate expression body', () => {

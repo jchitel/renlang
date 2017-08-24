@@ -223,7 +223,7 @@ export class IdentifierExpression extends Expression {
         // check to see if the name matches a variable in the current scope
         if (func.getFromScope(this.name) !== undefined) return func.getFromScope(this.name);
         // otherwise we need the translator to resolve a module-scope reference
-        return func.addInstruction(ref => translator.referenceIdentifier(ref, this.name));
+        return func.addRefInstruction(translator, ref => translator.referenceIdentifier(ref, this.name));
     }
 }
 
@@ -406,7 +406,7 @@ export class UnaryExpression extends Expression {
 
     translate(translator, func) {
         const targetRef = this.target.translate(translator, func);
-        return func.addRefInstruction(translator, ref => new UnaryOperatorRef(ref, this.oper, targetRef));
+        return func.addRefInstruction(translator, ref => new UnaryOperatorRef(ref, this.oper, targetRef, this.prefix));
     }
 }
 

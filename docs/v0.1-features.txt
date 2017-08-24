@@ -1,41 +1,68 @@
+So, even 3 files in v0 was enough to realize that we need more features.
+
+We will call this v0.1.
+
+I can identify 5 that are pretty much a necessity:
+- Interfaces
+  - Structural type with method signatures
+- Extensions
+  - Type operator that adds methods to types
+- Classes
+  - Nominal structured type with methods, inheritance, and encapsulation
+- Generic types
+  - Types with type parameters
+- Function overloads
+  - Functions with the same name and different parameter types
+
+Classes
+
+Ren classes will be inspired by C# and TypeScript.
+They are declarable wherever types can be declared, and used wherever types are used.
+Classes can contain one or more constructors, which are functions that receive parameters and an implicit `this` variable, and must return an instance of the class (it can be different from `this`).
+They can contain fields, which mirror the syntax of struct type fields, and can also contain an initializer.
+They can contain methods, with the syntax `<type> <name>(<...params>) => <body>`. This will need ambiguity resolution logic with fields.
+Classes can contain properties, with the syntax `<type> <name> { get => <body> set => <body with value> }`. Either get or set are optional.
+Shorthand properties are of the form `<type> <name> { get set }` where set is optional, in which case an initializer is required: `<type> <name> { get } = <value>` or in the constructor(s).
+Classes can inherit from other classes using the extends keyword, and implement interfaces using the implements keyword.
+Classes labelled sealed cannot be overridden.
+Any member of a class can be private, meaning that it is only accessible from inside the class. Class members are private by default.
+Any member of a class can be protected, meaning that it is only accessible from the class and subclasses.
+Any member of a class can be public, meaning that it is accessible anywhere the class is imported.
+Methods and properties can be abstract, in which case the class must be abstract. Abstract members may omit bodies, but any non-abstract child class must implement them.
+- For abstract members with bodies, child classes can implement them using the super keyword
+Methods and properties can be virtual, allowing subclasses to override them.
+Any class wishing to override a member must use the override keyword.
+Methods and properties not labelled virtual cannot be overridden.
+Static members are *not* a thing in this language because there are far simpler alternatives.
+Assignability with classes:
+- Any value is assignable to a class type if its type is the class or one of the classes child types.
+- Because of this, it is possible for the runtime type of an instance to be more specific than its compile time type.
+- This is contrary to primitive values, which will be coerced to the compile time type.
+- The is operator and getType() method are required to inspect the runtime type of an instance.
+- An important thing that differentiates classes from other types is that classes are not structural types. Assignability is determined nominally, and the structure does not matter.
+  - An interesting thing here is that class instances *are* assignable to struct types if the fields match, but *not* the other way around.
+Using classes:
+- Classes are instantiated using the new keyword followed by the class name and a set of arguments that match one of the constructors.
+- This is an expression that returns an instance of the class corresponding to the chosen constructor.
+- Methods and properties can access class members using the special `this` value, which always points to the current instance of the class.
+- If `this` is omitted, class members are last in the precedence order for resolving ambiguities, thus the order is:
+  - scope variables (recursively upwards to the top scope of the function)
+  - module-scoped names
+  - class members
+- `super` is a special form of `this` that allows access to ancestors' members.
+- `super()` in a constructor allows parent constructors to be called. `super` must be called at some point during any child constructor.
+
+Interfaces
+
+Interfaces are another sort of type, which can be assignable from any sort of type as long as the structure matches.
+They are already sort of possible by declaring type aliases, but interfaces go further.
+Classes can explicitly implement interfaces, which adds a step to type checking.
+Any type that structurally matches the interface (by the same rules as structs) can be assignable to it.
+Interfaces can contain methods as well, so they can be restricted to any value that declares those methods, either a class or an extension type.
+Interfaces contain no logic, have no public/private or inheritance modifiers. They only contain fields and/or method signatures and/or properties.
+When interfaces apply to classes, they must only apply to the public interface of the class, private/protected members are ignored.
 
 - Not being able to instantiate classes is pretty annoying.
-  - We may need to add classes, too much of the existing logic depends on it.
-  - Classes are inspired by C# and TypeScript.
-  - Classes are declarable wherever types can be declared, and used wherever types are used.
-  - Classes can contain a constructor(s), which is a function that receives parameters and an implicit `this` variable, and must return an instance of the class (it can be different from `this`).
-  - Classes can contain fields, which mirror the syntax of struct type fields, and can also contain an initializer
-  - Classes can contain methods, with the syntax `<type> <name>(<...params>) => <body>`. This will need ambiguity resolution logic with fields.
-  - Classes can contain properties, with the syntax `<type> <name> { get => <body> set => <body with value> }`. Either get or set are optional.
-    - Shorthand properties are of the form `<type> <name> { get set }` where set is optional, in which case an initializer is required: `<type> <name> { get } = <value>` or in the constructor(s).
-  - Classes can inherit from other classes using the extends keyword, and implement interfaces using the implements keyword.
-  - Classes labelled sealed cannot be overridden.
-  - Any member of a class can be private, meaning that it is only accessible from inside the class. Class members are private by default.
-  - Any member of a class can be protected, meaning that it is only accessible from the class and subclasses.
-  - Any member of a class can be public, meaning that it is accessible anywhere the class is imported.
-  - Methods and properties can be abstract, in which case the class must be abstract. Abstract members may omit bodies, but any non-abstract child class must implement them.
-    - For abstract members with bodies, child classes can implement them using the super keyword
-  - Methods and properties can be virtual, allowing subclasses to override them.
-  - Any class wishing to override a member must use the override keyword.
-  - Methods and properties not labelled virtual cannot be overridden.
-  - Static members are *not* a thing in this language because there are far simpler alternatives.
-  - Assignability with classes:
-    - Any value is assignable to a class type if its type is the class or one of the classes child types.
-    - Because of this, it is possible for the runtime type of an instance to be more specific than its compile time type.
-    - This is contrary to primitive values, which will be coerced to the compile time type.
-    - The is operator and getType() method are required to inspect the runtime type of an instance.
-    - An important thing that differentiates classes from other types is that classes are not structural types. Assignability is determined nominally, and the structure does not matter.
-      - An interesting thing here is that class instances *are* assignable to struct types if the fields match, but *not* the other way around.
-  - Using classes:
-    - Classes are instantiated using the new keyword followed by the class name and a set of arguments that match one of the constructors.
-    - This is an expression that returns an instance of the class corresponding to the chosen constructor.
-    - Methods and properties can access class members using the special `this` value, which always points to the current instance of the class.
-    - If `this` is omitted, class members are last in the precedence order for resolving ambiguities, thus the order is:
-      - scope variables (recursively upwards to the top scope of the function)
-      - module-scoped names
-      - class members
-    - `super` is a special form of `this` that allows access to ancestors' members.
-    - `super()` in a constructor allows parent constructors to be called. `super` must be called at some point during any child constructor.
 - Arrays, being a type that has a type parameter, are going to prove problematic when doing generic array operations.
   - We may need generic types and type parameters.
   - Any type or function can be generic, meaning that it has at least one type parameter.
@@ -80,11 +107,3 @@
     - For example, say we have a library that uses int extension methods (intext), and we declare an API function that uses intext, but we don't want intext to be accessible to end users.
     - A documentation generator will analyze and see that the exported function uses an unexported type, and will resolve that type down to components that are accessible to the user, in this case just "int".
   - It is not recommended to add extenstions to structs, because that is getting too close to classes, but it is definitely possible.
-- Interfaces
-  - Interfaces are another sort of type, which can be assignable from any sort of type as long as the structure matches.
-  - Interfaces are already sort of possible by declaring type aliases, but interfaces go further.
-  - Classes can explicitly implement interfaces, which adds a step to type checking.
-  - Any type that structurally matches the interface (by the same rules as structs) can be assignable to it.
-  - Interfaces can contain methods as well, so they can be restricted to any value that declares those methods, either a class or an extension type.
-  - Interfaces contain no logic, have no public/private or inheritance modifiers. They only contain fields and/or method signatures and/or properties.
-  - When interfaces apply to classes, they must only apply to the public interface of the class, private/protected members are ignored.

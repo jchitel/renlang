@@ -4,6 +4,7 @@ import * as exps from '../../src/ast/expressions';
 import { Token } from '../../src/parser/Tokenizer';
 import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnknown, TAny } from '../../src/typecheck/types';
 import { operator, Operator } from '../../src/runtime/operators';
+import * as inst from '../../src/runtime/instructions';
 
 
 const int = new TInteger(32, true);
@@ -30,14 +31,35 @@ function getDummyTypeChecker(type) {
     };
 }
 
-function extractNonFunctions(obj) {
-    const clone = Object.create(Object.getPrototypeOf(obj));
-    for (const [k, v] of Object.entries(obj)) {
-        if (typeof v === 'function') continue;
-        if (typeof v !== 'object' || v === null) clone[k] = v;
-        else clone[k] = extractNonFunctions(v);
-    }
-    return clone;
+function getUntranslatedNode(ref, fields = {}) {
+    return {
+        ...fields,
+        translate: () => ref,
+    };
+}
+
+function getDummyFunc(scope = {}, fields = {}) {
+    const fn = {
+        inum: 0,
+        instrs: [],
+        scope,
+        ...fields,
+        addInstruction: i => fn.instrs.push(i),
+        addRefInstruction: (tr, cb) => {
+            fn.instrs.push(cb(fn.inum));
+            return fn.inum++;
+        },
+        getFromScope: name => fn.scope[name],
+        nextInstrNum: () => fn.instrs.length,
+    };
+    return fn;
+}
+
+function getDummyTranslator() {
+    return {
+        referenceIdentifier: (ref, name) => ({ ref, name }),
+        lambda: (fn, ref) => ({ fn, ref }),
+    };
 }
 
 describe('Expression Nodes', () => {
@@ -180,6 +202,13 @@ describe('Expression Nodes', () => {
         it('should resolve the type of a parenthesized expression', () => {
             expect(new exps.Expression({ parenthesized: getDummyReducedNode(int) }).resolveType({}, {}, {})).to.eql(int);
         });
+
+        it('should translate inner expression', () => {
+            const exp = new exps.Expression({
+                parenthesized: getUntranslatedNode(2),
+            });
+            expect(exp.translate({}, {})).to.eql(2);
+        });
     });
 
     describe('IntegerLiteral', () => {
@@ -196,11 +225,27 @@ describe('Expression Nodes', () => {
             expect(new exps.IntegerLiteral(100000000).resolveType()).to.eql(new TInteger(32, false));
             expect(new exps.IntegerLiteral(100000000000).resolveType()).to.eql(new TInteger(64, false));
         });
+
+        it('should translate to a SetIntegerRef', () => {
+            const exp = new exps.IntegerLiteral(5);
+            const fn = getDummyFunc();
+            const ref = exp.translate({}, fn);
+            expect(ref).to.eql(0);
+            expect(fn.instrs).to.eql([new inst.SetIntegerRef(0, 5)]);
+        });
     });
 
     describe('FloatLiteral', () => {
         it('should estimate type of float literals', () => {
             expect(new exps.FloatLiteral(1.2).resolveType()).to.eql(new TFloat(64));
+        });
+
+        it('should translate to a SetFloatRef', () => {
+            const exp = new exps.FloatLiteral(5.2);
+            const fn = getDummyFunc();
+            const ref = exp.translate({}, fn);
+            expect(ref).to.eql(0);
+            expect(fn.instrs).to.eql([new inst.SetFloatRef(0, 5.2)]);
         });
     });
 
@@ -208,17 +253,41 @@ describe('Expression Nodes', () => {
         it('should resolve type of char literals', () => {
             expect(new exps.CharLiteral('a').resolveType()).to.eql(new TChar());
         });
+
+        it('should translate to a SetCharRef', () => {
+            const exp = new exps.CharLiteral('a');
+            const fn = getDummyFunc();
+            const ref = exp.translate({}, fn);
+            expect(ref).to.eql(0);
+            expect(fn.instrs).to.eql([new inst.SetCharRef(0, 'a')]);
+        });
     });
 
     describe('StringLiteral', () => {
         it('should resolve type of string literals', () => {
             expect(new exps.StringLiteral('abc').resolveType()).to.eql(new TArray(new TChar()));
         });
+
+        it('should translate to a SetFloatRef', () => {
+            const exp = new exps.StringLiteral('abc');
+            const fn = getDummyFunc();
+            const ref = exp.translate({}, fn);
+            expect(ref).to.eql(0);
+            expect(fn.instrs).to.eql([new inst.SetArrayRef(0, 'abc')]);
+        });
     });
 
     describe('BoolLiteral', () => {
         it('should resolve type of bool literals', () => {
             expect(new exps.BoolLiteral('true').resolveType()).to.eql(new TBool());
+        });
+
+        it('should translate to a SetBoolRef', () => {
+            const exp = new exps.BoolLiteral('true');
+            const fn = getDummyFunc();
+            const ref = exp.translate({}, fn);
+            expect(ref).to.eql(0);
+            expect(fn.instrs).to.eql([new inst.SetBoolRef(0, true)]);
         });
     });
 
@@ -237,6 +306,20 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker(undefined);
             expect(new exps.IdentifierExpression('myIdent', loc).resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
             expect(tc.errors.map(e => e.message)).to.eql(['Value "myIdent" is not defined [/index.ren:1:1]']);
+        });
+
+        it('should translate to scope ref', () => {
+            const exp = new exps.IdentifierExpression('myVar');
+            const fn = getDummyFunc({ myVar: 5 });
+            expect(exp.translate({}, fn)).to.eql(5);
+        });
+
+        it('should translate to module scope ref', () => {
+            const exp = new exps.IdentifierExpression('myVar');
+            const fn = getDummyFunc();
+            const tr = getDummyTranslator();
+            expect(exp.translate(tr, fn)).to.eql(0);
+            expect(fn.instrs).to.eql([{ ref: 0, name: 'myVar' }]);
         });
     });
 
@@ -263,6 +346,15 @@ describe('Expression Nodes', () => {
         it('should resolve type of empty array', () => {
             expect(new exps.ArrayLiteral({ items: [] }).resolveType({}, {}, {})).to.eql(new TArray(new TAny()));
         });
+
+        it('should translate to SetArrayRef', () => {
+            const exp = new exps.ArrayLiteral({
+                items: [getUntranslatedNode(0), getUntranslatedNode(1)],
+            });
+            const fn = getDummyFunc({}, { inum: 2 });
+            expect(exp.translate({}, fn)).to.eql(2);
+            expect(fn.instrs).to.eql([new inst.SetArrayRef(2, [0, 1])]);
+        });
     });
 
     describe('TupleLiteral', () => {
@@ -281,6 +373,15 @@ describe('Expression Nodes', () => {
         it('should resolve type of tuple literal', () => {
             const tuple = new exps.TupleLiteral({ items: [getDummyReducedNode(int), getDummyReducedNode(new TChar())] });
             expect(tuple.resolveType({}, {}, {})).to.eql(new TTuple([int, new TChar()]));
+        });
+
+        it('should translate to SetTupleRef', () => {
+            const exp = new exps.TupleLiteral({
+                items: [getUntranslatedNode(0), getUntranslatedNode(1)],
+            });
+            const fn = getDummyFunc({}, { inum: 2 });
+            expect(exp.translate({}, fn)).to.eql(2);
+            expect(fn.instrs).to.eql([new inst.SetTupleRef(2, [0, 1])]);
         });
     });
 
@@ -307,6 +408,18 @@ describe('Expression Nodes', () => {
                 entries: [{ key: 'field1', value: getDummyReducedNode(int) }, { key: 'field2', value: getDummyReducedNode(new TChar()) }],
             });
             expect(struct.resolveType({}, {}, {})).to.eql(new TStruct({ field1: int, field2: new TChar() }));
+        });
+
+        it('should translate to SetStructRef', () => {
+            const exp = new exps.StructLiteral({
+                entries: [
+                    { key: 'keyA', value: getUntranslatedNode(0) },
+                    { key: 'keyB', value: getUntranslatedNode(1) },
+                ],
+            });
+            const fn = getDummyFunc({}, { inum: 2 });
+            expect(exp.translate({}, fn)).to.eql(2);
+            expect(fn.instrs).to.eql([new inst.SetStructRef(2, { keyA: 0, keyB: 1 })]);
         });
     });
 
@@ -383,6 +496,14 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker();
             lambda.completeResolution(tc, { path: '/index.ren' });
             expect(tc.errors.map(e => e.message)).to.eql(['Type "signed 32-bit integer" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
+
+        it('should translate to lambda instruction', () => {
+            const exp = new exps.LambdaExpression({});
+            const fn = getDummyFunc();
+            const tr = getDummyTranslator();
+            expect(exp.translate(tr, fn)).to.eql(0);
+            expect(fn.instrs).to.eql([{ fn: exp, ref: 0 }]);
         });
     });
 
@@ -461,6 +582,17 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker();
             expect(op.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
             expect(tc.errors.map(e => e.message)).to.eql(['Operator "-" does not operate on type "bool" [/index.ren:1:1]']);
+        });
+
+        it('should translate to UnaryOperatorRef', () => {
+            const exp = new exps.UnaryExpression({
+                prefix: true,
+                oper: '+',
+                target: getUntranslatedNode(0),
+            });
+            const fn = getDummyFunc({}, { inum: 1 });
+            expect(exp.translate({}, fn)).to.eq(1);
+            expect(fn.instrs).to.eql([new inst.UnaryOperatorRef(1, '+', 0, true)]);
         });
     });
 
@@ -692,6 +824,17 @@ describe('Expression Nodes', () => {
                 }, false));
             });
         });
+
+        it('should translate to BinaryOperatorRef', () => {
+            const exp = new exps.BinaryExpression({
+                oper: '+',
+                left: getUntranslatedNode(0),
+                right: getUntranslatedNode(1),
+            });
+            const fn = getDummyFunc({}, { inum: 2 });
+            expect(exp.translate({}, fn)).to.eq(2);
+            expect(fn.instrs).to.eql([new inst.BinaryOperatorRef(2, 0, '+', 1)]);
+        });
     });
 
     describe('IfElseExpression', () => {
@@ -728,6 +871,10 @@ describe('Expression Nodes', () => {
             const tc = getDummyTypeChecker();
             expect(ifElse.resolveType(tc, { path: '/index.ren' }, {})).to.eql(int);
             expect(tc.errors.map(e => e.message)).to.eql(['Type "char" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
+
+        it('should translate if expression', () => {
+            // TODO: need to save result to reference
         });
     });
 
