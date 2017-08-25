@@ -229,14 +229,17 @@ export default class Parser {
     acceptTypeDeclaration(tok) {
         if (tok.type !== 'TYPE') return false;
         const typeNameToken = this.expectNextToken('IDENT', mess.INVALID_TYPE_NAME);
+        let typeParamList;
+        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.tokenizer.next().value);
         const equalsToken = this.expectNextToken('EQUALS', mess.TYPE_DECL_MISSING_EQUALS);
         const type = this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE);
         return new AST.TypeDeclaration({
             typeToken: tok,
             typeNameToken,
+            typeParamList,
             equalsToken,
             type,
-        }, [tok, typeNameToken, equalsToken, type]);
+        }, [tok, typeNameToken, typeParamList, equalsToken, type]);
     }
 
     /**

@@ -100,6 +100,7 @@ export default class Tokenizer {
         '=>': 'FAT_ARROW', // used to separate a function's parameter list from its body
         '`': 'BACKTICK',   // used to allow certain functions to be used akin to an operator, either prefix, postfix, or infix
         '.': 'DOT',        // used in field access expressions
+        '-:': 'ASS_FROM',
     };
 
     /**
