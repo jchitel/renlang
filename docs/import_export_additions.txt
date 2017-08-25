@@ -1,0 +1,93 @@
+IMPORT/EXPORT ADDITIONS (includes CLASSES and INTERFACES, but does not require them)
+
+DESCRIPTION:
+
+Exports are weird right now because they are sort of tacked on to declarations. They have their own scope for names, which sort of makes sense, but it can be done more intuitively.
+Also, as of now, exports are the only way to declare constants. It turned out that way because we wanted to be able to export expressions but had no way to declare non-exported expressions.
+We have an entire framework to support them, so we may as well just do it.
+
+So these are the import forms we need to support:
+- `import from "module": ImportName`:                                           import default
+- `import from "module": { {name}, {name} as {alias}, ... }`:                   import named (ADDING COLON FOR UNITY WITH OTHER FORMS)
+- `import from "module": { {name}, {name} as {alias}, ...{rest} }`:             import named and rest (NOT CURRENTLY SUPPORTED)
+- `import from "module": ImportName, { {name}, {name} as {alias}, ... }`:       import named and default (NOT CURRENTLY SUPPORTED)
+- `import from "module": * as {namespace}`:                                     wildcard import (NOT CURRENTLY SUPPORTED)
+- `import from "module": ImportName, * as {namespace}`:                         default and wildcard import (NOT CURRENTLY SUPPORTED)
+- `import from "module": ImportName, { {name}, {name} as {alias}, ...{rest} }`: default and rest import (NOT CURRENTLY SUPPORTED)
+And these are the export forms we need to support:
+- `export default {named declaration}`:        export default in place declaration
+- `export default {anon declaration}`:         export default anonymous declaration (NOT CURRENTLY SUPPORTED)
+- `export default {name}`:                     export default already declared declaration
+- `export {named declaration}`:                export declaration with declaration name (NOT CURRENTLY SUPPORTED)
+- `export {name} = {named declaration}`        export declaration with another name (CURRENTLY SUPPORTED, REMOVING)
+- `export {name} = {expression}`               export constant under name (CURRENTLY SUPPORTED, REMOVING)
+- `export { {name}, {name} as {alias}, ... }`: export already declared declaration(s) (PARTIALLY SUPPORTED, EXTENDING TO ALLOW MULTIPLE NAMES AND OPTIONAL ALIASING)
+And these are fusion import/export declarations (export forwarding):
+- `export from "module": ExportName`:                        Default from another -> Named from yours
+- `export default from "module"`:                            Default from another -> Default from yours
+- `export default from "module": { {name} }`:                 Named from another   -> Default from yours
+- `export from "module:" { {name}, {name} as {alias}, ... }`: Named from another   -> Named from yours
+- `export default from "module": *`:                         All from another     -> Default from yours (grouped under a namespace object)
+- `export from "module": * as {name}`:                       All from another     -> Named from yours (grouped under a namepsace object)
+- `export from "module": *`:                                 All from another     -> All from yours (ungrouped, just a 1:1 forward)
+
+With the above, all possible kinds of imports and exports should be supported.
+
+NEW SYNTACTIC FEATURES:
+
+New Tokens:
+-----------
+ELLIPSIS ::= ...
+
+Lexical analysis will be modified to treat all keywords as identifiers.
+That way keywords can be used as identifiers in places where they have no syntactic significance.
+
+New NonTerminals:
+-----------------
+Declaration ::= TypeDeclaration | FunctionDeclaration | ConstantDeclaration | InterfaceDeclaration | ClassDeclaration
+ConstantDeclaration ::= CONST IDENT EQUALS Expression
+AnonDeclaration ::= AnonTypeDeclaration | AnonFunctionDeclaration | Expression | AnonInterfaceDeclaration | AnonClassDeclaration
+AnonTypeDeclaration ::= TYPE EQUALS Type
+AnonFunctionDeclaration ::= FUNC Type TypeParamList? ParameterList FAT_ARROW (Expression | Block)
+AnonInterfaceDeclaration ::= INTERFACE TypeParamList? LBRACE InterfaceMember* RBRACE
+AnonClassDeclaration ::= (ABSTRACT | SEALED)? CLASS TypeParameterList? (EXTENDS Type)? (IMPLEMENTS (Type (COMMA Type)*))? LBRACE ClassMember* RBRACE
+ImportNames ::= IDENT
+              | NamedImports
+              | IDENT COMMA NamedImports
+              | MULTIPLY AS IDENT
+              | IDENT COMMA MULTIPLY AS IDENT
+NamedImports ::= LBRACE (IDENT | IDENT AS IDENT) (COMMA (IDENT | IDENT AS IDENT))* (COMMA ELLIPSIS IDENT)? RBRACE
+NamedExports ::= LBRACE (IDENT | IDENT AS IDENT) (COMMA (IDENT | IDENT AS IDENT))* RBRACE
+ExportForwards ::= ImportNames
+                 | MULTIPLY
+DefaultExportForwards ::= LBRACE IDENT RBRACE
+                        | MULTIPLY
+
+Extended NonTerminals:
+----------------------
+Program ::= ImportDeclaration* (Declaration | ExportDeclaration)*
+ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON ImportNames
+ExportDeclaration ::= EXPORT DEFAULT (Declaration | AnonDeclaration | IDENT)
+                    | EXPORT (Declaration | NamedExports)
+                    | EXPORT FROM STRING_LITERAL COLON ExportForwards
+                    | EXPORT DEFAULT FROM STRING_LITERAL (COLON DefaultExportForwards)?
+
+NEW SEMANTIC FEATURES:
+
+- All this basically boils down to the existing framework we have, except wildcards and rest imports, which I will address at the end
+- The new import types just add imports the same way they did before, the existing framework already supports it
+- Exports must always have a name. If there is a default export with a named declaration, the declaration is processed normally and the default export is set to that name.
+- Anonymous default exports are only exposed at typecheck time, not to the developer, under a special identifier for type checking.
+- Named exports with a separate name are no longer possible unless it is an already declared value, in which case there is an alias that points to the module scoped value.
+- All named exports are pointers to some other declaration. Export names still have their own scope.
+- Export forwarding is just sugar for an import combined with an export. The export names are just linked directly to the imported declarations.
+- Now for wildcards and rest imports.
+- Wildcard imports will take all exports of a module and group them on a namespace, which is a special sort of readonly struct.
+- The type of namespaces is not accessible from code, but it does have a type (this may change in the future).
+- Rest imports work the same way with namespaces, but they have to be more complex because they need to determine which exports haven't been explicitly imported.
+- If the default export is not explicitly imported, the wildcard will include the default export as a field.
+
+TRANSFORMATION:
+
+- Type checking resolves all exports to a common framework, so transformation will likely need no changes.
+- Namespace imports may require changes.

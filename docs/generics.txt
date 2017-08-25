@@ -43,6 +43,7 @@ Extended NonTerminals:
 TypeDeclaration ::= TYPE IDENT TypeParamList? EQUALS Type
 Type ::= IDENT TypeArgList?
 FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW (Expression | Block)
+FunctionApplication ::= Expression TypeArgList? LPAREN (Expression (COMMA Expression)*)? RPAREN
 
 NEW SEMANTIC FEATURES:
 

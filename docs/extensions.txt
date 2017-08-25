@@ -1,4 +1,4 @@
-EXTENSIONS
+EXTENSIONS (depends on GENERICS, OVERLOADS, INTERFACES)
 
 NEW SYNTACTIC FEATURES:
 
@@ -11,7 +11,7 @@ DOUBLE_COLON ::= ::
 New NonTerminals:
 -----------------
 MethodDeclaration ::= Type IDENT TypeParamList? ParameterList FAT_ARROW (Expression | Statement)
-MethodInvoation ::= Expression DOT IDENT LPAREN (Expression (COMMA Expression)*)? RPAREN
+MethodInvoation ::= Expression DOT IDENT TypeArgList? LPAREN (Expression (COMMA Expression)*)? RPAREN
 MethodReference ::= Expression DOUBLE_COLON IDENT
 
 Extended NonTerminals:
