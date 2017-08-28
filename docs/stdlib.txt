@@ -59,3 +59,29 @@ Here are the high level components that need to be included:
   - sets
 - logging
 - regex
+
+Here are specific APIs that we have discovered that are required during the process of translating the compiler code to Ren:
+- module "fs/io" (reading/writing files)
+  - TextStream readFile(string path) (reads a file at the specified path and returns a text stream for that file's contents)
+  - class TextStream (a lazy sequence of characters, useful as a buffer for reading text from a file or other IO text source)
+    - string toString() (reads all text from the stream and returns it in one string)
+- module "core/prelude" (core standard library, prelude declarations which are automatically included)
+  - type Array<T> (contains operations for arrays)
+    - Array<T> slice(int start) (returns a new array with the first (start) entries stripped)
+    - Array<T> slice(int start, int end) (returns a new array with the first (start) entries stripped, up to and not including the (end)-th entry)
+    - Array<T2> map<T2>((T) => T2 mapper) (returns a new array containing the result of calling mapper on each element in the original array)
+    - T max() (if this is an array of ordered values, returns the highest one, otherwise throws an error)
+    - int length { get } (property that provides the length of the array)
+    - void add(T elem) (adds an element to the end of an array)
+    - bool any() (returns true if the length of the array is greater than 0)
+  - Array<T> range<T : Ordered>(T start, T end) (given a start and end ordered value, return an array containing every value between the two values)
+  - Array<T> range<T : Ordered>(T end) (same as above, but with an implied 0 as the start)
+  - Array<T> range<T : Ordered>(T start, T end, int increment) (same as first overload, but with an incrementer)
+  - interface Iterable<T> (provides an iterator)
+    - Iterator<T> getIterator()
+  - interface Iterator<T> (provides an interface for iteration)
+    - { T next; bool done } next()
+  - type Maybe<T> (jerry-rigged optional type, we will need TRUE sum types for this to work correctly)
+    - type Some<T> { T value } (constructed via some(T))
+    - type None {} (constructed via nothing value)
+  - Error (base error class)

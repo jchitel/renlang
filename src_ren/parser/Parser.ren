@@ -1,39 +1,45 @@
-import from "./Tokenizer": newTokenizer
-import from "./Tokenizer" { Token }
-import from "./LookaheadIterator": newLookaheadIterator
-import from "./NewLineCheckIterator": newNewLineCheckIterator
-import from "../ast": AST
+import from "./Tokenizer": Tokenizer, { Token }
+import from "./LookaheadIterator": LookaheadIterator
+import from "./NewLineCheckIterator": NewLineCheckIterator
+import from "../ast": * as AST
 import from "../ast/ASTNode": ASTNode
-import from "./ParserError": newParserError
-import from "./ParserMessages": mess
+import from "./ParserError": ParserError
+import from "./ParserMessages": * as mess
 
+
+type Node = (ASTNode | Token)
+type ParserMessage = (string | ((Token) => string))
 
 /**
  * Given an arbitrary number of lists of nodes, interleave them, starting with the first item of the first list.
  * Continue filling the combined list with available items from each list until all lists are empty.
  */
-func (ASTNode | Token)[] interleave((ASTNode | Token)[][] lists) {
-    combined = newArray;
-    const max = Math.max(...lists.map(l => l.length));
-    for (let i = 0; i < max; ++i) {
-        for (const list of lists) if (list[i]) combined.push(list[i]);
+func Node[] interleave(Node[][] lists) => {
+    combined = []
+    const max = lists.map(l => l.length).max()
+    for (i in range(max)) {
+        for (list in lists) if (i < list.length) combined.add(list[i]) else ()
     }
-    return combined;
+    return combined
 }
 
 export default class Parser {
-    /**
-     * Top-level function.
-     * Given some source code string, parse it and return a syntax tree.
-     */
-    parse(source) {
+    private Iterator tokenizer
+
+    constructor(string source) => {
         // This is a triple-wrapped iterator:
         // 1. the tokenizer yields tokens one at a time
         // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
         // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
-        this.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
-        return this.acceptProgram();
+        this.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)))
+        return this
     }
+
+    /**
+     * Top-level function.
+     * Given some source code string, parse it and return a syntax tree.
+     */
+    AST.Program parse() => this.acceptProgram()
 
     // COMMON UTIL FUNCTIONS
 
@@ -41,40 +47,40 @@ export default class Parser {
      * Using the next token as a starting point, use the 'parseFunc' to attempt to parse a tree node
      * from the input. Throw 'message' if the parse fails.
      */
-    parseNextToken(parseFunc, message) {
-        const token = this.tokenizer.next().value;
-        const parsed = parseFunc(token);
-        if (!parsed && message) throw new ParserError(message, token.line, token.column);
-        return parsed;
+    Node parseNextToken((Token => Node) parseFunc, ParserMessage message) => {
+        token = this.tokenizer.next().value
+        parsed = parseFunc(token)
+        if (!parsed && message) throw new ParserError(message, token.line, token.column)
+        return parsed
     }
 
     /**
      * Get the next token, expecting it to be of type 'type',
      * throwing an error with message 'message' if it is not.
      */
-    expectNextToken(type, message) {
-        const token = this.tokenizer.next().value;
-        this.enforceTokenType(token, type, message);
-        return token.type === type ? token : false;
+    Maybe<Token> expectNextToken(string type, ParserMessage message) => {
+        token = this.tokenizer.next().value
+        this.enforceTokenType(token, type, message)
+        return if (token.type == type) some(token) else none;
     }
 
     /**
      * Check if the token is of the specified type,
      * throwing an error with the specified message if it is not.
      */
-    enforceTokenType(token, type, message) {
-        if (token.type !== type && message) {
-            const formatted = (typeof message === 'function') ? message(token) : message;
-            throw new ParserError(formatted, token.line, token.column);
-        }
+    void enforceTokenType(Token token, string type, Maybe<ParserMessage> message) => {
+        if (token.type != type && message != none) {
+            formatted = if (message is (T1) => T2) message(token) else message
+            throw new ParserError(formatted, token.line, token.column)
+        } else ()
     }
 
     /**
      * Check if the token has a new line after it,
      * throwing an error with the specified message if it is not.
      */
-    enforceNewLine(token, message) {
-        if (!token.hasNewLine) throw new ParserError(message, token.line, token.column + token.image.length - 1);
+    void enforceNewLine(Token token, string message) => {
+        if (!token.hasNewLine) throw new ParserError(message, token.line, token.column + token.image.length - 1)
     }
 
     // PARSER FUNCTIONS
@@ -84,32 +90,31 @@ export default class Parser {
      *
      * Program ::= ImportDeclaration* (FunctionDeclaration | TypeDeclaration | ExportDeclaration)* EOF
      */
-    acceptProgram() {
-        const imports = [], functions = [], types = [], exports = [], children = [];
-        for (const c of this.tokenizer) {
-            let node;
+    AST.Program acceptProgram() => {
+        imports = []; functions = []; types = []; exports = []; children = []
+        for (c in this.tokenizer) {
             if (node = this.acceptImportDeclaration(c)) {
-                if (functions.length || types.length || exports.length) throw new ParserError(mess.IMPORT_AFTER_DECL, c.line, c.column);
-                imports.push(node);
-                children.push(node);
+                if (functions.any() || types.any() || exports.any()) throw new ParserError(mess.IMPORT_AFTER_DECL, c.line, c.column)
+                imports.add(node)
+                children.add(node)
             } else if (node = this.acceptFunctionDeclaration(c)) {
-                functions.push(node);
-                children.push(node);
+                functions.add(node)
+                children.add(node)
             } else if (node = this.acceptTypeDeclaration(c)) {
-                types.push(node);
-                children.push(node);
+                types.add(node)
+                children.add(node)
             } else if (node = this.acceptExportDeclaration(c)) {
-                exports.push(node);
-                children.push(node);
-            } else if (c.type === 'EOF') {
-                children.push(c);
-                if (children.length === 1) throw new ParserError(mess.EMPTY_FILE, 1, 1);
-                return new AST.Program({ imports, functions, types, exports }, children);
+                exports.add(node)
+                children.add(node)
+            } else if (c.type == 'EOF') {
+                children.add(c)
+                if (children.length == 1) throw new ParserError(mess.EMPTY_FILE, 1, 1) else ()
+                return new AST.Program({ imports, functions, types, exports }, children)
             } else {
-                throw new ParserError(mess.INVALID_PROGRAM(c), c.line, c.column);
+                throw new ParserError(mess.INVALID_PROGRAM(c), c.line, c.column)
             }
         }
-        throw new Error('Tokenizer had no elements');
+        throw new Error('Tokenizer had no elements')
     }
 
     /**

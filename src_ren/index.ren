@@ -10,7 +10,7 @@ import from "./interpreter": interpreter
 func int main(string[] args) => {
     // read contents of specified file
     path = resolve(args[1])
-    contents = toString(readFile(path))
+    contents = readFile(path).toString()
     // parse them
     parsed = parse(contents)
     // typecheck the parsed result
@@ -18,12 +18,5 @@ func int main(string[] args) => {
     // translate the typechecker result to IR
     translated = translate(checked)
     // execute the IR in the interpreter and get the exit code of the program
-    return interpret(translated, sliceStart(args, 2))
+    return interpret(translated, args.slice(2))
 }
-
-/**
- * TODO:
- * - func string toString(any value) (prelude)
- * - func T[] sliceStart(T[] array, int startIndex) (prelude)
- * - func T[] slice(T[] array, int startIndex, int endIndex) (prelude)
- */

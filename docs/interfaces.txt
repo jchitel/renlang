@@ -21,6 +21,9 @@ NEW SEMANTIC FEATURES:
 
 - Interfaces are a new kind of type associated with a name, closely related to structs
 - Any type with a matching field/method structure is assignable to the interface
+- This will add support for iteration of other types than just arrays, so these built-in interfaces will be supported
+  - Iterable (provides a mechanism to get an iterator value from an type)
+  - Iterator (returned by iterables, provides a mechanism for lazy iteration of containing values)
 
 TRANSFORMATION:
 

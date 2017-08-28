@@ -71,6 +71,7 @@ ExportDeclaration ::= EXPORT DEFAULT (Declaration | AnonDeclaration | IDENT)
                     | EXPORT (Declaration | NamedExports)
                     | EXPORT FROM STRING_LITERAL COLON ExportForwards
                     | EXPORT DEFAULT FROM STRING_LITERAL (COLON DefaultExportForwards)?
+Type ::= IDENT DOT IDENT
 
 NEW SEMANTIC FEATURES:
 

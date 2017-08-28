@@ -80,9 +80,11 @@ Expression ::= NewObject
              | SuperCall
              | SuperMethodCall
              | VALUE
+             | IsOperation
 NewObject ::= NEW IDENT TypeArgList? LPAREN (Expression (COMMA Expression)*)? RPAREN
 SuperCall ::= SUPER LPAREN (Expression (COMMA Expression)*)? RPAREN
 SuperMethodCall ::= SUPER DOT IDENT TypeArgList? LPAREN (Expression (COMMA Expression)*)? RPAREN
+IsOperation ::= Expression IS Type
 
 NEW SEMANTIC FEATURES:
 
@@ -105,6 +107,9 @@ NEW SEMANTIC FEATURES:
 - Super calls are only valid in constructors
 - Super method calls are only valid in class members, must be checked against parents
 - Object types are assignable to their corresponding class or the class's parents
+- 'is' operator will be complicated
+  - For one, logic needs to be added to check assignability
+  - This will also affect typechecking so that expressions will take on more restricted types in branches when 'is' is used
 
 TRANSFORMATION:
 

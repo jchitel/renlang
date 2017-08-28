@@ -1,0 +1,108 @@
+This will contain a list of features identified during the compiler translation process that should be added to the language:
+
+# Invariant operation
+
+This will be a syntactic feature that is injected between statements to enforce some constraint.
+It is effectively equivalent to an if-statement that throws an error in the true case and does nothing in the false case.
+This is a mockup of what it might look like:
+
+invariant (<condition>) <expression>
+
+# Let-in expression
+
+This is a way to declare expressions that depend on intermediate values, based on the similar feature with the same name in haskell:
+
+let <assignment-expression> in <expression>
+
+or
+
+let { <assignment-expression>; <assignment-expression> ... } in <expression>
+
+# Patterns
+
+Patterns are a syntactic construct that is used in several places:
+- Function parameters
+- Assignment expressions
+- Match-case expressions
+Effectively any place where a name is declared (not used, declared)
+
+Patterns can be:
+- types (used in match-case expressions, case is chosen if value matches type)
+- expressions (used in match-case expressions, case is chosen if value equals value)
+- conditions (used in test-case expressions, case is chosen if condition is true for value)
+- structural patterns (destructuring)
+  - struct patterns (used in assignments to destructure, match-case to match pattern)
+  - array patterns (used in assignments to destructure, match-case to match pattern)
+  - tuple patterns (used in assignments to destructure, match-case to match pattern)
+
+Patterns can contain _ to skip over entries in arrays and tuples.
+
+# Match-case expressions
+
+Match-case expressions are powerful alternatives to if-else expressions.
+
+They allow you to specify a list of cases to match sequentially against a target expression.
+Cases can be types, expressions, or structural patterns.
+The default case is the final fallthrough, if no pattern matches then an error is thrown.
+
+match (<expression>) { case <pattern> => <expression>; ...; default => <expression> }
+
+# Test-case expressions
+
+Test-case expressions are for testing target expressions by predicate cases:
+
+test (<expression>) { case <predicate> => <expression>; ...; default => <expression> }
+
+Predicates are boolean expressions with a single _ to use as the input parameter.
+
+# Matches expressions
+
+The matches keyword is used to simply test in place if a value matches a pattern, returning a boolean:
+
+<expression> matches (<pattern>)
+
+# Array/struct spread
+
+This is a simply way to copy entries from an array or struct into a new array or struct:
+
+<assignable> = [<exp>, <exp>, ...<exp>]
+<assignable> = { <ident>: <exp>, ...<exp> }
+<assignable> = (<exp>, <exp>, ...<exp>)
+
+In this case order matters, and the spread can be followed by more entries.
+
+# Rest/spread params
+
+Rest params (also known as variadic arguments) allow you to specify a variable number of arguments for a function.
+This has an impact on the semantics of a function, for example when it is partially applied.
+
+func int myFunc(int ...params) => <exp>
+
+Spread params allows the items in arrays and tuples (and other iterables) to be spread into function calls.
+Tuples must match the correct types.
+For arrays and iterables, which have only runtime lengths, all function parameters must be assignable from the type of the iterable.
+If the function doesn't have rest params, then a runtime check is added to make sure the length of the iterable is correct.
+
+myFunc(<exp>, ...<exp>)
+
+# Truthy-falsiness
+
+Booleans shouldn't be the only values usable in if-else and test-case expressions.
+Any value can be passed.
+By default if a value represents an empty structure (empty array, tuple, or struct) it evaluates to false, otherwise it's true.
+But types can specify the (bool truthy()) method to override this behavior.
+
+# Default parameters
+
+To make it easier to specify overrides, a sugar allows you to specify a default value for a parameter, so that if it is not provided, the default it used.
+Unlike other languages, defaults can be specified in any order with non-defaults.
+Typechecking intelligently infers which arguments match which parameters.
+When two adjacent parameters have the same type, whichever comes first is used.
+
+func int myFunc(int a = 1, int b, int c = 4) => <exp>
+
+# Named parameters
+
+All parameters have names, but if you specify your function with the keyword kwargs, you can specify that calls to the function must specify the parameter names.
+Parameters without default values must be provided.
+Additionally, structs can then be spread into function calls.

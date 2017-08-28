@@ -1,5 +1,5 @@
-import from "./Parser": newParser
+import from "./Parser": Parser
 import from "../ast/ASTNode": ASTNode
 
 
-export default func ASTNode parse(string source) => parse(newParser(), source)
+export default func ASTNode (string source) => new Parser(source).parse()
