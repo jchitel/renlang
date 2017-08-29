@@ -1,6 +1,10 @@
 This will contain a list of features identified during the compiler translation process that should be added to the language:
 
-# Invariant operation
+(NOTE: some of these will not be added in 0.2, but offset for later pre-releases or 1.0. This document will offload later features once it becomes more clear)
+
+# Language features
+
+## Invariant operation
 
 This will be a syntactic feature that is injected between statements to enforce some constraint.
 It is effectively equivalent to an if-statement that throws an error in the true case and does nothing in the false case.
@@ -8,7 +12,7 @@ This is a mockup of what it might look like:
 
 invariant (<condition>) <expression>
 
-# Let-in expression
+## Let-in expression
 
 This is a way to declare expressions that depend on intermediate values, based on the similar feature with the same name in haskell:
 
@@ -18,7 +22,7 @@ or
 
 let { <assignment-expression>; <assignment-expression> ... } in <expression>
 
-# Patterns
+## Patterns
 
 Patterns are a syntactic construct that is used in several places:
 - Function parameters
@@ -37,7 +41,7 @@ Patterns can be:
 
 Patterns can contain _ to skip over entries in arrays and tuples.
 
-# Match-case expressions
+## Match-case expressions
 
 Match-case expressions are powerful alternatives to if-else expressions.
 
@@ -47,7 +51,7 @@ The default case is the final fallthrough, if no pattern matches then an error i
 
 match (<expression>) { case <pattern> => <expression>; ...; default => <expression> }
 
-# Test-case expressions
+## Test-case expressions
 
 Test-case expressions are for testing target expressions by predicate cases:
 
@@ -55,13 +59,13 @@ test (<expression>) { case <predicate> => <expression>; ...; default => <express
 
 Predicates are boolean expressions with a single _ to use as the input parameter.
 
-# Matches expressions
+## Matches expressions
 
 The matches keyword is used to simply test in place if a value matches a pattern, returning a boolean:
 
 <expression> matches (<pattern>)
 
-# Array/struct spread
+## Array/struct spread
 
 This is a simply way to copy entries from an array or struct into a new array or struct:
 
@@ -71,7 +75,7 @@ This is a simply way to copy entries from an array or struct into a new array or
 
 In this case order matters, and the spread can be followed by more entries.
 
-# Rest/spread params
+## Rest/spread params
 
 Rest params (also known as variadic arguments) allow you to specify a variable number of arguments for a function.
 This has an impact on the semantics of a function, for example when it is partially applied.
@@ -85,14 +89,14 @@ If the function doesn't have rest params, then a runtime check is added to make 
 
 myFunc(<exp>, ...<exp>)
 
-# Truthy-falsiness
+## Truthy-falsiness
 
 Booleans shouldn't be the only values usable in if-else and test-case expressions.
 Any value can be passed.
 By default if a value represents an empty structure (empty array, tuple, or struct) it evaluates to false, otherwise it's true.
 But types can specify the (bool truthy()) method to override this behavior.
 
-# Default parameters
+## Default parameters
 
 To make it easier to specify overrides, a sugar allows you to specify a default value for a parameter, so that if it is not provided, the default it used.
 Unlike other languages, defaults can be specified in any order with non-defaults.
@@ -101,8 +105,157 @@ When two adjacent parameters have the same type, whichever comes first is used.
 
 func int myFunc(int a = 1, int b, int c = 4) => <exp>
 
-# Named parameters
+## Named parameters
 
 All parameters have names, but if you specify your function with the keyword kwargs, you can specify that calls to the function must specify the parameter names.
 Parameters without default values must be provided.
 Additionally, structs can then be spread into function calls.
+
+## Template strings
+
+Clean replacement for string concatenation, potentially allowing for formatting as well.
+
+`some text${<exp>:<format-string>}some more text${<exp>}final text`
+
+This will be interesting for the lexer because there will be string "segments" that will serve as single tokens.
+
+## Indexers
+
+We should be able to index into things other than arrays, using keys other than integers.
+
+## Map/List literals
+
+Map literals:
+
+map = { [<key-exp>]: <value-exp>, ... }
+
+List literals:
+
+list = { <entry-exp>, ... }
+
+## Reverse inference (improved inference)
+
+Right now, inference works in two ways:
+- Expressions have inherent types, which flow through the places they are used, i.e. variables, method calls, operators, etc.
+- Lambda function types (particularly return types) are inferred because they can only be used in method calls, which have strictly defined signatures.
+
+This has a lot of limits. It's nice to say "types must be specified on parameters and return types and nowhere else" but this restricts the freedom of developers.
+Plus it's nice to be able to specify as little information as possible and have the language just know what you mean (like Haskell).
+
+We need to be able to do the following:
+- Specify types nowhere, including:
+  - Function parameters
+  - Function return types
+  - Lambda function expressions
+  - Struct/class fields (maybe)
+- Specify types everywhere, including:
+  - Variables
+  - Casts (see cast expressions below)
+
+This means that types can be inferred by two ways:
+- primitive expressions or already typed expressions bubbling up to where they are used
+- usages of identifiers or expressions defining the type
+
+This is very difficult but very powerful.
+To start this, we define the concept that an expression has a base assignable type that is as general as it can possibly be, but it is not 100% inferred yet.
+Or, if there is nothing inherent to the expression to define its type, then it simply has no type yet.
+We assign these loose types to everything we can as we move through a function.
+Anything that does not have a rock-solid type is added to an inference table with either its loose type or no type if it can potentially be any type.
+Anywhere that a non-inferred expression is used, we compare the loose type (if any) to the expected type of the usage.
+- If the assignment is valid, we can either further restrict the loose type or keep it
+- If the expression had not been typed yet, it now has a loose type
+- If the assignment is not valid, it is an error
+- If the inference has restricted to one possible type, that type is now inferred
+At the end of the function, any expression with a loose type gets that loose type.
+Any expression without even a loose type is left alone.
+
+A higher level pass will attempt to infer types across functions.
+If a function's parameter types could not be inferred from the contents of the function, they may be inferrable from invocations of the function.
+
+There are a few types that will never be valid to be inferred:
+- any (these must be explicit)
+- union types that have no logic to indicate that a union type is expected (also must be explicit)
+
+The only restriction on type inference is across modules. Modules should not be coupled to one another in that manner.
+If a module imports and uses a value that was not able to be inferred in the source module, this will be an error.
+This behavior can be disabled from module configuration to add coupling to modules that may not be exposed to 3P consumers.
+
+## Multithreading
+
+### Threads
+
+Multithreading functionality will be provided with the primitives:
+- tfork (takes a void function call and executes it in a new thread, returning a thread reference object)
+- tjoin (takes a thread reference object and waits for it to finish)
+- tkill (takes a thread reference object, sends a kill signal, and waits for it to finish)
+- tcurr (returns a reference to the current thread's reference object)
+- twait (puts the current thread to sleep until it is awoken, optionally an int argument can be provided)
+- twake (wakes a thread up)
+
+Additionally synchronization is provided with a lock block, which uses a single named reference as a lock object.
+When the lock is active, the thread that activated the lock is the only one that can access the associated block.
+Any other thread that attempts to activate it is put into a sleep queue until the active thread leaves the block, deactivating the lock.
+
+This locking mechanism is a further abstraction on top of three operations:
+- test-and-set (an atomic operation that sets a memory value to true (1), returning the previous value)
+- twait (see above)
+- set (set a memory value)
+
+A thread calls test-and-set. If it returns true, it should sleep.
+If it returns false, it means that the code block has been opened for business, and it can enter.
+Once the block is done, the lock object should be set to false and the next thread should be awoken.
+TODO: I'm mixing things up here. perhaps all we need is an "atomic" modifier.
+
+### Async functions
+
+Async functions are an abstraction over several multithreading operations to allow chaining of multiple asynchronous operations into a synchronous workflow.
+Any function (including methods) can be marked async. This does several things:
+- The function is implicitly transformed to one that returns a Task<T> object, where the type parameter is the return type of the function.
+- Invoking the function calls it in a new thread and immediately returns a Task<T> object that is bound to the operation.
+- Any 'await' operation inside the function puts the async thread to sleep while the inner async operation finishes.
+- Any return will make the returned value available to the task, and the task is marked resolved, triggering any dependent operations to wake up and start executing.
+- Any throw will do the same. If there is not at least one operation waiting for an error, an exception is raised in the thread, which will kill the whole process.
+
+Another type of async function is a task generator function, which can be used to create new tasks in a first-class way as opposed to the API way.
+Any async function that uses the keywords resolve or reject is parsed as a task generator. Await cannot be used in one of these functions.
+resolve and reject are available to any inner function within the async function. If there is no inner function, the operation does not need to be async.
+
+### Event queue
+
+An execution environment backed by an event queue can also be created. An event-based environment runs in a single thread, starting with one function.
+That function may invoke operations that place event handlers onto the queue. No queued event handler will be invoked until the current function is finished executing.
+This makes it very easy to reason about asynchronous operations, and things like race conditions are not possible.
+Additionally, execution is always non-blocking, which makes it very useful for use in responsive systems such as UI.
+
+Async functions invoked in the event queue will use the event queue model as opposed to a multi-threaded model.
+The event queue system can invoke synchronous code, but that will defeat the purpose of using the event system.
+Instead, a wrapper API asyncify will invoke the synchronous code in a separate thread, and when it finishes, will place a handler on the event queue.
+There are various mechanisms for interacting with an async environment from a synchronous one.
+
+## Generator functions
+
+Generator functions provide a syntactic abstraction for iterators and generators.
+
+TODO
+
+## Cast expressions
+
+Sometimes, it's nice to be able to force an expression to have a specific type (assuming assignability is valid).
+Cast expressions are used during type checking to force-infer (not coerce) an expression to a type.
+It's more of a "type hint" than a coersion.
+
+## Script mode
+
+## Macros
+
+## Module configurations
+
+## Closures
+
+# Tooling
+
+## Type evaluator
+
+This can be an extension of the REPL and/or its own command, but in any case it would be great to have some operation that takes a module and an exported identifier and gets the type information for it.
+This would be very useful in cases where you've created a module that exports inferred types and you want to know what those types are inferred to.
+IDEs can also hook into this to get type information.

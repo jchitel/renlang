@@ -2,19 +2,9 @@ So, even 3 files in v0 was enough to realize that we need more features.
 
 We will call this v0.1.
 
-I can identify 5 that are pretty much a necessity:
-- Interfaces
-  - Structural type with method signatures
-- Extensions
-  - Type operator that adds methods to types
-- Classes
-  - Nominal structured type with methods, inheritance, and encapsulation
-- Generic types
-  - Types with type parameters
-- Function overloads
-  - Functions with the same name and different parameter types
+# New language features
 
-Classes
+## Classes
 
 Ren classes will be inspired by C# and TypeScript.
 They are declarable wherever types can be declared, and used wherever types are used.
@@ -52,7 +42,7 @@ Using classes:
 - `super` is a special form of `this` that allows access to ancestors' members.
 - `super()` in a constructor allows parent constructors to be called. `super` must be called at some point during any child constructor.
 
-Interfaces
+## Interfaces
 
 Interfaces are another sort of type, which can be assignable from any sort of type as long as the structure matches.
 They are already sort of possible by declaring type aliases, but interfaces go further.
@@ -62,7 +52,8 @@ Interfaces can contain methods as well, so they can be restricted to any value t
 Interfaces contain no logic, have no public/private or inheritance modifiers. They only contain fields and/or method signatures and/or properties.
 When interfaces apply to classes, they must only apply to the public interface of the class, private/protected members are ignored.
 
-- Not being able to instantiate classes is pretty annoying.
+## Generic types
+
 - Arrays, being a type that has a type parameter, are going to prove problematic when doing generic array operations.
   - We may need generic types and type parameters.
   - Any type or function can be generic, meaning that it has at least one type parameter.
@@ -88,11 +79,17 @@ When interfaces apply to classes, they must only apply to the public interface o
   - Constraints can also be specified on the type parameters:
     - The type must be assignable to a specific type (T > {type})
     - The type must be assignable from a specific type (T < {type})
+
+## Function overloads
+
 - Function overloads are going to be hard to live without.
   - More than one function with the same name can be declared as long as they have different parameter types (assignability between parameter types is ignored).
   - Exporting a function that is overloaded only exports that function, not the overloads.
   - When invoking a function with overloads, the most specific type is attempted to be matched.
   - From an implementation standpoint, each set of overloads is stored under a single function. The presence of overloads overrides the behavior of type checking.
+
+## Extension methods
+
 - Extensions
   - Extensions allow logic to be tied to other types in the same way that methods tie logic to classes.
   - Extensions can be declared inline with types using the with keyword, followed by a block of methods.
@@ -107,3 +104,9 @@ When interfaces apply to classes, they must only apply to the public interface o
     - For example, say we have a library that uses int extension methods (intext), and we declare an API function that uses intext, but we don't want intext to be accessible to end users.
     - A documentation generator will analyze and see that the exported function uses an unexported type, and will resolve that type down to components that are accessible to the user, in this case just "int".
   - It is not recommended to add extenstions to structs, because that is getting too close to classes, but it is definitely possible.
+
+# Compiler improvements
+
+## Refactored parser
+
+Most of the parser logic fits a common format that does not require a whole lot of code duplication.

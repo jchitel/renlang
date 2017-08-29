@@ -28,6 +28,7 @@ NEW SYNTACTIC FEATURES:
 
 New Tokens:
 -----------
+remove "any"
 ASS_FROM ::= -:
 
 New NonTerminals:
@@ -44,6 +45,7 @@ TypeDeclaration ::= TYPE IDENT TypeParamList? EQUALS Type
 Type ::= IDENT TypeArgList?
 FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW (Expression | Block)
 FunctionApplication ::= Expression TypeArgList? LPAREN (Expression (COMMA Expression)*)? RPAREN
+Type ::= ANY (REMOVE THIS)
 
 NEW SEMANTIC FEATURES:
 
@@ -55,6 +57,7 @@ NEW SEMANTIC FEATURES:
 - Each usage of a generic type has a resolved generic type
 - Any usage of a type parameter has to be checked against type parameter constraints, as well as type arguments against the constraints
 - Assignability between generic types depends on the variance of the type parameters
+- Any type doesn't exist anymore
 
 TRANSFORMATION:
 
