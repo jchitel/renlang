@@ -34,9 +34,7 @@ ASS_FROM ::= -:
 New NonTerminals:
 -----------------
 TypeParamList ::= LT TypeParam (COMMA TypeParam)* GT
-TypeParam ::= VarianceOp? IDENT (TypeParamConstraint Type)?
-TypeParamConstraint ::= COLON | ASS_FROM
-VarianceOp ::= PLUS | MINUS
+TypeParam ::= (+ | -)? IDENT ((COLON | ASS_FROM) Type)?
 TypeArgList ::= LT Type (COMMA Type)* GT
 
 Extended NonTerminals:

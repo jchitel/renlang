@@ -117,6 +117,13 @@ export class TypeDeclaration extends ASTNode {
     }
 }
 
+export class TypeParamList extends ASTNode {
+    reduce() {
+        // semantically, this is a pointless node, so we just return the list of param nodes directly
+        return this.typeParams.map(p => p.reduce());
+    }
+}
+
 export class ExportDeclaration extends ASTNode {
     reduce() {
         const node = this._createNewNode();

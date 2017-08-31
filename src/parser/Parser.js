@@ -61,6 +61,15 @@ export default class Parser {
         return token.type === type ? token : false;
     }
 
+    expectNextTokenImage(image, message) {
+        const token = this.tokenizer.next().value;
+        if (token.image !== image && message) {
+            const formatted = (typeof message === 'function') ? message(token) : message;
+            throw new ParserError(formatted, token.line, token.column);
+        }
+        return token.image === image ? token : false;
+    }
+
     /**
      * Check if the token is of the specified type,
      * throwing an error with the specified message if it is not.
@@ -113,6 +122,24 @@ export default class Parser {
             }
         }
         throw new Error('Tokenizer had no elements');
+    }
+
+    acceptProgram(opts) {
+        return this.accept([
+            { name: 'imports', parse: ::this.acceptImportDeclaration, zeroOrMore: true },
+            { name: 'declarations', parse: ::this.acceptDeclaration, zeroOrMore: true },
+            { name: 'eof', type: 'EOF' },
+        ], AST.Program, opts);
+    }
+
+    acceptDeclaration(opts) {
+        return this.accept([{
+            choices: [
+                { name: 'function', parse: ::this.acceptFunctionDeclaration },
+                { name: 'typeNode', parse: ::this.acceptTypeDeclaration },
+                { name: 'export', parse: ::this.acceptExportDeclaration },
+            ],
+        }], AST.Declaration, opts);
     }
 
     /**
@@ -192,6 +219,8 @@ export default class Parser {
         if (tok.type !== 'FUNC') return false;
         const returnType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_RETURN_TYPE);
         const functionNameToken = this.expectNextToken('IDENT', mess.INVALID_FUNCTION_NAME);
+        let typeParamList;
+        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.tokenizer.next().value);
         const params = this.parseNextToken(t => this.acceptParameterList(t), mess.INVALID_PARAMETER_LIST);
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_FAT_ARROW);
         const next = this.tokenizer.next().value;
@@ -200,10 +229,11 @@ export default class Parser {
             funcToken: tok,
             returnType,
             functionNameToken,
+            typeParamList,
             params,
             fatArrowToken,
             functionBody,
-        }, [tok, returnType, functionNameToken, params, fatArrowToken, functionBody]);
+        }, [tok, returnType, functionNameToken, typeParamList, params, fatArrowToken, functionBody]);
     }
 
     /**
@@ -240,6 +270,54 @@ export default class Parser {
             equalsToken,
             type,
         }, [tok, typeNameToken, typeParamList, equalsToken, type]);
+    }
+
+    /**
+     * TypeParamList ::= LT TypeParam (COMMA TypeParam)* GT
+     */
+    acceptTypeParamList(tok) {
+        const typeParams = [];
+        const commas = [];
+        typeParams.push(this.parseNextToken(t => this.acceptTypeParam(t), mess.INVALID_TYPE_PARAM));
+        while (this.tokenizer.peek().type === 'COMMA') {
+            commas.push(this.tokenizer.next().value);
+            typeParams.push(this.parseNextToken(t => this.acceptTypeParam(t), mess.INVALID_TYPE_PARAM));
+        }
+        const closeGtToken = this.expectNextTokenImage('>', mess.INVALID_TYPE_PARAM_LIST);
+        return new AST.TypeParamList({
+            openLtToken: tok,
+            typeParams,
+            commas,
+            closeGtToken,
+        }, [tok, ...interleave(typeParams, commas), closeGtToken]);
+    }
+
+    /**
+     * TypeParam ::= (+ | -)? IDENT ((COLON | ASS_FROM) Type)?
+     */
+    acceptTypeParam(tok) {
+        const components = [];
+        let varianceOpToken;
+        if (tok.image === '+' || tok.image === '-') {
+            varianceOpToken = tok;
+            components.push(varianceOpToken);
+            tok = this.tokenizer.next().value;
+        }
+        components.push(tok);
+        this.enforceTokenType(tok, 'IDENT', mess.INVALID_TYPE_PARAM);
+        let constraintOpToken, constraintType;
+        if (this.tokenizer.peek().type === 'COLON' || this.tokenizer.peek().type === 'ASS_FROM') {
+            constraintOpToken = this.tokenizer.next().value;
+            constraintType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_PARAM);
+            components.push(constraintOpToken);
+            components.push(constraintType);
+        }
+        return new AST.TypeParam({
+            varianceOpToken,
+            identToken: tok,
+            constraintOpToken,
+            constraintType,
+        });
     }
 
     /**
@@ -334,8 +412,14 @@ export default class Parser {
             case 'ANY':
                 typeNode = new AST.Type({ builtIn: tok }, [tok]);
                 break;
-            case 'IDENT': typeNode = new AST.Type({ name: tok }, [tok]); break;
             default: break;
+        }
+        if (tok.type === 'IDENT') {
+            typeNode = new AST.Type({ name: tok }, [tok]);
+            if (this.tokenizer.peek().image === '<') {
+                const typeArgList = this.parseNextToken(t => this.acceptTypeArgList(t), mess.INVALID_TYPE_ARG_LIST);
+                typeNode = new AST.GenericType({ baseType: typeNode, typeArgList });
+            }
         }
         if (!typeNode) {
             // handle more complex types
@@ -359,6 +443,26 @@ export default class Parser {
             }
         }
         return typeNode;
+    }
+
+    /**
+     * TypeArgList ::= LT Type (COMMA Type)* GT
+     */
+    acceptTypeArgList(tok) {
+        const types = [];
+        const commas = [];
+        types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_ARGUMENT));
+        while (this.tokenizer.peek().type === 'COMMA') {
+            commas.push(this.tokenizer.next().value);
+            types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_ARGUMENT));
+        }
+        const closeGtToken = this.expectNextTokenImage('>', mess.INVALID_TYPE_ARG_LIST);
+        return new AST.TypeArgList({
+            openLtToken: tok,
+            types,
+            commas,
+            closeGtToken,
+        }, [tok, ...interleave(types, commas), closeGtToken]);
     }
 
     tryArrayType(baseType) {
@@ -795,7 +899,14 @@ export default class Parser {
      * FunctionApplication ::= Expression LPAREN (Expression (COMMA Expression)*)? RPAREN
      */
     tryFunctionApplication(target) {
-        if (this.tokenizer.peek().type !== 'LPAREN') return false;
+        let typeArgList;
+        if (this.tokenizer.peek().image === '<') {
+            typeArgList = this.parseNextToken(t => this.acceptTypeArgList(t), mess.INVALID_TYPE_ARG_LIST);
+        }
+        if (this.tokenizer.peek().type !== 'LPAREN') {
+            if (typeArgList) throw new ParserError(mess.INVALID_EXPRESSION, this.tokenizer.peek().line, this.tokenizer.peek().column);
+            return false;
+        }
         const openParenToken = this.tokenizer.next().value;
         const paramValues = [], commaTokens = [];
         let first = true;
@@ -807,11 +918,12 @@ export default class Parser {
         const closeParenToken = this.tokenizer.next().value;
         return new AST.FunctionApplication({
             target,
+            typeArgList,
             openParenToken,
             paramValues,
             commaTokens,
             closeParenToken,
-        }, [target, openParenToken, ...interleave(paramValues, commaTokens), closeParenToken]);
+        }, [target, typeArgList, openParenToken, ...interleave(paramValues, commaTokens), closeParenToken]);
     }
 
     /**
@@ -900,6 +1012,23 @@ export default class Parser {
         }
     }
 
+    acceptStatement(opts) {
+        return this.accept([{
+            choices: [
+                { name: 'block', parse: ::this.acceptBlock },
+                { name: 'exp', parse: ::this.acceptBlock },
+                { name: 'for', parse: ::this.acceptBlock },
+                { name: 'while', parse: ::this.acceptBlock },
+                { name: 'doWhile', parse: ::this.acceptBlock },
+                { name: 'tryCatch', parse: ::this.acceptBlock },
+                { name: 'throw', parse: ::this.acceptBlock },
+                { name: 'return', parse: ::this.acceptBlock },
+                { name: 'break', parse: ::this.acceptBlock },
+                { name: 'continue', parse: ::this.acceptBlock },
+            ],
+        }], AST.Statement, opts);
+    }
+
     /**
      * Block ::= LBRACE Statement* RBRACE
      */
@@ -919,6 +1048,14 @@ export default class Parser {
             statements,
             closeBraceToken: next,
         }, [tok, ...statements, next]);
+    }
+
+    acceptBlock(opts) {
+        return this.accept([
+            { name: 'openBraceToken', type: 'LBRACE', accept: true },
+            { name: 'statements', parse: ::this.acceptStatement, zeroOrMore: true },
+            { name: 'closeBraceToken', type: 'RBRACE', mess: mess.MISSING_CLOSE_BRACE },
+        ], AST.Block, opts);
     }
 
     /**
@@ -943,6 +1080,18 @@ export default class Parser {
         }, [tok, openParenToken, iterVarToken, inToken, iterableExp, closeParenToken, body]);
     }
 
+    acceptForStatement(opts) {
+        return this.accept([
+            { name: 'forToken', type: 'FOR', accept: true },
+            { name: 'openParenToken', type: 'LPAREN', mess: mess.FOR_MISSING_OPEN_PAREN },
+            { name: 'iterVarToken', type: 'IDENT', mess: mess.FOR_INVALID_ITER_IDENT },
+            { name: 'inToken', type: 'IN', mess: mess.FOR_MISSING_IN },
+            { name: 'iterableExp', parse: ::this.acceptExpression, mess: mess.INVALID_EXPRESSION },
+            { name: 'closeParenToken', type: 'RPAREN', mess: mess.FOR_MISSING_CLOSE_PAREN },
+            { name: 'body', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+        ], AST.ForStatement, opts);
+    }
+
     /**
      * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
      */
@@ -959,6 +1108,16 @@ export default class Parser {
             closeParenToken,
             body,
         }, [tok, openParenToken, conditionExp, closeParenToken, body]);
+    }
+
+    acceptWhileStatement(opts) {
+        return this.accept([
+            { name: 'whileToken', type: 'WHILE', accept: true },
+            { name: 'openParenToken', type: 'LPAREN', mess: mess.WHILE_MISSING_OPEN_PAREN },
+            { name: 'conditionExp', parse: ::this.acceptExpression, mess: mess.INVALID_EXPRESSION },
+            { name: 'closeParenToken', type: 'RPAREN', mess: mess.WHILE_MISSING_CLOSE_PAREN },
+            { name: 'body', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+        ], AST.WhileStatement, opts);
     }
 
     /**
@@ -979,6 +1138,17 @@ export default class Parser {
             conditionExp,
             closeParenToken,
         }, [tok, body, whileToken, openParenToken, conditionExp, closeParenToken]);
+    }
+
+    acceptDoWhileStatement(opts) {
+        return this.accept([
+            { name: 'doToken', type: 'DO', accept: true },
+            { name: 'body', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+            { name: 'whileToken', type: 'WHILE', mess: mess.DO_WHILE_MISSING_WHILE },
+            { name: 'openParenToken', type: 'LPAREN', mess: mess.WHILE_MISSING_OPEN_PAREN },
+            { name: 'conditionExp', parse: ::this.acceptExpression, mess: mess.INVALID_EXPRESSION },
+            { name: 'closeParenToken', type: 'RPAREN', mess: mess.WHILE_MISSING_CLOSE_PAREN },
+        ], AST.DoWhileStatement, opts);
     }
 
     /**
@@ -1012,6 +1182,32 @@ export default class Parser {
             [tok, tryBody, ...interleave(catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks)]);
     }
 
+    acceptTryCatchStatement(opts) {
+        return this.accept([
+            { name: 'tryToken', type: 'TRY', accept: true },
+            { name: 'tryBody', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+            { name: 'catches', parse: ::this.acceptCatchClause, oneOrMore: true, mess: mess.TRY_CATCH_MISSING_CATCH },
+            { name: 'finally', parse: ::this.acceptFinallyClause, optional: true },
+        ], AST.TryCatchStatement, opts);
+    }
+
+    acceptCatchClause(opts) {
+        return this.accept([
+            { name: 'catchToken', type: 'CATCH', mess: mess.TRY_CATCH_MISSING_CATCH },
+            { name: 'openParenToken', type: 'LPAREN', mess: mess.TRY_CATCH_MISSING_OPEN_PAREN },
+            { name: 'param', parse: ::this.acceptParam, mess: mess.CATCH_INVALID_PARAM },
+            { name: 'closeParenToken', type: 'RPAREN', mess: mess.TRY_CATCH_MISSING_CLOSE_PAREN },
+            { name: 'body', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+        ], AST.CatchClause, opts);
+    }
+
+    acceptFinallyClause(opts) {
+        return this.accept([
+            { name: 'finallyToken', type: 'FINALLY', accept: true },
+            { name: 'finallyBlock', parse: ::this.acceptStatement, mess: mess.INVALID_STATEMENT },
+        ], AST.FinallyClause, opts);
+    }
+
     /**
      * ThrowStatement ::= THROW Expression
      */
@@ -1022,6 +1218,13 @@ export default class Parser {
             throwToken: tok,
             exp,
         }, [tok, exp]);
+    }
+
+    acceptThrowStatement(opts) {
+        return this.accept([
+            { name: 'throwToken', type: 'THROW', accept: true },
+            { name: 'exp', parse: ::this.acceptExpression, mess: mess.INVALID_EXPRESSION },
+        ], AST.ThrowStatement, opts);
     }
 
     /**
@@ -1036,6 +1239,13 @@ export default class Parser {
         return new AST.ReturnStatement({ returnToken: tok }, [tok]);
     }
 
+    acceptReturnStatement(opts) {
+        return this.accept([
+            { name: 'returnToken', type: 'RETURN', accept: true },
+            { name: 'exp', parse: ::this.acceptExpression, optional: true, mess: mess.INVALID_EXPRESSION },
+        ], AST.ReturnStatement, opts);
+    }
+
     /**
      * BreakStatement ::= BREAK INTEGER_LITERAL?
      */
@@ -1046,6 +1256,13 @@ export default class Parser {
         return new AST.BreakStatement({ breakToken: tok, loopNumber }, [tok, loopNumber]);
     }
 
+    acceptBreakStatement(opts) {
+        return this.accept([
+            { name: 'breakToken', type: 'BREAK', accept: true },
+            { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
+        ], AST.ContinueStatement, opts);
+    }
+
     /**
      * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
      */
@@ -1054,5 +1271,94 @@ export default class Parser {
         const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
         if (!loopNumber) return new AST.ContinueStatement({ continueToken: tok }, [tok]);
         return new AST.ContinueStatement({ continueToken: tok, loopNumber }, [tok, loopNumber]);
+    }
+
+    acceptContinueStatement(opts) {
+        return this.accept([
+            { name: 'continueToken', type: 'CONTINUE', accept: true },
+            { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
+        ], AST.ContinueStatement, opts);
+    }
+
+    /**
+     * Generic non-terminal parse function.
+     * 'defs' is an array of non-terminal component definitions, which must have at least the following properties:
+     * - 'name': the name of the resulting component in the node class
+     * and can have the following properties:
+     * - 'type': a token type to match
+     * - 'optional': whether the component is required
+     *   - for tokens, this will simply skip over the token if it does not match
+     *   - for non-terminals, this will check to see if the non-terminal matches and skip if it doesn't
+     * - 'accept': if the component is not present, return false so that other expansions can be tried
+     * - 'mess': message string or function to use when the parse fails
+     * - 'parse': parse function to use when a component is another non-terminal
+     * 'opts' is an object of parser options to pass to the next child accept() call:
+     * - 'check': parse without consuming, stop when it is guaranteed that this non-terminal matches, then return true, otherwise return false
+     * - 'soft': when parse fails, just return false, don't throw an error
+     * TODO: the check option needs to peek instead of iterating
+     */
+    accept(defs, clss, opts) {
+        // AST node class constructor parameters
+        const comps = {};
+        const children = [];
+        // loop over each component definition
+        for (const def of defs) {
+            let node;
+            if (def.choices) {
+                for (const choice of def.choices) {
+                    let choiceNode;
+                    if (choice.type || choice.image) {
+                        choiceNode = this.acceptToken(choice, opts);
+                    } else if (choice.parse) {
+                        choiceNode = this.acceptNode(choice, opts);
+                    }
+                    // false = no match, other = valid (choices are never marked optional)
+                    if (!choiceNode) continue;
+                    node = choiceNode;
+                    break;
+                }
+            } else if (def.type || def.image) {
+                node = this.acceptToken(def, opts);
+            } else if (def.parse) {
+                node = this.acceptNode(def, opts);
+            }
+            // null = skip, false = soft fail, other = valid
+            if (node === null) continue;
+            if (!node) return false;
+            children.push(comps[def.name] = node);
+        }
+        // create node object
+        return new clss(comps, children);
+    }
+
+    acceptToken(def, opts) {
+        // check against the provided constraints
+        const tok = def.optional ? this.tokenizer.peek() : this.tokenizer.next().value;
+        // check the type
+        if (def.type && tok.type !== def.type || def.image && tok.image !== def.image) {
+            // optional tokens can be skipped
+            if (def.optional) return null;
+            // if accept was true, then this non-terminal is one of many possibilities, and this shouldn't fail
+            if (def.accept || opts.check || opts.soft) return false;
+            // otherwise it is an error
+            throw new ParserError(typeof def.mess === 'string' ? def.mess : def.mess(tok), tok.line, tok.column);
+        }
+        // success
+        return tok;
+    }
+
+    acceptNode(def, opts) {
+        const tok = this.tokenizer.peek();
+        if (def.optional) {
+            // optional node, check to see if it MUST be, if not, skip it
+            if (!def.parse({ ...opts, check: true })) return null;
+        }
+        // not optional or succeeded optional check, just do the parse, pass soft if this def has a message
+        const node = def.parse((def.mess || def.optional) ? { ...opts, soft: true } : opts);
+        // failed
+        if (!node && opts.soft) return false;
+        if (!node) throw new ParserError(def.mess, tok.line, tok.column);
+        // success
+        return node;
     }
 }
