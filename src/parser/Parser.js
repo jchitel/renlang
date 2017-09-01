@@ -24,6 +24,30 @@ function interleave(...lists) {
     return combined;
 }
 
+/**
+ * The parser logic is tightly coupled to the comments above each accept*() method.
+ * The comments specify expansion rules for their corresponding non-terminal.
+ * They have rules based on the parser logic:
+ * - A non-terminal must either have a sequential expansion, a choice expansion, or a left-recursive expansion
+ * - Sequential expansions are space-separated lists of components, signifying that the non-terminal must expand to that sequence.
+ * - A component is a terminal (token) or non-terminal, and can have the following modifiers:
+ *   - optional (?)
+ *   - oneOrMore (+)
+ *   - zeroOrMore (*)
+ *   - alternate ((* alt <comp>) or (+ alt <comp>))
+ * - The "alternate" modifier specifies either oneOrMore or zeroOrMore, with the extra stipulation that repetitions should be separated by some other component.
+ *   This is an abstraction of a very commonly occuring structure.
+ * - Choice expansions are bar-separated (|) lists of components, signifying that the non-terminal can expand to any one of the choices.
+ * - Components in choice expansions cannot have modifiers.
+ * - Left-recursive expansions are an extension of choice expansions that allow for left-recursive choices.
+ * - These are the rules of left-recursive expansions:
+ *   - There must be at least one non-left-recursive choice
+ *   - Left-recursive choices are grouped under a *Suffix non-terminal
+ *   - The *Suffix non-terminal must come last in the choice list (as "N NSuffix")
+ *   - The *Suffix non-terminal must be a choice expansion of components labelled *Suffix as well (to indicate that they only represent the tail of the whole expansion)
+ * - No other syntax is allowed. Expansions cannot be nested (aside from the stipulation for left-recursion above), and must be split out into separate non-terminals.
+ * - Any parse logic should be possible with this syntax.
+ */
 export default class Parser {
     /**
      * Top-level function.
@@ -587,33 +611,6 @@ export default class Parser {
         }
         return exp;
     }
-function acceptExpression(parser) {
-    return accept(parser, {
-        leftRecursive: {
-            bases: [
-                { name: 'integerLiteralToken', type: 'INTEGER_LITERAL' },
-                { name: 'floatLiteralToken', type: 'FLOAT_LITERAL' },
-                { name: 'stringLiteralToken', type: 'STRING_LITERAL' },
-                { name: 'charLiteralToken', type: 'CHAR_LITERAL' },
-                { name: 'boolLiteralToken', type: 'TRUE' },
-                { name: 'boolLiteralToken', type: 'FALSE' },
-                { name: 'varDecl', parse: acceptVarDeclaration },
-                { name: 'lambda', parse: acceptShorthandLambdaExpression },
-                { name: 'identToken', type: 'IDENT' },
-                { name: 'arrayLiteral', parse: acceptArrayLiteral },
-                { name: 'structLiteral', parse: acceptStructLiteral },
-                { name: 'ifElse', parse: acceptIfElseExpression },
-                { name: 'unary', parse: acceptPrefixExpression },
-                { name: 'lambda', parse: acceptLambdaExpression },
-                { name: 'tupleLiteral', parse: acceptTupleLiteral },
-                { name: 'inner', parse: acceptParentheticalExpression },
-            ],
-            suffixes: [
-
-            ],
-        }
-    })
-}
 
     /**
      * We need this function because return statements can optionally not include an expression, and the binary/postfix logic also needs to determine if there
@@ -1178,7 +1175,9 @@ function acceptExpression(parser) {
     }
 }
 
-
+/**
+ * Program ::= ImportDeclaration* Declaration*
+ */
 function acceptProgram(parser) {
     return accept(parser, [
         { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true },
@@ -1187,6 +1186,84 @@ function acceptProgram(parser) {
     ], AST.Program);
 }
 
+/**
+ * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON ImportList
+ */
+function acceptImportDeclaration(parser) {
+    return accept(parser, [
+        { name: 'importToken', type: 'IMPORT', definite: true },
+        { name: 'fromToken', type: 'FROM', mess: mess.INVALID_IMPORT },
+        { name: 'moduleNameToken', type: 'STRING_LITERAL', mess: mess.INVALID_IMPORT_MODULE },
+        { name: 'colonToken', type: 'COLON', mess: mess.INVALID_IMPORT },
+        { name: 'imports', parse: acceptImportList, mess: mess.INVALID_IMPORT },
+    ], AST.ImportDeclaration);
+}
+
+/**
+ * ImportList ::= IDENT
+ *              | NamedImports
+ */
+function acceptImportList(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'defaultImportNameToken', type: 'IDENT' },
+            { name: 'namedImports', parse: acceptNamedImports },
+        ],
+    }], AST.ImportList);
+}
+
+/**
+ * NamedImports ::= LBRACE ImportComponent(+ alt COMMA) RBRACE
+ */
+function acceptNamedImports(parser) {
+    return accept(parser, [
+        { name: 'openBraceToken', type: 'LBRACE', definite: true },
+        { name: 'importComponents', parse: acceptImportComponent, mess: mess.INVALID_IMPORT, oneOrMore: true, alt: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeBraceToken', type: 'RBRACE', mess: mess.INVALID_IMPORT },
+    ], AST.NamedImports);
+}
+
+/**
+ * ImportComponent ::= IDENT | ImportWithAlias
+ */
+function acceptImportComponent(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'importWithAlias', parse: acceptImportWithAlias },
+            { name: 'importNameToken', type: 'IDENT' },
+        ],
+    }], AST.ImportComponent);
+
+    if (tok.type !== 'IDENT') return false;
+    if (this.tokenizer.peek().type === 'AS') {
+        const asToken = this.tokenizer.next().value;
+        const importAliasToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
+        return new AST.ImportComponent({
+            importNameToken: tok,
+            asToken,
+            importAliasToken,
+        }, [tok, asToken, importAliasToken]);
+    } else {
+        return new AST.ImportComponent({
+            importNameToken: tok,
+        }, [tok]);
+    }
+}
+
+/**
+ * ImportWithAlias ::= IDENT AS IDENT
+ */
+function acceptImportWithAlias(parser) {
+    return accept(parser, [
+        { name: 'importNameToken', type: 'IDENT' },
+        { name: 'asToken', type: 'AS', definite: true },
+        { name: 'importAliasToken', type: 'IDENT', mess: mess.INVALID_IMPORT },
+    ], AST.ImportWithAlias);
+}
+
+/**
+ * Declaration ::= FunctionDeclaration | TypeDeclaration | ExportDeclaration
+ */
 function acceptDeclaration(parser) {
     return accept(parser, [{
         choices: [
@@ -1195,6 +1272,84 @@ function acceptDeclaration(parser) {
             { name: 'export', parse: acceptExportDeclaration },
         ],
     }], AST.Declaration);
+}
+
+/**
+ * Expression ::= INTEGER_LITERAL
+ *              | FLOAT_LITERAL
+ *              | STRING_LITERAL
+ *              | CHAR_LITERAL
+ *              | TRUE | FALSE
+ *              | VarDeclaration            # Starts with IDENT
+ *              | ShorthandLambdaExpression # Starts with IDENT
+ *              | IDENT                     # Fallback if the above two don't work
+ *              | ArrayLiteral
+ *              | StructLiteral
+ *              | IfElseExpression
+ *              | PrefixExpression
+ *              | LambdaExpression        # Starts with LPAREN
+ *              | TupleLiteral            # Starts with LPAREN, must have !=1 entries
+ *              | ParentheticalExpression # Fallback if the above two don't work
+ *              | Expression ExpressionSuffix # Left-recursive expansions
+ *
+ * ExpressionSuffix ::= FunctionApplicationSuffix
+ *                    | BinaryExpressionSuffix
+ *                    | PostfixExpressionSuffix
+ *                    | FieldAccessSuffix
+ *                    | ArrayAccessSuffix
+ */
+function acceptExpression(parser) {
+    return accept(parser, [{
+        leftRecursive: {
+            bases: [
+                { name: 'integerLiteralToken', type: 'INTEGER_LITERAL' },
+                { name: 'floatLiteralToken', type: 'FLOAT_LITERAL' },
+                { name: 'stringLiteralToken', type: 'STRING_LITERAL' },
+                { name: 'charLiteralToken', type: 'CHAR_LITERAL' },
+                { name: 'boolLiteralToken', type: 'TRUE' },
+                { name: 'boolLiteralToken', type: 'FALSE' },
+                { name: 'varDecl', parse: acceptVarDeclaration },
+                { name: 'lambda', parse: acceptShorthandLambdaExpression },
+                { name: 'identToken', type: 'IDENT' },
+                { name: 'arrayLiteral', parse: acceptArrayLiteral },
+                { name: 'structLiteral', parse: acceptStructLiteral },
+                { name: 'ifElse', parse: acceptIfElseExpression },
+                { name: 'unary', parse: acceptPrefixExpression },
+                { name: 'lambda', parse: acceptLambdaExpression },
+                { name: 'tupleLiteral', parse: acceptTupleLiteral },
+                { name: 'inner', parse: acceptParentheticalExpression },
+            ],
+            suffixes: [
+                { name: 'functionApplication', baseName: 'target', parse: acceptFunctionApplicationSuffix },
+                { name: 'binary', baseName: 'left', parse: acceptBinaryExpressionSuffix },
+                { name: 'unary', baseName: 'target', parse: acceptPostfixExpressionSuffix },
+                { name: 'fieldAccess', baseName: 'target', parse: acceptFieldAccessSuffix },
+                { name: 'arrayAccess', baseName: 'target', parse: acceptArrayAccessSuffix },
+            ],
+        },
+    }], AST.Expression);
+}
+
+/**
+ * VarDeclaration ::= IDENT EQUALS Expression
+ */
+function acceptVarDeclaration(parser) {
+    return accept(parser, [
+        { name: 'varIdentToken', type: 'IDENT' },
+        { name: 'equalsToken', type: 'EQUALS', definite: true },
+        { name: 'initialValue', parse: acceptExpression, mess: mess.INVALID_INITIAL_VALUE },
+    ], AST.VarDeclaration);
+}
+
+/**
+ * ShorthandLambdaExpression ::= IDENT FAT_ARROW FunctionBody
+ */
+function acceptShorthandLambdaExpression(parser) {
+    return accept(parser, [
+        { name: 'shorthandParam', type: 'IDENT' },
+        { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
+        { name: 'body', parse: acceptFunctionBody },
+    ], AST.LambdaExpression);
 }
 
 /**
@@ -1209,7 +1364,7 @@ function acceptDeclaration(parser) {
  *               BreakStatement
  */
 function acceptStatement(parser) {
-    return this.accept(parser, [{
+    return accept(parser, [{
         choices: [
             { name: 'block', parse: acceptBlock },
             { name: 'exp', parse: acceptExpression },
