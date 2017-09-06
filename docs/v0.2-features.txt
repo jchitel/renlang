@@ -57,7 +57,21 @@ Test-case expressions are for testing target expressions by predicate cases:
 
 test (<expression>) { case <predicate> => <expression>; ...; default => <expression> }
 
-Predicates are boolean expressions with a single _ to use as the input parameter.
+Predicates are functions that return a boolean value for an input parameter of the type of the target expression.
+
+## Shorthand functions
+
+Shorthand functions are even more succinct function forms than lambdas.
+They are only applicable to non-complex (yet to be defined) expression bodied functions that have one parameter.
+The one parameter is represented by a _ character.
+
+Examples:
+_ + 4
+_ == 2
+someOtherFunc(_, 9)
+
+This will be interesting because it will be parsed as an expression until the underscore is reached.
+Although because this is so context-sensitive, it is probably better to be dealt with during type-checking.
 
 ## Matches expressions
 
@@ -122,6 +136,8 @@ This will be interesting for the lexer because there will be string "segments" t
 ## Indexers
 
 We should be able to index into things other than arrays, using keys other than integers.
+
+<modifiers> <type> [<type> <name>] { get => <expression> set => <expression> }
 
 ## Map/List literals
 
@@ -236,6 +252,13 @@ There are various mechanisms for interacting with an async environment from a sy
 
 Generator functions provide a syntactic abstraction for iterators and generators.
 
+Generators are simply normal functions that use a 'yield' keyword.
+The yielded value is output from the function before it returns, and the function's execution is paused until the next value is requested.
+Generators add additional behavior to iterators that allow the caller to pass data to the generator, so yield expressions may actually resolve to a value.
+Callers can also invoke a throw operation on the generator, which will cause an exception to be thrown in the generator.
+
+### Async generators
+
 TODO
 
 ## Cast expressions
@@ -244,13 +267,226 @@ Sometimes, it's nice to be able to force an expression to have a specific type (
 Cast expressions are used during type checking to force-infer (not coerce) an expression to a type.
 It's more of a "type hint" than a coersion.
 
+Certain casts also inject runtime behavior as well, for example with classes.
+Casts from a general class type to a more specific one will add a runtime type check.
+A class cast error will be thrown if the type is not assignable to the casted type.
+
+<assignable> = (<type>)<expression>
+
 ## Script mode
+
+Script mode allows logic on the top-level of a module.
+
+When this is applied to the main module, the logic is treated in the same manner as the main function.
+The main function in this context is ignored unless it is explicitly invoked.
+
+When this is applied to imported modules, the logic is executed when the module is first imported.
+In script mode, imports can be placed anywhere in the file because they are executed statements as opposed to declarations.
+You can also import modules without using any exported values.
+In addition, "global" values are possible via modules, because modules become runtime values that are mutable (only when const is not used).
+
+In script mode, code is always executed by an interpreter as opposed to being compiled, because the extra overhead is not necessary.
+
+To turn on script mode, you can add a "#script" to the module configuration or use a ".rensh" extension to the file.
+
+Non-script files will have extra optimization in script mode, because they are not executed.
+Script files cannot be compiled, because the structure is not compatible with the compiled code structure.
 
 ## Macros
 
+Macros are intended to be used to build DSLs (domain-specific languages) within Ren, NOT for traditional C-like purposes.
+
+To build macros, you are effectively building parsing and execution logic for the DSL.
+Macros add abstractions for syntax and logic ONLY, they do NOT change the behavior of the type system or runtime.
+
+Macros are collections of parser functions.
+There is always one top-level parser function which indicates if the macro is a "transformation" or "execution" macro.
+Transformation macros parse the DSL and emit valid Ren code that will be used to replace the DSL code during parsing.
+Execution macros parse the DSL into runtime values and contain Ren code that will be executed when the macro is encountered at runtime.
+In the case of execution macros, the macro defintion is used to translate the DSL code into some boilerplate that will invoke the macro functions.
+Transformation macros are more performant than execution ones, but are more complex.
+
+Modules that export macros are special because they need to be processed before any other code.
+Modules that use macros need to declare a macro directive in the module configuration that specifies the relative path to the macro module.
+When the parser encounters these directives during preprocessing, it will parse and process the macro module and add its logic to the parser runtime.
+For each module that uses the macro, the DSL implemented by the macro will be usable like any other code.
+Because Ren's parser is built using order of precedence, macros must declare parse functions that do not clash with Ren code.
+
+The syntax of macros is yet to be determined.
+
 ## Module configurations
 
+Module configurations are a set of preprocessor directives that control how modules are parsed, processed, and compiled.
+Here is a running list of configurations:
+
+- script (turns script mode on)
+- noscript (turns script mode off)
+- macro <path> (imports a macro definition)
+- macrodef (specifies the module as a macro definition)
+- dirmodule (turns the current module into a directory aggregator module, only usable on index.ren files)
+- exclude <glob> (specifies a glob path for files to exclude from the dirmodule)
+- include <glob> (specifies a glob path for files to include in the dirmodule)
+- recursive (applies current dirmodule configuration to all subdirectories as well)
+- exportstyle <explicit|pascal|camel|underscore> <includepath?> (specifies how the aggregated exports should be named)
+  - explicit (default): as much as possible, keep the names as-is. default exports of modules will take the module name, replacing all non-identifier characters with underscores
+  - pascal: module names are translated to pascal-case, where the first letter is capitalized and all non-identifier characters are treated as word boundaries where the next character is capitalized
+  - camel: module names are translated to camel-case, where the first letter is lowercase and all non-identifier characters are treated as word boundaries where the next character is capitalized
+  - underscore: module names are translated to underscore style, where all letters are made lowercase and non-identifier characters are replaced with underscores
+  - includepath (default false): an optional modifier that includes relative module paths in names, inserting "default" for default exports
+- defaultforward <path> (specifies a module whose default value should be forwarded as the default of the dirmodule)
+
+"dirmodule" modules allow common configuration to be specified for several files in a directory, and potentially subdirectories as well.
+It is useful to be used for the top-level index.ren to specify project-wide configurations.
+In recursive configurations, module configurations can override inherited configurations.
+
+There will likely be many more options to come, containing things like compiler options and typechecker configurations.
+
 ## Closures
+
+As of now, functions only support operations on their parameters or module-scoped constants.
+We need to allow access to local variables as well.
+This is classically done via "closures", which are logical collections of references to local variables.
+While parameters are new memory allocations which will lose the original reference if reassigned, closure variables are direct references.
+If you have a variable x and an inner lambda function which sets x to some value, that will set the value of x in the outer function.
+
+A necessary extension of this is that non-mutating references to outer function variables are possible.
+This is MUCH easier to implement, and as an optimization, any outer function references that are not modified can be copied as opposed to being referenced.
+Closures are an example of something that can be configured as disallowed in a linter, because they lead to performance issues.
+
+## Function contexts
+
+Function contexts are one of the language features that is completely new to Ren, not inspired from another language.
+Operations that come with necessary side effects, such as IO, are difficult to implement in a pure functional way.
+Languages like Haskell use Monads to get around this, but the IO Monad is just a way to offset the side-effecty operations until after
+the program is done executing. When you perform an IO operation, you are just specifying "actions" to be executed later.
+
+Function contexts are a way to implement operations that mutate data or perform side effects without a bunch of code overhead.
+A function context is an implicit parameter that is passed to functions that require it.
+Functions that require a context must explicitly declare it as a context parameter.
+Any function that invokes a function with a context then has that context implicitly added to itself.
+This goes recursively upward to the main function.
+The main function receives a special context called "external" that represents resources external to the application.
+This context is required to access side-effecty operations from pure code.
+Any time an impure function is called from a pure function, the external context is implicitly passed to it and implicitly returned as a new value.
+
+external is the only context received by the main function, so if a different context bubbles up to the main function, an error is thrown during compilation.
+These contexts must be created separately and passed to functions that use them.
+For example, an application might have a "state" context that maintains the state of the application.
+Functions that use it will implicitly or explicitly be given a "state" context parameter.
+But some function between the main function and those functions must initialize "state" and start it as a context for a call chain.
+
+There are a few dependent features that are required for this to be possible:
+
+### Pure/impure functions
+
+Functions should be labelled either pure or impure.
+There are two types of "pure" that are not really distinguished by Ren, but should be distinguishable by the developer.
+The first is "true pure", meaning every function is expression-bodied and not even local state is mutated.
+These functions do not perform side effecty operations of any kind.
+The second is "essentially pure" or "quasi pure", where externally, functions don't violate referential transparency,
+but internally, they perform mutable operations such as setting local variables and changing their values.
+To label a function "pure", you can simply add the "pure" keyword to the function (or add the #pure directive to the module).
+"true pure" functions are "pure" functions that are expression-bodied.
+"quasi pure" functions are "pure" functions that are statement-bodied.
+Ren doesn't care, it treats them effectively the same.
+
+"impure" functions are functions that can directly mutate state and perform side effects.
+They can be expression bodied, but are usually statement-bodied.
+To label these, use the "impure" keyword (or add the #impure directive to the module).
+
+"quasi pure" functions and "impure" functions have different runtime semantics, primarily around mutation.
+When you declare a local variable, a new variable is added to the runtime state of the function initialized to the provided value.
+In an "impure" function, reassigning the variable behaves as expected. The memory location or register value is modified.
+In a "quasi-pure" function, reassigning the variable creates a new reference, and all future references to the variable will use the new reference.
+All past references to the variable maintain the old value.
+This is not necessary when previous references are not saved.
+This behavior maintains immutability rules for purity.
+
+Additionally, mutating the internals of values, either local variables or parameters, will cause a shallow copy of the value to be created in "quasi-pure" functions.
+In "impure" functions, the value is actually mutated.
+When this happens to a parameters in a "quasi-pure" function, the new reference will be made available implicitly to the caller.
+If the caller (even an "impure" caller) uses the value after calling the function, it will be referencing the new value.
+In the case of methods, references to "this" behave the same way. If "this" is modified at all, a new "this" will be implicitly returned from the function.
+The same applies to contexts.
+
+Classes and structs can also be labelled pure, which effectively makes their internals immutable.
+Impure code using these types will have the same restrictions as "quasi-pure" functions.
+
+## Decorators
+
+Decorators are higher-order functions that modify function definitions in-place.
+This is very useful for common logic around functions.
+They receive a function as a parameter (the types can be generic or specific) and must return a function of the same type.
+Ideally the new function will call the original function, but it technically doesn't have to.
+
+This can be useful for many things:
+- logging
+- memoization
+- invariant checks on parameters
+- initialization of values required by the function
+
+Additionally, decorators can be functions that return decorator functions.
+This can be used to configure the decorator for each target function.
+
+## Reflection
+
+Reflection allows runtime inspection of types and values.
+The built-in "reflect" module provides a single entry-point function: reflect() which will return a reflection object for the provided value.
+This will return a Value instance (a subclass instance of Value) which allows runtime access to the value's internals and types.
+For example, invoking reflect() on a struct will return a Struct instance, and one can enumerate the keys and values of the struct,
+get its runtime memory size, or serialize it.
+
+To do this on types, the type must be converted to a type reference using the "typeof" keyword.
+A type reference isn't useful for much aside from comparing to other type references and getting the name as a string.
+To do reflection operations, you have to call reflect() on the type reference to get a Type instance.
+Type is a class that has several subclasses: StructType, ArrayType, TupleType, Class, Primitive, etc.
+The fields or contents of the type can be enumerated or invoked dynamically on a value.
+
+Reflection also includes type decorators.
+Type decorators are functions that receive the reflected value of types and can operate on the type before it is created.
+During this stage, the type is technically mutable, but members cannot be added or removed, and signatures cannot change.
+
+## String interpolation
+
+String interpolation is a syntax sugar for string concatenation.
+
+It can be done by placing a $ at the start of a string, then using {}. In between the {} can be any expression.
+At some point in the expression a : can be used to configure formatting options, which must be separated by commas and will be passed
+as parameters to the type's toString() method. Strings do not need to be delimited here, but they can.
+A type cannot be used in a string interpolation if it does not have a toString() method.
+
+## Optionals
+
+Optionals are special values that can be either some value or nothing.
+Optional types look like this:
+
+<type>?
+
+Optional types are assignable from their base type, but not to them.
+Additionally there is a special value nothing that is assignable to all T?.
+To extract a value of the base type from an optional, you need the ?? operator, which has the following signature:
+
+infix oper T ??(T? value, T alternate)
+
+If the value represents some T, then that value is returned. Otherwise, the alternate value is returned.
+
+Additionally, there is a little thing called optional chaining, whereby you can access an optional's value as if it were some T, but nothing will happen if it's nothing.
+
+value = (SomeType?)nothing
+value?.someField?.someFunc?() // nothing
+
+Each member access returns an optional form of the expected type of the access.
+At runtime, if the base value or any intermediate value is nothing, the full expression will resolve to nothing.
+
+There are several other APIs of the T? type that can all be called on nothing without an error, which is what makes these types so valuable.
+
+## With operator
+
+For classes and structs, the with operator allows setting multiple fields in a single expression.
+
+<assignable> with <expression>
+
+The expression must be struct-assignable to the assignable value, and will return a new reference.
 
 # Tooling
 
