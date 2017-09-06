@@ -1175,10 +1175,22 @@ export default class Parser {
     }
 }
 
+export function parse(source) {
+    // start with 'soft' as false because Program is implicitly definite
+    const parser = { soft: false, peeked: 0 };
+    // This is a triple-wrapped iterator:
+    // 1. the tokenizer yields tokens one at a time
+    // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
+    // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
+    parser.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
+    parser.tokenizer.peeked = 0;
+    return acceptProgram(parser);
+}
+
 /**
  * Program ::= ImportDeclaration* Declaration*
  */
-function acceptProgram(parser) {
+export function acceptProgram(parser) {
     return accept(parser, [
         { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true },
         { name: 'declarations', parse: acceptDeclaration, zeroOrMore: true },
@@ -1189,7 +1201,7 @@ function acceptProgram(parser) {
 /**
  * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON ImportList
  */
-function acceptImportDeclaration(parser) {
+export function acceptImportDeclaration(parser) {
     return accept(parser, [
         { name: 'importToken', type: 'IMPORT', definite: true },
         { name: 'fromToken', type: 'FROM', mess: mess.INVALID_IMPORT },
@@ -1203,7 +1215,7 @@ function acceptImportDeclaration(parser) {
  * ImportList ::= IDENT
  *              | NamedImports
  */
-function acceptImportList(parser) {
+export function acceptImportList(parser) {
     return accept(parser, [{
         choices: [
             { name: 'defaultImportNameToken', type: 'IDENT' },
@@ -1215,7 +1227,7 @@ function acceptImportList(parser) {
 /**
  * NamedImports ::= LBRACE ImportComponent(+ sep COMMA) RBRACE
  */
-function acceptNamedImports(parser) {
+export function acceptNamedImports(parser) {
     return accept(parser, [
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'importComponents', parse: acceptImportComponent, mess: mess.INVALID_IMPORT, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
@@ -1226,7 +1238,7 @@ function acceptNamedImports(parser) {
 /**
  * ImportComponent ::= IDENT | ImportWithAlias
  */
-function acceptImportComponent(parser) {
+export function acceptImportComponent(parser) {
     return accept(parser, [{
         choices: [
             { name: 'importWithAlias', parse: acceptImportWithAlias },
@@ -1238,7 +1250,7 @@ function acceptImportComponent(parser) {
 /**
  * ImportWithAlias ::= IDENT AS IDENT
  */
-function acceptImportWithAlias(parser) {
+export function acceptImportWithAlias(parser) {
     return accept(parser, [
         { name: 'importNameToken', type: 'IDENT' },
         { name: 'asToken', type: 'AS', definite: true },
@@ -1249,7 +1261,7 @@ function acceptImportWithAlias(parser) {
 /**
  * Declaration ::= FunctionDeclaration | TypeDeclaration | ExportDeclaration
  */
-function acceptDeclaration(parser) {
+export function acceptDeclaration(parser) {
     return accept(parser, [{
         choices: [
             { name: 'function', parse: acceptFunctionDeclaration },
@@ -1262,7 +1274,7 @@ function acceptDeclaration(parser) {
 /**
  * FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW FunctionBody
  */
-function acceptFunctionDeclaration(parser) {
+export function acceptFunctionDeclaration(parser) {
     return accept(parser, [
         { name: 'funcToken', type: 'FUNC', definite: true },
         { name: 'returnType', parse: acceptType, mess: mess.INVALID_RETURN_TYPE },
@@ -1277,7 +1289,7 @@ function acceptFunctionDeclaration(parser) {
 /**
  * ParameterList ::= LPAREN Param(+ sep COMMA) RPAREN
  */
-function acceptParameterList(parser) {
+export function acceptParameterList(parser) {
     return accept(parser, [
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'params', parse: acceptParam, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
@@ -1288,7 +1300,7 @@ function acceptParameterList(parser) {
 /**
  * Param ::= Type IDENT
  */
-function acceptParam(parser) {
+export function acceptParam(parser) {
     return accept(parser, [
         { name: 'typeNode', parse: acceptType, mess: mess.INVALID_PARAMETER_TYPE },
         { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_PARAMETER_NAME },
@@ -1298,7 +1310,7 @@ function acceptParam(parser) {
 /**
  * FunctionBody ::= Expression | Statement
  */
-function acceptFunctionBody(parser) {
+export function acceptFunctionBody(parser) {
     return accept(parser, [{
         choices: [
             { name: 'expressionBody', parse: acceptExpression },
@@ -1308,9 +1320,9 @@ function acceptFunctionBody(parser) {
 }
 
 /**
- * TypeDeclaration ::= TYPE IDENT EQUALS Type
+ * TypeDeclaration ::= TYPE IDENT TypeParamList? EQUALS Type
  */
-function acceptTypeDeclaration(parser) {
+export function acceptTypeDeclaration(parser) {
     return accept(parser, [
         { name: 'typeToken', type: 'TYPE', definite: true },
         { name: 'typeNameToken', type: 'IDENT', mess: mess.INVALID_TYPE_NAME },
@@ -1323,7 +1335,7 @@ function acceptTypeDeclaration(parser) {
 /**
  * ExportDeclaration ::= EXPORT ExportName ExportValue?
  */
-function acceptExportDeclaration(parser) {
+export function acceptExportDeclaration(parser) {
     return accept(parser, [
         { name: 'exportToken', type: 'EXPORT', definite: true },
         { name: 'exportName', parser: acceptExportName },
@@ -1334,7 +1346,7 @@ function acceptExportDeclaration(parser) {
 /**
  * ExportName ::= DEFAULT | NamedExport
  */
-function acceptExportName(parser) {
+export function acceptExportName(parser) {
     return accept(parser, [{
         choices: [
             { name: 'defaultToken', type: 'DEFAULT' },
@@ -1346,7 +1358,7 @@ function acceptExportName(parser) {
 /**
  * NamedExport ::= IDENT EQUALS
  */
-function acceptNamedExport(parser) {
+export function acceptNamedExport(parser) {
     return accept(parser, [
         { name: 'exportNameToken', type: 'IDENT' },
         { name: 'equalsToken', type: 'EQUALS' },
@@ -1356,7 +1368,7 @@ function acceptNamedExport(parser) {
 /**
  * ExportValue ::= FunctionDeclaration | TypeDeclaration | Expression
  */
-function acceptExportValue(parser) {
+export function acceptExportValue(parser) {
     return accept(parser, [{
         choices: [
             { name: 'functionDeclaration', parse: acceptFunctionDeclaration },
@@ -1369,7 +1381,7 @@ function acceptExportValue(parser) {
 /**
  * TypeParamList ::= LT TypeParam(+ sep COMMA) GT
  */
-function acceptTypeParamList(parser) {
+export function acceptTypeParamList(parser) {
     return accept(parser, [
         { name: 'openLtToken', image: '<', definite: true },
         { name: 'typeParams', parse: acceptTypeParam, mess: mess.INVALID_TYPE_PARAM, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
@@ -1380,7 +1392,7 @@ function acceptTypeParamList(parser) {
 /**
  * TypeParam ::= VarianceOp? IDENT TypeConstraint?
  */
-function acceptTypeParam(parser) {
+export function acceptTypeParam(parser) {
     return accept(parser, [
         { name: 'varianceOp', parse: acceptVarianceOp, optional: true },
         { name: 'identToken', type: 'IDENT', mess: mess.INVALID_TYPE_PARAM },
@@ -1391,7 +1403,7 @@ function acceptTypeParam(parser) {
 /**
  * VarianceOp ::= PLUS | MINUS
  */
-function acceptVarianceOp(parser) {
+export function acceptVarianceOp(parser) {
     return accept(parser, [{
         choices: [
             { name: 'covariantToken', image: '+' },
@@ -1403,7 +1415,7 @@ function acceptVarianceOp(parser) {
 /**
  * TypeConstraint ::= ConstraintOp Type
  */
-function acceptTypeConstraint(parser) {
+export function acceptTypeConstraint(parser) {
     return accept(parser, [
         { name: 'constraintOp', parse: acceptConstraintOp, definite: true },
         { name: 'constraintType', parse: acceptType, mess: mess.INVALID_TYPE_PARAM },
@@ -1413,7 +1425,7 @@ function acceptTypeConstraint(parser) {
 /**
  * ConstraintOp ::= COLON | ASS_FROM
  */
-function acceptConstraintOp(parser) {
+export function acceptConstraintOp(parser) {
     return accept(parser, [{
         choices: [
             { name: 'assignableToToken', type: 'COLON' },
@@ -1445,7 +1457,7 @@ function acceptConstraintOp(parser) {
  * TypeSuffix ::= ArrayTypeSuffix
  *              | UnionTypeSuffix
  */
-function acceptType(parser) {
+export function acceptType(parser) {
     return accept(parser, [{
         leftRecursive: {
             bases: [
@@ -1463,8 +1475,8 @@ function acceptType(parser) {
                 { name: 'builtIn', type: 'ANY' },
                 { name: 'structType', parse: acceptStructType },
                 { name: 'functionType', parse: acceptFunctionType },
-                { name: 'tupleType', parse: acceptTupleType },
                 { name: 'parenthesized', parse: acceptParenthesizedType },
+                { name: 'tupleType', parse: acceptTupleType },
                 { name: 'genericType', parse: acceptGenericType },
                 { name: 'nameToken', type: 'IDENT' },
             ],
@@ -1479,7 +1491,7 @@ function acceptType(parser) {
 /**
  * StructType ::= LBRACE Field* RBRACE
  */
-function acceptStructType(parser) {
+export function acceptStructType(parser) {
     return accept(parser, [
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'fields', parse: acceptField, zeroOrMore: true },
@@ -1490,7 +1502,7 @@ function acceptStructType(parser) {
 /**
  * Field ::= Type IDENT
  */
-function acceptField(parser) {
+export function acceptField(parser) {
     return accept(parser, [
         { name: 'typeNode', parse: acceptType, mess: mess.INVALID_FIELD_TYPE },
         { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_FIELD_NAME },
@@ -1500,7 +1512,7 @@ function acceptField(parser) {
 /**
  * FunctionType ::= LPAREN Type(* sep COMMA) RPAREN FAT_ARROW Type
  */
-function acceptFunctionType(parser) {
+export function acceptFunctionType(parser) {
     return accept(parser, [
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
@@ -1511,9 +1523,20 @@ function acceptFunctionType(parser) {
 }
 
 /**
+ * ParenthesizedType ::= LPAREN Type RPAREN
+ */
+export function acceptParenthesizedType(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'paramTypes', parse: acceptType, mess: mess.INVALID_TYPE },
+        { name: 'closeParenToken', type: 'RPAREN', definite: true },
+    ], AST.ParenthesizedType);
+}
+
+/**
  * TupleType ::= LPAREN Type(* sep COMMA) RPAREN
  */
-function acceptTupleType(parser) {
+export function acceptTupleType(parser) {
     return accept(parser, [
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', definite: true, mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
@@ -1521,12 +1544,45 @@ function acceptTupleType(parser) {
     ], AST.FunctionType);
 }
 
-function acceptParenthesizedType(parser) {
+/**
+ * GenericType ::= IDENT TypeArgList
+ */
+export function acceptGenericType(parser) {
     return accept(parser, [
-        { name: 'openParenToken', type: 'LPAREN', definite: true },
-        { name: 'paramTypes', parse: acceptType, mess: mess.INVALID_TYPE },
-        { name: 'closeParenToken', type: 'RPAREN' },
-    ], AST.ParenthesizedType);
+        { name: 'identToken', type: 'IDENT' },
+        { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
+    ], AST.GenericType);
+}
+
+/**
+ * TypeArgList ::= LT Type(+ sep COMMA) GT
+ */
+export function acceptTypeArgList(parser) {
+    return accept(parser, [
+        { name: 'openLtToken', image: '<', definite: true },
+        { name: 'types', parse: acceptType, oneOrMore: true, mess: mess.INVALID_TYPE_ARGUMENT, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeGtToken', image: '>', mess: mess.INVALID_TYPE_ARG_LIST },
+    ], AST.TypeArgList);
+}
+
+/**
+ * ArrayTypeSuffix ::= LBRACK RBRACK
+ */
+export function acceptArrayTypeSuffix(parser) {
+    return accept(parser, [
+        { name: 'openBracketToken', type: 'LBRACK', definite: true },
+        { name: 'closeBracketToken', type: 'RBRACK' },
+    ], AST.ArrayType);
+}
+
+/**
+ * UnionTypeSuffix ::= VBAR Type
+ */
+export function acceptUnionTypeSuffix(parser) {
+    return accept(parser, [
+        { name: 'vbarToken', image: '|', definite: true },
+        { name: 'right', parse: acceptType, mess: mess.INVALID_UNION_TYPE },
+    ], AST.UnionType);
 }
 
 /**
@@ -1553,7 +1609,7 @@ function acceptParenthesizedType(parser) {
  *                    | FieldAccessSuffix
  *                    | ArrayAccessSuffix
  */
-function acceptExpression(parser) {
+export function acceptExpression(parser) {
     return accept(parser, [{
         leftRecursive: {
             bases: [
@@ -1571,8 +1627,8 @@ function acceptExpression(parser) {
                 { name: 'ifElse', parse: acceptIfElseExpression },
                 { name: 'unary', parse: acceptPrefixExpression },
                 { name: 'lambda', parse: acceptLambdaExpression },
-                { name: 'tupleLiteral', parse: acceptTupleLiteral },
                 { name: 'inner', parse: acceptParentheticalExpression },
+                { name: 'tupleLiteral', parse: acceptTupleLiteral },
             ],
             suffixes: [
                 { name: 'functionApplication', baseName: 'target', parse: acceptFunctionApplicationSuffix },
@@ -1588,7 +1644,7 @@ function acceptExpression(parser) {
 /**
  * VarDeclaration ::= IDENT EQUALS Expression
  */
-function acceptVarDeclaration(parser) {
+export function acceptVarDeclaration(parser) {
     return accept(parser, [
         { name: 'varIdentToken', type: 'IDENT' },
         { name: 'equalsToken', type: 'EQUALS', definite: true },
@@ -1599,12 +1655,169 @@ function acceptVarDeclaration(parser) {
 /**
  * ShorthandLambdaExpression ::= IDENT FAT_ARROW FunctionBody
  */
-function acceptShorthandLambdaExpression(parser) {
+export function acceptShorthandLambdaExpression(parser) {
     return accept(parser, [
         { name: 'shorthandParam', type: 'IDENT' },
         { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
         { name: 'body', parse: acceptFunctionBody },
     ], AST.LambdaExpression);
+}
+
+/**
+ * ArrayLiteral ::= LBRACK Expression(* sep COMMA) RBRACK
+ */
+export function acceptArrayLiteral(parser) {
+    return accept(parser, [
+        { name: 'openBracketToken', type: 'LBRACK', definite: true },
+        { name: 'items', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.ARRAY_LITERAL_MISSING_COMMA } },
+        { name: 'closeBracketToken', type: 'RBRACK' },
+    ], AST.ArrayLiteral);
+}
+
+/**
+ * StructLiteral ::= LBRACE StructEntry(* sep COMMA) RBRACE
+ */
+export function acceptStructLiteral(parser) {
+    return accept(parser, [
+        { name: 'openBraceToken', type: 'LBRACE', definite: true },
+        { name: 'entries', parse: acceptStructEntry, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.STRUCT_LITERAL_MISSING_COMMA } },
+        { name: 'closeBraceToken', type: 'RBRACE' },
+    ], AST.ArrayLiteral);
+}
+
+/**
+ * StructEntry ::= IDENT COLON Expression
+ */
+export function acceptStructEntry(parser) {
+    return accept(parser, [
+        { name: 'keyToken', type: 'IDENT', definite: true },
+        { name: 'colonToken', type: 'COLON', mess: mess.STRUCT_LITERAL_MISSING_COLON },
+        { name: 'value', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+    ], AST.StructEntry);
+}
+
+/**
+ * IfElseExpression ::= IF LPAREN Expression RPAREN Expression ELSE Expression
+ */
+export function acceptIfElseExpression(parser) {
+    return accept(parser, [
+        { name: 'ifToken', type: 'IF', definite: true },
+        { name: 'openParenToken', type: 'LPAREN', mess: mess.IF_MISSING_OPEN_PAREN },
+        { name: 'condition', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+        { name: 'closeParenToken', type: 'RPAREN', mess: mess.IF_MISSING_CLOSE_PAREN },
+        { name: 'consequent', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+        { name: 'elseToken', type: 'ELSE', mess: mess.IF_MISSING_ELSE },
+        { name: 'alternate', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+    ], AST.IfElseExpression);
+}
+
+/**
+ * PrefixExpression ::= OPER Expression
+ */
+export function acceptPrefixExpression(parser) {
+    return accept(parser, [
+        { name: 'operatorToken', type: 'OPER', definite: true },
+        { name: 'target', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+    ], AST.PrefixExpression);
+}
+
+/**
+ * LambdaExpression ::= LPAREN LambdaParam(* sep COMMA) RPAREN FAT_ARROW FunctionBody
+ */
+export function acceptLambdaExpression(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'params', parse: acceptLambdaParam, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeParenToken', type: 'RPAREN' },
+        { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
+        { name: 'functionBody', parse: acceptFunctionBody, mess: mess.INVALID_FUNCTION_BODY },
+    ], AST.LambdaExpression);
+}
+
+/**
+ * LambdaParam ::= Param | IDENT
+ */
+export function acceptLambdaParam(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'typedParam', parse: acceptParam },
+            { name: 'identToken', type: 'IDENT' },
+        ],
+    }], AST.LambdaParam);
+}
+
+/**
+ * ParentheticalExpression ::= LPAREN Expression RPAREN
+ */
+export function acceptParentheticalExpression(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'inner', parse: acceptExpression },
+        { name: 'closeParenToken', type: 'RPAREN', definite: true },
+    ], AST.ParentheticalExpression);
+}
+
+/**
+ * TupleLiteral ::= LPAREN Expression(* sep COMMA) RPAREN
+ */
+export function acceptTupleLiteral(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN', definite: true },
+        { name: 'items', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.TUPLE_LITERAL_MISSING_COMMA } },
+        { name: 'closeParenToken', type: 'RPAREN' },
+    ], AST.TupleLiteral);
+}
+
+/**
+ * FunctionApplicationSuffix ::= TypeArgList? LPAREN Expression(* sep COMMA) RPAREN
+ */
+export function acceptFunctionApplicationSuffix(parser) {
+    return accept(parser, [
+        { name: 'typeArgList', parse: acceptTypeArgList, optional: true },
+        { name: 'openParenToken', type: 'LPAREN', definite: true },
+        { name: 'args', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.FUNCTION_APPLICATION_MISSING_COMMA } },
+        { name: 'closeParenToken', type: 'RPAREN' },
+    ], AST.FunctionApplication);
+}
+
+/**
+ * BinaryExpressionSuffix ::= OPER Expression
+ */
+export function acceptBinaryExpressionSuffix(parser) {
+    return accept(parser, [
+        { name: 'operatorToken', type: 'OPER' },
+        { name: 'right', parse: acceptExpression, definite: true },
+    ], AST.BinaryExpression);
+}
+
+/**
+ * PostfixExpressionSuffix ::= OPER
+ */
+export function acceptPostfixExpressionSuffix(parser) {
+    return accept(parser, [
+        { name: 'operatorToken', type: 'OPER', definite: true },
+    ], AST.PostfixExpression);
+}
+
+/**
+ * FieldAccessSuffix ::= DOT IDENT
+ */
+export function acceptFieldAccessSuffix(parser) {
+    return accept(parser, [
+        { name: 'dotToken', type: 'DOT', definite: true },
+        { name: 'fieldNameToken', type: 'IDENT', mess: mess.FIELD_ACCESS_INVALID_FIELD_NAME },
+    ], AST.FieldAccess);
+}
+
+/**
+ * ArrayAccessSuffix ::= LBRACK Expression RBRACK
+ */
+export function acceptArrayAccessSuffix(parser) {
+    return accept(parser, [
+        { name: 'openBracketToken', type: 'LBRACK', definite: true },
+        { name: 'indexExp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+        { name: 'closeBracketToken', type: 'RBRACK', mess: mess.ARRAY_ACCESS_MISSING_CLOSE_BRACKET },
+    ], AST.ArrayAccess);
 }
 
 /**
@@ -1618,7 +1831,7 @@ function acceptShorthandLambdaExpression(parser) {
  *               ThrowStatement |
  *               BreakStatement
  */
-function acceptStatement(parser) {
+export function acceptStatement(parser) {
     return accept(parser, [{
         choices: [
             { name: 'block', parse: acceptBlock },
@@ -1638,7 +1851,7 @@ function acceptStatement(parser) {
 /**
  * Block ::= LBRACE Statement* RBRACE
  */
-function acceptBlock(parser) {
+export function acceptBlock(parser) {
     return accept(parser, [
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'statements', parse: acceptStatement, zeroOrMore: true },
@@ -1649,7 +1862,7 @@ function acceptBlock(parser) {
 /**
  * ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
  */
-function acceptForStatement(parser) {
+export function acceptForStatement(parser) {
     return accept(parser, [
         { name: 'forToken', type: 'FOR', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.FOR_MISSING_OPEN_PAREN },
@@ -1664,7 +1877,7 @@ function acceptForStatement(parser) {
 /**
  * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
  */
-function acceptWhileStatement(parser) {
+export function acceptWhileStatement(parser) {
     return accept(parser, [
         { name: 'whileToken', type: 'WHILE', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.WHILE_MISSING_OPEN_PAREN },
@@ -1677,7 +1890,7 @@ function acceptWhileStatement(parser) {
 /**
  * DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
  */
-function acceptDoWhileStatement(parser) {
+export function acceptDoWhileStatement(parser) {
     return accept(parser, [
         { name: 'doToken', type: 'DO', definite: true },
         { name: 'body', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
@@ -1691,7 +1904,7 @@ function acceptDoWhileStatement(parser) {
 /**
  * TryCatchStatement ::= TRY Statement CatchClause+ FinallyClause?
  */
-function acceptTryCatchStatement(parser) {
+export function acceptTryCatchStatement(parser) {
     return accept(parser, [
         { name: 'tryToken', type: 'TRY', definite: true },
         { name: 'tryBody', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
@@ -1703,7 +1916,7 @@ function acceptTryCatchStatement(parser) {
 /**
  * CatchClause ::= CATCH LPAREN Param RPAREN Statement
  */
-function acceptCatchClause(parser) {
+export function acceptCatchClause(parser) {
     return accept(parser, [
         { name: 'catchToken', type: 'CATCH', mess: mess.TRY_CATCH_MISSING_CATCH },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.TRY_CATCH_MISSING_OPEN_PAREN },
@@ -1716,7 +1929,7 @@ function acceptCatchClause(parser) {
 /**
  * FinallyClause ::= FINALLY Statement
  */
-function acceptFinallyClause(parser) {
+export function acceptFinallyClause(parser) {
     return accept(parser, [
         { name: 'finallyToken', type: 'FINALLY', definite: true },
         { name: 'finallyBlock', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
@@ -1726,7 +1939,7 @@ function acceptFinallyClause(parser) {
 /**
  * ThrowStatement ::= THROW Expression
  */
-function acceptThrowStatement(parser) {
+export function acceptThrowStatement(parser) {
     return accept(parser, [
         { name: 'throwToken', type: 'THROW', definite: true },
         { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
@@ -1736,7 +1949,7 @@ function acceptThrowStatement(parser) {
 /**
  * ReturnStatement ::= RETURN Expression?
  */
-function acceptReturnStatement(parser) {
+export function acceptReturnStatement(parser) {
     return accept(parser, [
         { name: 'returnToken', type: 'RETURN', definite: true },
         { name: 'exp', parse: acceptExpression, optional: true, mess: mess.INVALID_EXPRESSION },
@@ -1746,7 +1959,7 @@ function acceptReturnStatement(parser) {
 /**
  * BreakStatement ::= BREAK INTEGER_LITERAL?
  */
-function acceptBreakStatement(parser) {
+export function acceptBreakStatement(parser) {
     return accept(parser, [
         { name: 'breakToken', type: 'BREAK', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
@@ -1756,135 +1969,262 @@ function acceptBreakStatement(parser) {
 /**
  * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
  */
-function acceptContinueStatement(parser) {
+export function acceptContinueStatement(parser) {
     return accept(parser, [
         { name: 'continueToken', type: 'CONTINUE', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);
 }
 
+// ///////////////////////////
+// PARSER CONTROL FUNCTIONS //
+// ///////////////////////////
+
 /**
- * Generic non-terminal parse function.
- * 'defs' is an array of non-terminal component definitions, which must have at least the following properties:
- * - 'name': the name of the resulting component in the node class
- * and can have the following properties:
- * - 'type': a token type to match
- * - 'optional': whether the component is required
- *   - for tokens, this will simply skip over the token if it does not match
- *   - for non-terminals, this will check to see if the non-terminal matches and skip if it doesn't
- * - 'definite': if the component is not present, return false so that other expansions can be tried
- * - 'mess': message string or function to use when the parse fails
- * - 'parse': parse function to use when a component is another non-terminal
- * 'opts' is an object of parser options to pass to the next child accept() call:
- * - 'check': parse without consuming, stop when it is guaranteed that this non-terminal matches, then return true, otherwise return false
- * - 'soft': when parse fails, just return false, don't throw an error
- * TODO: the check option needs to peek instead of iterating
+ * Gets the next token from the parser, taking into account the soft flag.
  */
-function accept(parser, defs, clss) {
-    // AST node class constructor parameters
-    const comps = {};
-    const children = [];
-    // loop over each component definition
-    for (const def of defs) {
-        let node;
-        if (def.choices) {
-            for (const choice of def.choices) {
-                let choiceNode;
-                if (choice.type || choice.image) {
-                    choiceNode = acceptToken(parser, choice);
-                } else if (choice.parse) {
-                    choiceNode = acceptNode(parser, choice);
+function getNextToken(parser) {
+    if (parser.soft) {
+        const tok = parser.tokenizer.peek(parser.tokenizer.peeked);
+        parser.tokenizer.peeked++;
+        return tok;
+    }
+    return parser.tokenizer.next().value;
+}
+
+/**
+ * Fast forwards the iteration of tokens to the current peeked location
+ */
+function consumePeekedTokens(parser) {
+    for (; parser.tokenizer.peeked > 0; --parser.tokenizer.peeked) parser.tokenizer.next();
+}
+
+/**
+ * Resets the peeking of tokens to the previously consumed point
+ */
+function resetPeekedTokens(parser) {
+    parser.tokenizer.peeked = 0;
+}
+
+/**
+ * Creates a message from either a string or a function
+ */
+function createMessage(mess, tok) {
+    return (typeof mess === 'string') ? mess : mess(tok);
+}
+
+/**
+ * Given a definite flag, change the parser state if it is true
+ */
+function processDefiniteFlag(definite, parser) {
+    if (!definite) return;
+    parser.soft = false;
+    consumePeekedTokens(parser);
+}
+
+/**
+ * THE ENGINE OF THE PARSER
+ * So this function has to be huge because there is a ton of control flow logic here, unfortunately.
+ * The parser runs off of a configuration for each non-terminal in the grammar.
+ *
+ * Here are the options we require:
+ * - 'name': specifies the field name on the resulting AST node object
+ * - either 'type', 'image', or 'parse':
+ *   - 'type' and 'image' are the corresponding fields on tokens used to check for terminals
+ *   - 'parse' specifies a non-terminal parse function
+ *
+ * Here are the fields that are required to appear in the defs list somewhere in specific situations:
+ * - 'definite': specifies the component which, when parsed, means that this expansion is the correct path chosen.
+ *   - If, until this point, we have been parsing softly, we can consume all softly parsed tokens
+ *   - After this point, if a token does not match, it is an actual error
+ *   - This option must appear on AT LEAST ONE component of a sequential expansion, and cannot appear on any choice expansions
+ * - 'mess': In the event of an error on this component, throw an error with this message or message generator function
+ * - 'choices': Specifies a choice expansion, where each child is checked in order until one is matched definitely
+ * - 'leftRecursive': A special kind of choice expansion where there are at least one left-recursive choices
+ *   - 'bases': The list of non-left-recursive choices, which are normal choices
+ *   - 'suffixes': The list of left-recursive choices, which should only parse the suffix of the choice, ignoring the left-recursive part
+ *     - 'baseName': The name of the field in the left-recursive AST object that should be used for the prefix portion
+ *
+ * Here are optional fields:
+ * - 'optional': specifies that this component is optional.
+ *   - The component MUST be parsed softly, and in the event of a failure, it should be skipped
+ * - 'zeroOrMore' or 'oneOrMore': specifies that this component can be repeated.
+ *   - Either one or the other can appear, but not both.
+ *   - 'zeroOrMore' means that the component can appear 0 or more times, and 'oneOrMore' means 1 or more times
+ *   - In the event of oneOrMore, parse one instance of the component as if it were non-optional, then proceed to the repetition phase
+ *   - In the repetition phase, parse softly, skipping the component and continuing in the event of a failure
+ * - 'sep': specifies for a repeated component another component that must separate each instance
+ *   - Obviously, this can only appear alongside 'zeroOrMore' and 'oneOrMore'
+ *   - After each repeated instance, one of these MUST be parsed softly.
+ *   - In the event of a failure parsing the separator, the entire repetition is broken out of
+ *   - In the event of a success parsing the separator, the next instance MUST be parsed definitely
+ *
+ * Operation of the parser:
+ * - So there are 4 "modes" of the parser:
+ *   1. Sequential mode: parse expansion components in sequence
+ *   2. Choice mode: parse choice expansions by trying each option separately until one works
+ *   3. Left-recursive mode: same as choice mode, but check for left-recursive options after the non-left-recursive ones
+ *   4. Repetition mode: same as sequential mode, but loop for components that can be repeated
+ * - There is also a 'soft' flag in the parser to indicate whether tokens should be consumed or just peeked,
+ *   and whether failures should simply return false or throw an error.
+ *   Child components will inherit the parent's soft flag unless the parent overrides it.
+ * - Sequential mode is default, each def is used to accept or reject the next sequence of n tokens.
+ *   In the even of a failure, optional components are skipped, the soft flag will cause false to be returned, or an error will be thrown.
+ *   A success will cause the parsed component to be queued for addition to the parent node.
+ *   The 'definite' flag on a component will cause the soft flag to be turned off for the remainder of the parent's operation.
+ *   Once each def is processed, the resulting enumerated children are used to create an instance of the provided AST node class.
+ * - Choice mode is used if one def is provided with the 'choices' key.
+ *   Each child choice is enumerated and accepted softly. A failure will cause the choice to be ignored.
+ *   The first succcessful choice will be used as the resulting single child of the node.
+ *   If none succeed, false is returned so the parent can handle the error accordingly.
+ * - Left-recursive mode is used if one def is provided with the 'leftRecursive' key.
+ *   The 'bases' key under that will be treated the same as the 'choices' key.
+ *   Once a base is chosen, the parser iterates all of the left-recursive suffixes repeatedly
+ *   until it reaches an iteration where none of the suffixes succeed.
+ *   Each successful suffix wraps the previous base as the new base.
+ *   Once that loop exits, the resulting base is the parse result.
+ *   Any failed suffix parse is ignored.
+ * - Repetition mode is used as a sub-mode of sequential mode if a component has the oneOrMore or zeroOrMore flags.
+ *   The definition is accepted repeatedly until it fails, after which all successful parses are grouped into
+ *   a list and used as the resulting child. A oneOrMore flag will treat the first repeated item as required.
+ *   If the component also specifies a 'sep' key, that value will be parsed as a separator which must be
+ *   found between each repetition. If a separator is parsed, the next item is required.
+ *   If a separator is not parsed, another item cannot follow and the component will be finished.
+ */
+export function accept(parser, defs, clss) {
+    if (!defs[0].choices && !defs[0].leftRecursive) {
+        // sequence expansion, process each def in order
+        const comps = {}, children = [];
+        sequentialLoop: for (const def of defs) {
+            // check for repetitive components
+            if (def.oneOrMore || def.zeroOrMore) {
+                // repetitive components are organized into a list, with separators put into a list as well (if used)
+                const list = [], seps = [];
+                // this flag indicates if there was a separator prior, in which case the next item is required
+                let wasSep = false;
+                // this flag indicates that it is a oneOrMore repetition where the first item is required
+                let handleFirst = !!def.oneOrMore;
+                // enter repetition mode
+                while (true) {
+                    // use soft if: 1) handleFirst and wasSep are both false (this item isn't required), or 2) the parser is already soft
+                    const soft = (!handleFirst && !wasSep) || parser.soft;
+                    const [node, accepted] = acceptUsingDef(def, { ...parser, soft });
+                    if (!accepted) {
+                        if (handleFirst) {
+                            // no match for first oneOrMore item, return false or throw error
+                            if (parser.soft || !def.mess) {
+                                resetPeekedTokens(parser);
+                                return false;
+                            }
+                            throw new ParserError(createMessage(def.mess, node), node.line, node.column);
+                        }
+                        // if there was no separator prior, we treat this as the end of repetition
+                        if (!wasSep) {
+                            comps[def.name] = list;
+                            if (def.sep) comps[def.sep.name] = seps;
+                            children = [...children, ...interleave(list, seps)];
+                            resetPeekedTokens(parser);
+                            continue sequentialLoop;
+                        }
+                        if (parser.soft || !def.mess) {
+                            resetPeekedTokens(parser);
+                            return false;
+                        }
+                        throw new ParserError(createMessage(def.mess, node), node.line, node.column);
+                    }
+                    // after the first iteration this should always be false
+                    handleFirst = false;
+                    processDefiniteFlag(def.definite, parser);
+                    list.push(node);
+                    if (def.sep) {
+                        // if there is a separator, parse for it
+                        const sep = acceptUsingDef(def.sep, { ...parser, soft: true });
+                        if (!sep) {
+                            // no separator, repetition has to stop here
+                            comps[def.name] = list;
+                            comps[def.sep.name] = seps;
+                            children = [...children, ...interleave(list, seps)];
+                            resetPeekedTokens(parser);
+                            continue sequentialLoop;
+                        } else {
+                            processDefiniteFlag(def.sep.definite, parser);
+                            seps.push(sep);
+                            wasSep = true;
+                        }
+                    }
                 }
-                // false = no match, other = valid (choices are never marked optional)
-                if (!choiceNode) continue;
-                node = choiceNode;
-                break;
             }
-        } else if (def.type || def.image) {
-            node = acceptToken(parser, def);
-        } else if (def.parse) {
-            node = acceptNode(parser, def);
+            // Sequential mode
+            const [node, accepted] = acceptUsingDef(def, parser);
+            if (!accepted) {
+                // no match, if optional, skip it, if soft or no message, return false, otherwise throw an error
+                if (def.optional) {
+                    resetPeekedTokens(parser);
+                    continue;
+                }
+                if (parser.soft || !def.mess) {
+                    resetPeekedTokens(parser);
+                    return false;
+                }
+                throw new ParserError(createMessage(def.mess, node), node.line, node.column);
+            }
+            processDefiniteFlag(def.definite, parser);
+            // add that component
+            children.push(comps[def.name] = node);
         }
-        // null = skip, false = soft fail, other = valid
-        if (node === null) continue;
-        if (!node) return false;
-        children.push(comps[def.name] = node);
+        return new clss(comps, children);
+    } else {
+        // Choice mode and left-recursive mode
+        let base = null;
+        const choices = defs[0].choices || defs[0].leftRecursive.bases;
+        for (const choice of choices) {
+            const [node, accepted] = acceptUsingDef(def, { ...parser, soft: true });
+            if (!accepted) {
+                resetPeekedTokens(parser);
+                continue;
+            }
+            base = new clss({ [def.name]: node }, [node]);
+            consumePeekedTokens(parser);
+            break;
+        }
+        // if there was no match, the expansion failed
+        if (!base) return false;
+        // if this was not left-recursive, we're done
+        if (defs[0].choices) return base;
+        // Enter left-recursive mode
+        recursiveRetryLoop: while (true) {
+            for (const suff of defs[0].leftRecursive.suffixes) {
+                const suffNode = suff.parse({ ...parser, soft: true });
+                if (suffNode) {
+                    // suffix matched, add the current base to the suffix node, wrap the suffix node
+                    suffNode[suff.baseName] = base;
+                    base = new clss({ [suff.name]: suffNode }, [suffNode]);
+                    consumePeekedTokens(parser);
+                    // try again
+                    continue recursiveRetryLoop;
+                } else {
+                    resetPeekedTokens(parser);
+                }
+            }
+            // we've gone a whole iteration with no matches, break out of the loop
+            break;
+        }
+        return base;
     }
-    // create node object
-    return new clss(comps, children);
 }
 
-function acceptToken(parser, def) {
-    // check against the provided constraints
-    const tok = def.optional ? this.tokenizer.peek() : this.tokenizer.next().value;
-    // check the type
-    if (def.type && tok.type !== def.type || def.image && tok.image !== def.image) {
-        // optional tokens can be skipped
-        if (def.optional) return null;
-        // if definite was true, then this non-terminal is one of many possibilities, and this shouldn't fail
-        if (def.definite || parser.check || parser.soft) return false;
-        // otherwise it is an error
-        throw new ParserError(typeof def.mess === 'string' ? def.mess : def.mess(tok), tok.line, tok.column);
+/**
+ * Attempts to accept the next sequence according to the specified def and parser state.
+ * Returns a tuple array containing [the next token or node, a flag indicating if the accept was successful]
+ */
+function acceptUsingDef(def, parser) {
+    const subParser = { ...parser, soft: def.optional || parser.soft };
+    if (def.type || def.image) {
+        const tok = getNextToken(subParser);
+        const accepted = def.type && (tok.type === def.type) || def.image && (def.image === tok.image);
+        return [tok, accepted];
+    } else if (def.parse) {
+        const node = def.parse(subParser);
+        return [node, !!node];
     }
-    // success
-    return tok;
 }
-
-function acceptNode(parser, def) {
-    const tok = this.tokenizer.peek();
-    if (def.optional) {
-        // optional node, check to see if it MUST be, if not, skip it
-        if (!def.parse({ ...parser, check: true })) return null;
-    }
-    // not optional or succeeded optional check, just do the parse, pass soft if this def has a message
-    const node = def.parse((def.mess || def.optional) ? { ...parser, soft: true } : parser);
-    // failed
-    if (!node && parser.soft) return false;
-    if (!node) throw new ParserError(def.mess, tok.line, tok.column);
-    // success
-    return node;
-}
-
-/*
-Features required of generic parser logic:
-- Specifying expansions of non-terminals (ordered sequences of terminal and non-terminal expressions)
-  - Terminals are specified with an "expected token type"
-  - Non-terminals are specified with a parse function
-  - The sequence is traversed one at a time, if one item fails then the parse fails
-- Zero-or-more and one-or-more options
-  - Captured as a list
-- Optionals
-  - Optional terminals are simply skipped if the type doesn't match
-  - Optional non-terminals are parsed "softly", if they fail then it is skipped, if they reach the "decision point" then they are parsed "non-softly"
-- Choice branching
-  - Each choice is attempted "softly" one by one until one reaches a point where it must be that choice
-  - If no choice reaches that point, the parse fails
-  - Choices must be top-level, any choices embedded must be separated into a new non-terminal
-- Errors for failed parses
-  - Messages can be strings or functions that will receive the first token of the failed parse and return a string
-- "trailing" option for left-recursive non-terminals
-  - The value will be the name of the left-most component in the wrapping non-terminal that is created if the trailing expansion matches
-  - So, all left-recursive non-terminals (type and expression) are of the form: A ::= A a1 | A a2 | b1 | b2 ...
-    We can translate this to A ::= b1 A' | b2 A' ;; A' ::= a1 A' | a2 A' | eps
-    Translated for our purposes, this means that Type and Expression can be shaped like so:
-    - All non-left-recursive choices are matched first.
-    - Once one is matched, we jump straight into a TypeSuffix and ExpressionSuffix non-terminal
-    - These non-terminals contain all of the suffixes of the left-recursive expansions as choices, followed by another reference to itself.
-    - If one is matched, the base expression is wrapped with the suffix type
-    - If not, there's no issue because nothing is a possible option
-    - To denote this, we use a "suffix" option in the def
-    - OR, we have the following setup:
-      Expression ::= ExpressionBase ExpressionSuffix*
-      ExpressionBase ::= (NLR1 | NLR2 | ...) # all of the non-left-recursive expansions
-      ExpressionSuffix ::= (LRS1 | LRS2 | ...) # all of the suffixes of the left-recursive expansions
-    - OR, we have a special thing that is a combination of the two:
-      { leftRecursive: { bases: [{ ...normal... }], suffixes: [{ baseName: 'baseName', ...normal... }] } }
-      I like this one better because it makes it special behavior that assembles the tree as it is supposed to be assembled
-
-
-Possibilities
-- All non-terminals are parsed softly initially until:
-  - A failed terminal is reached, in which case everything is consumed until that terminal and the terminal is passed to the error function
-  - The non-terminal parses successfully, in which case the whole non-terminal is consumed
-- Abstraction for interleaved components, such as comma-separated things
-*/
