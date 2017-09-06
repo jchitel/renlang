@@ -1213,12 +1213,12 @@ function acceptImportList(parser) {
 }
 
 /**
- * NamedImports ::= LBRACE ImportComponent(+ alt COMMA) RBRACE
+ * NamedImports ::= LBRACE ImportComponent(+ sep COMMA) RBRACE
  */
 function acceptNamedImports(parser) {
     return accept(parser, [
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
-        { name: 'importComponents', parse: acceptImportComponent, mess: mess.INVALID_IMPORT, oneOrMore: true, alt: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'importComponents', parse: acceptImportComponent, mess: mess.INVALID_IMPORT, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeBraceToken', type: 'RBRACE', mess: mess.INVALID_IMPORT },
     ], AST.NamedImports);
 }
@@ -1233,21 +1233,6 @@ function acceptImportComponent(parser) {
             { name: 'importNameToken', type: 'IDENT' },
         ],
     }], AST.ImportComponent);
-
-    if (tok.type !== 'IDENT') return false;
-    if (this.tokenizer.peek().type === 'AS') {
-        const asToken = this.tokenizer.next().value;
-        const importAliasToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
-        return new AST.ImportComponent({
-            importNameToken: tok,
-            asToken,
-            importAliasToken,
-        }, [tok, asToken, importAliasToken]);
-    } else {
-        return new AST.ImportComponent({
-            importNameToken: tok,
-        }, [tok]);
-    }
 }
 
 /**
@@ -1272,6 +1257,276 @@ function acceptDeclaration(parser) {
             { name: 'export', parse: acceptExportDeclaration },
         ],
     }], AST.Declaration);
+}
+
+/**
+ * FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW FunctionBody
+ */
+function acceptFunctionDeclaration(parser) {
+    return accept(parser, [
+        { name: 'funcToken', type: 'FUNC', definite: true },
+        { name: 'returnType', parse: acceptType, mess: mess.INVALID_RETURN_TYPE },
+        { name: 'functionNameToken', type: 'IDENT', mess: mess.INVALID_FUNCTION_NAME },
+        { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
+        { name: 'params', parse: acceptParameterList, mess: mess.INVALID_PARAMETER_LIST },
+        { name: 'fatArrowToken', type: 'FAT_ARROW', mess: mess.INVALID_FAT_ARROW },
+        { name: 'functionBody', parse: acceptFunctionBody },
+    ], AST.FunctionDeclaration);
+}
+
+/**
+ * ParameterList ::= LPAREN Param(+ sep COMMA) RPAREN
+ */
+function acceptParameterList(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'params', parse: acceptParam, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeParenToken', type: 'RPAREN', mess: mess.MISSING_CLOSE_PAREN },
+    ], AST.ParameterList);
+}
+
+/**
+ * Param ::= Type IDENT
+ */
+function acceptParam(parser) {
+    return accept(parser, [
+        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_PARAMETER_TYPE },
+        { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_PARAMETER_NAME },
+    ], AST.Param);
+}
+
+/**
+ * FunctionBody ::= Expression | Statement
+ */
+function acceptFunctionBody(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'expressionBody', parse: acceptExpression },
+            { name: 'statementBody', parse: acceptStatement },
+        ],
+    }], AST.FunctionBody);
+}
+
+/**
+ * TypeDeclaration ::= TYPE IDENT EQUALS Type
+ */
+function acceptTypeDeclaration(parser) {
+    return accept(parser, [
+        { name: 'typeToken', type: 'TYPE', definite: true },
+        { name: 'typeNameToken', type: 'IDENT', mess: mess.INVALID_TYPE_NAME },
+        { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
+        { name: 'equalsToken', type: 'EQUALS', mess: mess.TYPE_DECL_MISSING_EQUALS },
+        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_TYPE },
+    ], AST.TypeDeclaration);
+}
+
+/**
+ * ExportDeclaration ::= EXPORT ExportName ExportValue?
+ */
+function acceptExportDeclaration(parser) {
+    return accept(parser, [
+        { name: 'exportToken', type: 'EXPORT', definite: true },
+        { name: 'exportName', parser: acceptExportName },
+        { name: 'exportDefinition', parser: acceptExportValue, optional: true },
+    ], AST.ExportDeclaration);
+}
+
+/**
+ * ExportName ::= DEFAULT | NamedExport
+ */
+function acceptExportName(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'defaultToken', type: 'DEFAULT' },
+            { name: 'namedExport', parser: acceptNamedExport },
+        ],
+    }], AST.ExportName);
+}
+
+/**
+ * NamedExport ::= IDENT EQUALS
+ */
+function acceptNamedExport(parser) {
+    return accept(parser, [
+        { name: 'exportNameToken', type: 'IDENT' },
+        { name: 'equalsToken', type: 'EQUALS' },
+    ], AST.NamedExport);
+}
+
+/**
+ * ExportValue ::= FunctionDeclaration | TypeDeclaration | Expression
+ */
+function acceptExportValue(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'functionDeclaration', parse: acceptFunctionDeclaration },
+            { name: 'typeDeclaration', parse: acceptTypeDeclaration },
+            { name: 'expression', parse: acceptExpression },
+        ],
+    }], AST.ExportValue);
+}
+
+/**
+ * TypeParamList ::= LT TypeParam(+ sep COMMA) GT
+ */
+function acceptTypeParamList(parser) {
+    return accept(parser, [
+        { name: 'openLtToken', image: '<', definite: true },
+        { name: 'typeParams', parse: acceptTypeParam, mess: mess.INVALID_TYPE_PARAM, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeGtToken', image: '<', definite: true },
+    ], AST.TypeParamList);
+}
+
+/**
+ * TypeParam ::= VarianceOp? IDENT TypeConstraint?
+ */
+function acceptTypeParam(parser) {
+    return accept(parser, [
+        { name: 'varianceOp', parse: acceptVarianceOp, optional: true },
+        { name: 'identToken', type: 'IDENT', mess: mess.INVALID_TYPE_PARAM },
+        { name: 'typeConstraint', parse: acceptTypeConstraint, optional: true },
+    ], AST.TypeParam);
+}
+
+/**
+ * VarianceOp ::= PLUS | MINUS
+ */
+function acceptVarianceOp(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'covariantToken', image: '+' },
+            { name: 'contravariantToken', image: '-' },
+        ],
+    }], AST.VarianceOp);
+}
+
+/**
+ * TypeConstraint ::= ConstraintOp Type
+ */
+function acceptTypeConstraint(parser) {
+    return accept(parser, [
+        { name: 'constraintOp', parse: acceptConstraintOp, definite: true },
+        { name: 'constraintType', parse: acceptType, mess: mess.INVALID_TYPE_PARAM },
+    ]);
+}
+
+/**
+ * ConstraintOp ::= COLON | ASS_FROM
+ */
+function acceptConstraintOp(parser) {
+    return accept(parser, [{
+        choices: [
+            { name: 'assignableToToken', type: 'COLON' },
+            { name: 'assignableFromToken', type: 'ASS_FROM' },
+        ],
+    }], AST.ConstraintOp);
+}
+
+/**
+ * Type ::= U8 | I8 | BYTE |       # 8-bit integers:  unsigned, signed, unsigned
+ *          U16 | I16 | SHORT |    # 16-bit integers: unsigned, signed, unsigned
+ *          U32 | I32 | INTEGER |  # 32-bit integers: unsigned, signed, signed
+ *          U64 | I64 | LONG |     # 64-bit integers: unsigned, signed, signed
+ *          INT |                  # Unbounded integers
+ *          F32 | FLOAT |          # 32-bit floating point numbers
+ *          F64 | DOUBLE |         # 64-bit floating point numbers
+ *          STRING |               # Array of characters
+ *          CHAR |                 # UTF-8 Character
+ *          BOOL |                 # Boolean value
+ *          VOID |                 # No type (alias of ())
+ *          StructType |           # Structured type
+ *          TupleType |            # Tuple type
+ *          FunctionType |         # Function type
+ *          ParenthesizedType |    # Parenthesized type
+ *          GenericType |          # Generic type
+ *          IDENT |                # Already defined type
+ *          Type TypeSuffix
+ *
+ * TypeSuffix ::= ArrayTypeSuffix
+ *              | UnionTypeSuffix
+ */
+function acceptType(parser) {
+    return accept(parser, [{
+        leftRecursive: {
+            bases: [
+                { name: 'builtIn', type: 'U8' }, { name: 'builtIn', type: 'I8' }, { name: 'builtIn', type: 'BYTE' },
+                { name: 'builtIn', type: 'U16' }, { name: 'builtIn', type: 'I16' }, { name: 'builtIn', type: 'SHORT' },
+                { name: 'builtIn', type: 'U32' }, { name: 'builtIn', type: 'I32' }, { name: 'builtIn', type: 'INTEGER' },
+                { name: 'builtIn', type: 'U64' }, { name: 'builtIn', type: 'I64' }, { name: 'builtIn', type: 'LONG' },
+                { name: 'builtIn', type: 'INT' },
+                { name: 'builtIn', type: 'F32' }, { name: 'builtIn', type: 'FLOAT' },
+                { name: 'builtIn', type: 'F64' }, { name: 'builtIn', type: 'DOUBLE' },
+                { name: 'builtIn', type: 'STRING' },
+                { name: 'builtIn', type: 'CHAR' },
+                { name: 'builtIn', type: 'BOOL' },
+                { name: 'builtIn', type: 'VOID' },
+                { name: 'builtIn', type: 'ANY' },
+                { name: 'structType', parse: acceptStructType },
+                { name: 'functionType', parse: acceptFunctionType },
+                { name: 'tupleType', parse: acceptTupleType },
+                { name: 'parenthesized', parse: acceptParenthesizedType },
+                { name: 'genericType', parse: acceptGenericType },
+                { name: 'nameToken', type: 'IDENT' },
+            ],
+            suffixes: [
+                { name: 'arrayType', baseName: 'baseType', parse: acceptArrayTypeSuffix },
+                { name: 'unionType', baseName: 'left', parse: acceptUnionTypeSuffix },
+            ],
+        },
+    }], AST.Type);
+}
+
+/**
+ * StructType ::= LBRACE Field* RBRACE
+ */
+function acceptStructType(parser) {
+    return accept(parser, [
+        { name: 'openBraceToken', type: 'LBRACE', definite: true },
+        { name: 'fields', parse: acceptField, zeroOrMore: true },
+        { name: 'closeBraceToken', type: 'RBRACE', mess: mess.INVALID_STRUCT_NO_CLOSE_BRACE },
+    ], AST.StructType);
+}
+
+/**
+ * Field ::= Type IDENT
+ */
+function acceptField(parser) {
+    return accept(parser, [
+        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_FIELD_TYPE },
+        { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_FIELD_NAME },
+    ], AST.Field);
+}
+
+/**
+ * FunctionType ::= LPAREN Type(* sep COMMA) RPAREN FAT_ARROW Type
+ */
+function acceptFunctionType(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
+        { name: 'closeParenToken', type: 'RPAREN' },
+        { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
+        { name: 'returnType', parse: acceptType, mess: mess.FUNCTION_TYPE_INVALID_RETURN_TYPE },
+    ], AST.FunctionType);
+}
+
+/**
+ * TupleType ::= LPAREN Type(* sep COMMA) RPAREN
+ */
+function acceptTupleType(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN' },
+        { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', definite: true, mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
+        { name: 'closeParenToken', type: 'RPAREN' },
+    ], AST.FunctionType);
+}
+
+function acceptParenthesizedType(parser) {
+    return accept(parser, [
+        { name: 'openParenToken', type: 'LPAREN', definite: true },
+        { name: 'paramTypes', parse: acceptType, mess: mess.INVALID_TYPE },
+        { name: 'closeParenToken', type: 'RPAREN' },
+    ], AST.ParenthesizedType);
 }
 
 /**
@@ -1384,7 +1639,7 @@ function acceptStatement(parser) {
  * Block ::= LBRACE Statement* RBRACE
  */
 function acceptBlock(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'statements', parse: acceptStatement, zeroOrMore: true },
         { name: 'closeBraceToken', type: 'RBRACE', mess: mess.MISSING_CLOSE_BRACE },
@@ -1395,7 +1650,7 @@ function acceptBlock(parser) {
  * ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
  */
 function acceptForStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'forToken', type: 'FOR', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.FOR_MISSING_OPEN_PAREN },
         { name: 'iterVarToken', type: 'IDENT', mess: mess.FOR_INVALID_ITER_IDENT },
@@ -1410,7 +1665,7 @@ function acceptForStatement(parser) {
  * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
  */
 function acceptWhileStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'whileToken', type: 'WHILE', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.WHILE_MISSING_OPEN_PAREN },
         { name: 'conditionExp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
@@ -1423,7 +1678,7 @@ function acceptWhileStatement(parser) {
  * DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
  */
 function acceptDoWhileStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'doToken', type: 'DO', definite: true },
         { name: 'body', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
         { name: 'whileToken', type: 'WHILE', mess: mess.DO_WHILE_MISSING_WHILE },
@@ -1437,7 +1692,7 @@ function acceptDoWhileStatement(parser) {
  * TryCatchStatement ::= TRY Statement CatchClause+ FinallyClause?
  */
 function acceptTryCatchStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'tryToken', type: 'TRY', definite: true },
         { name: 'tryBody', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
         { name: 'catches', parse: acceptCatchClause, oneOrMore: true, mess: mess.TRY_CATCH_MISSING_CATCH },
@@ -1449,7 +1704,7 @@ function acceptTryCatchStatement(parser) {
  * CatchClause ::= CATCH LPAREN Param RPAREN Statement
  */
 function acceptCatchClause(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'catchToken', type: 'CATCH', mess: mess.TRY_CATCH_MISSING_CATCH },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.TRY_CATCH_MISSING_OPEN_PAREN },
         { name: 'param', parse: acceptParam, mess: mess.CATCH_INVALID_PARAM },
@@ -1462,7 +1717,7 @@ function acceptCatchClause(parser) {
  * FinallyClause ::= FINALLY Statement
  */
 function acceptFinallyClause(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'finallyToken', type: 'FINALLY', definite: true },
         { name: 'finallyBlock', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
     ], AST.FinallyClause);
@@ -1472,7 +1727,7 @@ function acceptFinallyClause(parser) {
  * ThrowStatement ::= THROW Expression
  */
 function acceptThrowStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'throwToken', type: 'THROW', definite: true },
         { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
     ], AST.ThrowStatement);
@@ -1482,7 +1737,7 @@ function acceptThrowStatement(parser) {
  * ReturnStatement ::= RETURN Expression?
  */
 function acceptReturnStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'returnToken', type: 'RETURN', definite: true },
         { name: 'exp', parse: acceptExpression, optional: true, mess: mess.INVALID_EXPRESSION },
     ], AST.ReturnStatement);
@@ -1492,7 +1747,7 @@ function acceptReturnStatement(parser) {
  * BreakStatement ::= BREAK INTEGER_LITERAL?
  */
 function acceptBreakStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'breakToken', type: 'BREAK', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);
@@ -1502,7 +1757,7 @@ function acceptBreakStatement(parser) {
  * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
  */
 function acceptContinueStatement(parser) {
-    return this.accept(parser, [
+    return accept(parser, [
         { name: 'continueToken', type: 'CONTINUE', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);
@@ -1546,9 +1801,9 @@ function accept(parser, defs, clss) {
                 break;
             }
         } else if (def.type || def.image) {
-            node = this.acceptToken(parser, def);
+            node = acceptToken(parser, def);
         } else if (def.parse) {
-            node = this.acceptNode(parser, def);
+            node = acceptNode(parser, def);
         }
         // null = skip, false = soft fail, other = valid
         if (node === null) continue;
@@ -1559,7 +1814,7 @@ function accept(parser, defs, clss) {
     return new clss(comps, children);
 }
 
-acceptToken(parser, def) {
+function acceptToken(parser, def) {
     // check against the provided constraints
     const tok = def.optional ? this.tokenizer.peek() : this.tokenizer.next().value;
     // check the type
@@ -1575,7 +1830,7 @@ acceptToken(parser, def) {
     return tok;
 }
 
-acceptNode(parser, def) {
+function acceptNode(parser, def) {
     const tok = this.tokenizer.peek();
     if (def.optional) {
         // optional node, check to see if it MUST be, if not, skip it
