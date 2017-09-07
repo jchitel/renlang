@@ -375,6 +375,15 @@ describe('parser', () => {
                     ],
                 });
             });
+
+            it('should error when a new item is expected after a separator but there isnt one', () => {
+                let parser = getParser('a | a |');
+                let defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, sep: { name: 'bars', image: '|' } }];
+                expect(pars.accept(parser, defs, ASTNode)).to.eql(false);
+                parser = getParser('a | a |');
+                defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, mess: 'NOT FOUND', sep: { name: 'bars', image: '|' } }]
+                expect(() => pars.accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 8)');
+            });
         });
     });
 });

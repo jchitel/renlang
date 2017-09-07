@@ -2121,7 +2121,6 @@ export function accept(parser, defs, clss) {
                         // if there was no separator prior, we treat this as the end of repetition
                         if (!wasSep) {
                             comps[def.name] = list;
-                            if (def.sep) comps[def.sep.name] = seps;
                             children.push(...interleave(list, seps));
                             resetPeekedTokens(parser);
                             continue sequentialLoop;
@@ -2138,8 +2137,8 @@ export function accept(parser, defs, clss) {
                     list.push(node);
                     if (def.sep) {
                         // if there is a separator, parse for it
-                        const sep = acceptUsingDef(def.sep, { ...parser, soft: true });
-                        if (!sep) {
+                        const [sep, accepted] = acceptUsingDef(def.sep, { ...parser, soft: true });
+                        if (!accepted) {
                             // no separator, repetition has to stop here
                             comps[def.name] = list;
                             comps[def.sep.name] = seps;
@@ -2147,33 +2146,31 @@ export function accept(parser, defs, clss) {
                             resetPeekedTokens(parser);
                             continue sequentialLoop;
                         } else {
-                            processDefiniteFlag(def.sep.definite, parser);
+                            processDefiniteFlag(true, parser);
                             seps.push(sep);
                             wasSep = true;
                         }
                     }
                 }
-            }
-            // Sequential mode
-            console.log('parsing sequential component');
-            const [node, accepted] = acceptUsingDef(def, parser);
-            if (!accepted) {
-                console.log('not accepted seq');
-                // no match, if optional, skip it, if soft or no message, return false, otherwise throw an error
-                if (def.optional) {
-                    resetPeekedTokens(parser);
-                    continue;
+            } else {
+                // Sequential mode
+                const [node, accepted] = acceptUsingDef(def, parser);
+                if (!accepted) {
+                    // no match, if optional, skip it, if soft or no message, return false, otherwise throw an error
+                    if (def.optional) {
+                        resetPeekedTokens(parser);
+                        continue;
+                    }
+                    if (parser.soft || !def.mess) {
+                        resetPeekedTokens(parser);
+                        return false;
+                    }
+                    throw new ParserError(createMessage(def.mess, node), node.line, node.column);
                 }
-                if (parser.soft || !def.mess) {
-                    resetPeekedTokens(parser);
-                    return false;
-                }
-                throw new ParserError(createMessage(def.mess, node), node.line, node.column);
+                processDefiniteFlag(def.definite, parser);
+                // add that component
+                children.push(comps[def.name] = node);
             }
-            console.log('accepted seq');
-            processDefiniteFlag(def.definite, parser);
-            // add that component
-            children.push(comps[def.name] = node);
         }
         return new clss(comps, children);
     } else {
@@ -2181,14 +2178,11 @@ export function accept(parser, defs, clss) {
         let base;
         const choices = defs[0].choices || defs[0].leftRecursive.bases;
         for (const choice of choices) {
-            console.log('parsing choice');
             const [node, accepted] = acceptUsingDef(choice, { ...parser, soft: true });
             if (!accepted) {
-                console.log('not accepted choice');
                 resetPeekedTokens(parser);
                 continue;
             }
-            console.log('accepted choice');
             base = new clss({ [choice.name]: node }, [node]);
             consumePeekedTokens(parser);
             break;
