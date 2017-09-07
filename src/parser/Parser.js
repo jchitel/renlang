@@ -2009,8 +2009,8 @@ function resetPeekedTokens(parser) {
 /**
  * Creates a message from either a string or a function
  */
-function createMessage(mess, tok) {
-    return (typeof mess === 'string') ? mess : mess(tok);
+function createMessage(message, tok) {
+    return (typeof message === 'string') ? message : message(tok);
 }
 
 /**
@@ -2122,7 +2122,7 @@ export function accept(parser, defs, clss) {
                         if (!wasSep) {
                             comps[def.name] = list;
                             if (def.sep) comps[def.sep.name] = seps;
-                            children = [...children, ...interleave(list, seps)];
+                            children.push(...interleave(list, seps));
                             resetPeekedTokens(parser);
                             continue sequentialLoop;
                         }
@@ -2143,7 +2143,7 @@ export function accept(parser, defs, clss) {
                             // no separator, repetition has to stop here
                             comps[def.name] = list;
                             comps[def.sep.name] = seps;
-                            children = [...children, ...interleave(list, seps)];
+                            children.push(...interleave(list, seps));
                             resetPeekedTokens(parser);
                             continue sequentialLoop;
                         } else {
@@ -2155,8 +2155,10 @@ export function accept(parser, defs, clss) {
                 }
             }
             // Sequential mode
+            console.log('parsing sequential component');
             const [node, accepted] = acceptUsingDef(def, parser);
             if (!accepted) {
+                console.log('not accepted seq');
                 // no match, if optional, skip it, if soft or no message, return false, otherwise throw an error
                 if (def.optional) {
                     resetPeekedTokens(parser);
@@ -2168,6 +2170,7 @@ export function accept(parser, defs, clss) {
                 }
                 throw new ParserError(createMessage(def.mess, node), node.line, node.column);
             }
+            console.log('accepted seq');
             processDefiniteFlag(def.definite, parser);
             // add that component
             children.push(comps[def.name] = node);
@@ -2175,15 +2178,18 @@ export function accept(parser, defs, clss) {
         return new clss(comps, children);
     } else {
         // Choice mode and left-recursive mode
-        let base = null;
+        let base;
         const choices = defs[0].choices || defs[0].leftRecursive.bases;
         for (const choice of choices) {
-            const [node, accepted] = acceptUsingDef(def, { ...parser, soft: true });
+            console.log('parsing choice');
+            const [node, accepted] = acceptUsingDef(choice, { ...parser, soft: true });
             if (!accepted) {
+                console.log('not accepted choice');
                 resetPeekedTokens(parser);
                 continue;
             }
-            base = new clss({ [def.name]: node }, [node]);
+            console.log('accepted choice');
+            base = new clss({ [choice.name]: node }, [node]);
             consumePeekedTokens(parser);
             break;
         }
@@ -2198,6 +2204,7 @@ export function accept(parser, defs, clss) {
                 if (suffNode) {
                     // suffix matched, add the current base to the suffix node, wrap the suffix node
                     suffNode[suff.baseName] = base;
+                    suffNode.children.unshift(base);
                     base = new clss({ [suff.name]: suffNode }, [suffNode]);
                     consumePeekedTokens(parser);
                     // try again
@@ -2226,5 +2233,7 @@ function acceptUsingDef(def, parser) {
     } else if (def.parse) {
         const node = def.parse(subParser);
         return [node, !!node];
+    } else {
+        throw new Error('this should never happen');
     }
 }
