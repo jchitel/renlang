@@ -38,6 +38,10 @@ export class ImportDeclaration extends ASTNode {
     }
 }
 
+export class ImportList extends ASTNode {}
+
+export class NamedImports extends ASTNode {}
+
 export class ImportComponent extends ASTNode {
     reduce() {
         const node = this._createNewNode();
@@ -49,6 +53,8 @@ export class ImportComponent extends ASTNode {
         return node;
     }
 }
+
+export class ImportWithAlias extends ASTNode {}
 
 export class FunctionDeclaration extends ASTNode {
     reduce() {

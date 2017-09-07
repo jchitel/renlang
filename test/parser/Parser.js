@@ -2,387 +2,202 @@ import { expect } from 'chai';
 
 import ASTNode from '../../src/ast/ASTNode';
 import * as pars from '../../src/parser/Parser';
+import { Parser } from '../../src/parser/parser-control';
 import Tokenizer from '../../src/parser/Tokenizer';
 import LookaheadIterator from '../../src/parser/LookaheadIterator';
 import NewLineCheckIterator from '../../src/parser/NewLineCheckIterator';
 
 
-function getParser(source) {
-    const parser = { soft: false };
-    parser.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
-    parser.tokenizer.peeked = 0;
-    return parser;
-}
-
 describe('parser', () => {
-    describe('base functionality', () => {
-        describe('sequential expansions', () => {
-            it('should parse some basic sequential token definitions', () => {
-                const parser = getParser('if (abc) bcd else xyz');
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'elseToken', type: 'ELSE' },
-                    { name: 'alternateToken', type: 'IDENT' },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'bcd' },
-                        { type: 'ELSE', image: 'else' },
-                        { type: 'IDENT', image: 'xyz' },
-                    ],
-                });
+    describe('parsing declarations', () => {
+        it('should parse ImportWithAlias', () => {
+            const parsed = pars.acceptImportWithAlias(new Parser('myImport as myAlias'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportWithAlias',
+                children: [
+                    { type: 'IDENT', image: 'myImport' },
+                    { type: 'AS', image: 'as' },
+                    { type: 'IDENT', image: 'myAlias' },
+                ],
             });
+        });
 
-            it('should parse sequential token definition with optional tokens included', () => {
-                const parser = getParser('if (abc) bcd else xyz');
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'elseToken', type: 'ELSE', optional: true },
-                    { name: 'alternateToken', type: 'IDENT', optional: true },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'bcd' },
-                        { type: 'ELSE', image: 'else' },
-                        { type: 'IDENT', image: 'xyz' },
-                    ],
-                });
+        it('should parse ImportComponent', () => {
+            let parsed = pars.acceptImportComponent(new Parser('myImport as myAlias'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportComponent',
+                children: [{
+                    type: 'ImportWithAlias',
+                    children: [{ type: 'IDENT', image: 'myImport' }, { type: 'AS', image: 'as' }, { type: 'IDENT', image: 'myAlias' }],
+                }],
             });
-
-            it('should parse sequential token definition with optional tokens not included', () => {
-                let parser = getParser('if (abc) bcd');
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'elseToken', type: 'ELSE', optional: true },
-                    { name: 'alternateToken', type: 'IDENT', optional: true },
-                ];
-                let node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'bcd' },
-                    ],
-                });
-                // try again with partial inclusion
-                parser = getParser('if (abc) bcd else');
-                node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'bcd' },
-                        { type: 'ELSE', image: 'else' },
-                    ],
-                });
+            parsed = pars.acceptImportComponent(new Parser('myImport'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportComponent',
+                children: [{ type: 'IDENT', image: 'myImport' }],
             });
+        });
 
-            it('should return false when required token not included and error message not included', () => {
-                const parser = getParser('if');
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'thenToken', image: 'then' },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node).to.eql(false);
-                expect(parser.tokenizer.next().done).to.eql(true);
-            });
-
-            it('should throw error when required token not included and error message included', () => {
-                const parser = getParser('if');
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'thenToken', image: 'then', mess: 'NOT FOUND' },
-                ];
-                expect(() => pars.accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 3)');
-            });
-
-            it('should parse sequential definition with sub-parse', () => {
-                const parser = getParser('if (abc) def else xyz');
-                const acceptAlternate = p => pars.accept(p, [
-                    { name: 'elseToken', type: 'ELSE', definite: true },
-                    { name: 'alternateToken', type: 'IDENT' },
-                ], ASTNode);
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'alternate', parse: acceptAlternate },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'def' },
-                        {
-                            type: 'ASTNode',
+        it('should parse NamedImports', () => {
+            const parsed = pars.acceptNamedImports(new Parser('{ myImport, myImport as myAlias }'));
+            expect(parsed.toTree()).to.eql({
+                type: 'NamedImports',
+                children: [
+                    { type: 'LBRACE', image: '{' },
+                    {
+                        type: 'ImportComponent',
+                        children: [{ type: 'IDENT', image: 'myImport' }],
+                    },
+                    { type: 'COMMA', image: ',' },
+                    {
+                        type: 'ImportComponent',
+                        children: [{
+                            type: 'ImportWithAlias',
                             children: [
-                                { type: 'ELSE', image: 'else' },
-                                { type: 'IDENT', image: 'xyz' },
-                            ],
-                        },
-                    ],
-                });
-            });
-
-            it('should parse sequential definition with optional sub-parse', () => {
-                const parser = getParser('if (abc) def else xyz');
-                const acceptAlternate = p => pars.accept(p, [
-                    { name: 'elseToken', type: 'ELSE', definite: true },
-                    { name: 'alternateToken', type: 'IDENT' },
-                ], ASTNode);
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'alternate', parse: acceptAlternate, optional: true },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'def' },
-                        {
-                            type: 'ASTNode',
-                            children: [
-                                { type: 'ELSE', image: 'else' },
-                                { type: 'IDENT', image: 'xyz' },
-                            ],
-                        },
-                    ],
-                });
-                expect(parser.tokenizer.next().value.type).to.eql('EOF');
-            });
-
-
-            it('should ignore optional not-included sub-parses', () => {
-                const parser = getParser('if (abc) def');
-                const acceptAlternate = p => pars.accept(p, [
-                    { name: 'elseToken', type: 'ELSE', definite: true },
-                    { name: 'alternateToken', type: 'IDENT' },
-                ], ASTNode);
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'alternate', parse: acceptAlternate, optional: true },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'def' },
-                    ],
-                });
-            });
-
-            it('should ignore a failed parse of an optional non-terminal', () => {
-                const parser = getParser('if (abc) def else 1');
-                const acceptAlternate = p => pars.accept(p, [
-                    { name: 'elseToken', type: 'ELSE' },
-                    { name: 'alternateToken', type: 'IDENT', definite: true },
-                ], ASTNode);
-                const defs = [
-                    { name: 'ifToken', type: 'IF', definite: true },
-                    { name: 'openParenToken', type: 'LPAREN' },
-                    { name: 'conditionToken', type: 'IDENT' },
-                    { name: 'closeParenToken', type: 'RPAREN' },
-                    { name: 'consequentToken', type: 'IDENT' },
-                    { name: 'alternate', parse: acceptAlternate, optional: true },
-                ];
-                const node = pars.accept(parser, defs, ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IF', image: 'if' },
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'IDENT', image: 'abc' },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'IDENT', image: 'def' },
-                    ],
-                });
-                expect(parser.tokenizer.peek().image).to.eql('else');
+                                { type: 'IDENT', image: 'myImport' },
+                                { type: 'AS', image: 'as' },
+                                { type: 'IDENT', image: 'myAlias' },
+                            ]
+                        }],
+                    },
+                    { type: 'RBRACE', image: '}' },
+                ],
             });
         });
 
-        describe('choice expansions', () => {
-            it('should parse from a set of single-token choices', () => {
-                const parser = getParser('abc');
-                const choices = [
-                    { name: 'aToken', image: 'a' },
-                    { name: 'abToken', image: 'ab' },
-                    { name: 'abcToken', image: 'abc' },
-                    { name: 'abcdToken', image: 'abcd' },
-                ];
-                const node = pars.accept(parser, [{ choices }], ASTNode);
-                expect(node.toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [{ type: 'IDENT', image: 'abc' }],
-                });
+        it('should parse ImportList', () => {
+            let parsed = pars.acceptImportList(new Parser('myDefault'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportList',
+                children: [{ type: 'IDENT', image: 'myDefault' }],
             });
-
-            it('should return false for an unmatched token', () => {
-                const parser = getParser('awef');
-                const choices = [
-                    { name: 'aToken', image: 'a' },
-                    { name: 'abToken', image: 'ab' },
-                    { name: 'abcToken', image: 'abc' },
-                    { name: 'abcdToken', image: 'abcd' },
-                ];
-                expect(pars.accept(parser, [{ choices }], ASTNode)).to.eql(false);
-            });
-
-            it('should parse from a set of non-terminal choices', () => {
-                const parser = getParser('a b');
-                const choices = [
-                    { name: 'abcd', parse: p => pars.accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c' }, { name: 'dToken', image: 'd' }], ASTNode) },
-                    { name: 'abc', parse: p => pars.accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c' }], ASTNode) },
-                    { name: 'ab', parse: p => pars.accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }], ASTNode) },
-                    { name: 'a', parse: p => pars.accept(p, [{ name: 'aToken', image: 'a' }], ASTNode) },
-                ];
-                expect(pars.accept(parser, [{ choices }], ASTNode).toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [{
-                        type: 'ASTNode',
-                        children: [
-                            { type: 'IDENT', image: 'a' },
-                            { type: 'IDENT', image: 'b' },
-                        ],
-                    }],
-                });
+            parsed = pars.acceptImportList(new Parser('{ myImport }'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportList',
+                children: [{
+                    type: 'NamedImports',
+                    children: [
+                        { type: 'LBRACE', image: '{' },
+                        { type: 'ImportComponent', children: [{ type: 'IDENT', image: 'myImport' }] },
+                        { type: 'RBRACE', image: '}' },
+                    ],
+                }],
             });
         });
 
-        describe('left-recursive expansions', () => {
-            it('should parse from a set of left-recursive choices', () => {
-                class MyNode extends ASTNode {}
-                const parser = getParser('a c');
-                const bases = [{ name: 'aToken', image: 'a' }];
-                const suffixes = [
-                    { name: 'b', baseName: 'base', parse: p => pars.accept(p, [{ name: 'bToken', image: 'b' }], ASTNode) },
-                    { name: 'c', baseName: 'base', parse: p => pars.accept(p, [{ name: 'cToken', image: 'c' }], ASTNode) },
-                    { name: 'd', baseName: 'base', parse: p => pars.accept(p, [{ name: 'dToken', image: 'd' }], ASTNode) },
-                ];
-                expect(pars.accept(parser, [{ leftRecursive: { bases, suffixes } }], MyNode).toTree()).to.eql({
-                    type: 'MyNode',
-                    children: [{
-                        type: 'ASTNode',
-                        children: [
-                            { type: 'MyNode', children: [{ type: 'IDENT', image: 'a' }] },
-                            { type: 'IDENT', image: 'c' },
-                        ],
-                    }],
-                });
+        it('should parse ImportDeclaration', () => {
+            const parsed = pars.acceptImportDeclaration(new Parser('import from "module": myDefault'));
+            expect(parsed.toTree()).to.eql({
+                type: 'ImportDeclaration',
+                children: [
+                    { type: 'IMPORT', image: 'import' },
+                    { type: 'FROM', image: 'from' },
+                    { type: 'STRING_LITERAL', image: '"module"' },
+                    { type: 'COLON', image: ':' },
+                    { type: 'ImportList', children: [{ type: 'IDENT', image: 'myDefault' }] },
+                ],
+            });
+        });
+    });
+
+    describe('parsing types', () => {
+        it('should parse Type', () => {
+            expect(pars.acceptType(new Parser('u8')).toTree()).to.eql({ type: 'Type', children: [{ type: 'U8', image: 'u8' }] });
+            expect(pars.acceptType(new Parser('i8')).toTree()).to.eql({ type: 'Type', children: [{ type: 'I8', image: 'i8' }] });
+            expect(pars.acceptType(new Parser('byte')).toTree()).to.eql({ type: 'Type', children: [{ type: 'BYTE', image: 'byte' }] });
+            expect(pars.acceptType(new Parser('u16')).toTree()).to.eql({ type: 'Type', children: [{ type: 'U16', image: 'u16' }] });
+            expect(pars.acceptType(new Parser('i16')).toTree()).to.eql({ type: 'Type', children: [{ type: 'I16', image: 'i16' }] });
+            expect(pars.acceptType(new Parser('short')).toTree()).to.eql({ type: 'Type', children: [{ type: 'SHORT', image: 'short' }] });
+            expect(pars.acceptType(new Parser('u32')).toTree()).to.eql({ type: 'Type', children: [{ type: 'U32', image: 'u32' }] });
+            expect(pars.acceptType(new Parser('i32')).toTree()).to.eql({ type: 'Type', children: [{ type: 'I32', image: 'i32' }] });
+            expect(pars.acceptType(new Parser('integer')).toTree()).to.eql({ type: 'Type', children: [{ type: 'INTEGER', image: 'integer' }] });
+            expect(pars.acceptType(new Parser('u64')).toTree()).to.eql({ type: 'Type', children: [{ type: 'U64', image: 'u64' }] });
+            expect(pars.acceptType(new Parser('i64')).toTree()).to.eql({ type: 'Type', children: [{ type: 'I64', image: 'i64' }] });
+            expect(pars.acceptType(new Parser('long')).toTree()).to.eql({ type: 'Type', children: [{ type: 'LONG', image: 'long' }] });
+            expect(pars.acceptType(new Parser('int')).toTree()).to.eql({ type: 'Type', children: [{ type: 'INT', image: 'int' }] });
+            expect(pars.acceptType(new Parser('f32')).toTree()).to.eql({ type: 'Type', children: [{ type: 'F32', image: 'f32' }] });
+            expect(pars.acceptType(new Parser('float')).toTree()).to.eql({ type: 'Type', children: [{ type: 'FLOAT', image: 'float' }] });
+            expect(pars.acceptType(new Parser('f64')).toTree()).to.eql({ type: 'Type', children: [{ type: 'F64', image: 'f64' }] });
+            expect(pars.acceptType(new Parser('double')).toTree()).to.eql({ type: 'Type', children: [{ type: 'DOUBLE', image: 'double' }] });
+            expect(pars.acceptType(new Parser('char')).toTree()).to.eql({ type: 'Type', children: [{ type: 'CHAR', image: 'char' }] });
+            expect(pars.acceptType(new Parser('string')).toTree()).to.eql({ type: 'Type', children: [{ type: 'STRING', image: 'string' }] });
+            expect(pars.acceptType(new Parser('bool')).toTree()).to.eql({ type: 'Type', children: [{ type: 'BOOL', image: 'bool' }] });
+            expect(pars.acceptType(new Parser('void')).toTree()).to.eql({ type: 'Type', children: [{ type: 'VOID', image: 'void' }] });
+            expect(pars.acceptType(new Parser('any')).toTree()).to.eql({ type: 'Type', children: [{ type: 'ANY', image: 'any' }] });
+            expect(pars.acceptType(new Parser('{}')).toTree()).to.eql({ type: 'Type', children: [{ type: 'StructType', children: [{ type: 'LBRACE', image: '{' }, { type: 'RBRACE', image: '}' }] }] });
+            expect(pars.acceptType(new Parser('() => void', true)).toTree()).to.eql({
+                type: 'Type',
+                children: [{
+                    type: 'FunctionType',
+                    children: [
+                    { type: 'LPAREN', image: '(' },
+                    { type: 'RPAREN', image: ')' },
+                    { type: 'FAT_ARROW', image: '=>' },
+                    { type: 'Type', children: [{ type: 'VOID', image: 'void' }] },
+                    ],
+                }],
+            });
+            // TODO: paren
+            // TODO: tuple
+            // TODO: generic
+            // TODO: ident
+            expect(pars.acceptType(new Parser('int[]')).toTree()).to.eql({
+                type: 'Type',
+                children: [{
+                    type: 'ArrayType',
+                    children: [
+                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                        { type: 'LBRACK', image: '[' },
+                        { type: 'RBRACK', image: ']' },
+                    ],
+                }],
+            });
+            // TODO: union
+        });
+
+        it('should parse Field', () => {
+            const parsed = pars.acceptField(new Parser('int i'));
+            expect(parsed.toTree()).to.eql({
+                type: 'Field',
+                children: [
+                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                    { type: 'IDENT', image: 'i' },
+                ],
             });
         });
 
-        describe('repetitive expansions', () => {
-            it('should handle basic zeroOrMore expansion', () => {
-                const parser = getParser('a a a');
-                const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true }];
-                expect(pars.accept(parser, defs, ASTNode).toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'IDENT', image: 'a' },
-                    ],
-                });
+        it('should parse StructType', () => {
+            const parsed = pars.acceptStructType(new Parser('{ int i; int j }'));
+            expect(parsed.toTree()).to.eql({
+                type: 'StructType',
+                children: [
+                    { type: 'LBRACE', image: '{' },
+                    {
+                        type: 'Field',
+                        children: [{ type: 'Type', children: [{ type: 'INT', image: 'int' }] }, { type: 'IDENT', image: 'i' }],
+                    },
+                    {
+                        type: 'Field',
+                        children: [{ type: 'Type', children: [{ type: 'INT', image: 'int' }] }, { type: 'IDENT', image: 'j' }],
+                    },
+                    { type: 'RBRACE', image: '}' },
+                ],
             });
+        });
 
-            it('should handle basic oneOrMore expansion', () => {
-                const parser = getParser('a a a');
-                const defs = [{ name: 'aTokens', image: 'a', oneOrMore: true }];
-                expect(pars.accept(parser, defs, ASTNode).toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'IDENT', image: 'a' },
-                    ],
-                });
-            });
-
-            it('should throw an error for unsatisfied oneOrMore expansion', () => {
-                let parser = getParser('b');
-                let defs = [{ name: 'aTokens', image: 'a', oneOrMore: true }];
-                expect(pars.accept(parser, defs, ASTNode)).to.eql(false);
-
-                parser = getParser('b');
-                defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, mess: 'NOT FOUND' }];
-                expect(() => pars.accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 1)');
-            });
-
-            it('should handle repetition with a separator', () => {
-                const parser = getParser('a | a | a');
-                const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, sep: { name: 'bars', image: '|' } }];
-                expect(pars.accept(parser, defs, ASTNode).toTree()).to.eql({
-                    type: 'ASTNode',
-                    children: [
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'OPER', image: '|' },
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'OPER', image: '|' },
-                        { type: 'IDENT', image: 'a' },
-                    ],
-                });
-            });
-
-            it('should error when a new item is expected after a separator but there isnt one', () => {
-                let parser = getParser('a | a |');
-                let defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, sep: { name: 'bars', image: '|' } }];
-                expect(pars.accept(parser, defs, ASTNode)).to.eql(false);
-                parser = getParser('a | a |');
-                defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, mess: 'NOT FOUND', sep: { name: 'bars', image: '|' } }]
-                expect(() => pars.accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 8)');
+        it('should parse FunctionType', () => {
+            const parsed = pars.acceptFunctionType(new Parser('(int, int) => int'));
+            expect(parsed.toTree()).to.eql({
+                type: 'FunctionType',
+                children: [
+                    { type: 'LPAREN', image: '(' },
+                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                    { type: 'COMMA', image: ',' },
+                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                    { type: 'RPAREN', image: ')' },
+                    { type: 'FAT_ARROW', image: '=>' },
+                    { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                ],
             });
         });
     });
@@ -446,63 +261,6 @@ describe('Parser', () => {
     });
 
     describe('parsing declarations', () => {
-        it('should parse import declarations', () => {
-            const sourceString =
-    `import from "myModule": MyDefaultImport
-    import from "otherModule" { name, name1 as oneName, myName }; import from "thirdModule": OtherDefault
-    `;
-            const parsed = parser.parse(sourceString);
-            expect(parsed.toTree()).to.eql({
-                type: 'Program',
-                children: [{
-                    type: 'ImportDeclaration',
-                    children: [
-                        { type: 'IMPORT', image: 'import' },
-                        { type: 'FROM', image: 'from' },
-                        { type: 'STRING_LITERAL', image: '"myModule"' },
-                        { type: 'COLON', image: ':' },
-                        { type: 'IDENT', image: 'MyDefaultImport' },
-                    ],
-                }, {
-                    type: 'ImportDeclaration',
-                    children: [
-                        { type: 'IMPORT', image: 'import' },
-                        { type: 'FROM', image: 'from' },
-                        { type: 'STRING_LITERAL', image: '"otherModule"' },
-                        { type: 'LBRACE', image: '{' },
-                        {
-                            type: 'ImportComponent',
-                            children: [{ type: 'IDENT', image: 'name' }],
-                        },
-                        { type: 'COMMA', image: ',' },
-                        {
-                            type: 'ImportComponent',
-                            children: [
-                                { type: 'IDENT', image: 'name1' },
-                                { type: 'AS', image: 'as' },
-                                { type: 'IDENT', image: 'oneName' },
-                            ],
-                        },
-                        { type: 'COMMA', image: ',' },
-                        {
-                            type: 'ImportComponent',
-                            children: [{ type: 'IDENT', image: 'myName' }],
-                        },
-                        { type: 'RBRACE', image: '}' },
-                    ],
-                }, {
-                    type: 'ImportDeclaration',
-                    children: [
-                        { type: 'IMPORT', image: 'import' },
-                        { type: 'FROM', image: 'from' },
-                        { type: 'STRING_LITERAL', image: '"thirdModule"' },
-                        { type: 'COLON', image: ':' },
-                        { type: 'IDENT', image: 'OtherDefault' },
-                    ],
-                }, { type: 'EOF', image: null }],
-            });
-        });
-
         it('should throw an error for import declarations after other declarations', () => {
             expect(() => parser.parse('export a; import from "": b')).to.throw('Imports must occur before any declarations (Line 1, Column 11)');
         });
@@ -694,62 +452,10 @@ describe('Parser', () => {
     });
 
     describe('parsing types', () => {
-        it('should parse built-in types', () => {
-            const builtIns = ['u8', 'i8', 'byte', 'u16', 'i16', 'short', 'u32', 'i32', 'integer', 'u64', 'i64', 'long', 'int', 'f32', 'float', 'f64', 'double', 'string', 'char', 'bool', 'void'];
-            for (const bi of builtIns) {
-                const parsed = parser.parse(`type t = ${bi}`);
-                const type = parsed.toTree().children[0].children[3];
-                expect(type).to.eql({ type: 'Type', children: [{ type: bi.toUpperCase(), image: bi }] });
-            }
-        });
-
         it('should parse user-defined types', () => {
             const parsed = parser.parse('type t = myType');
             const type = parsed.toTree().children[0].children[3];
             expect(type).to.eql({ type: 'Type', children: [{ type: 'IDENT', image: 'myType' }] });
-        });
-
-        it('should parse struct types', () => {
-            const parsed = parser.parse('type t = { int a; string b; myType c; }');
-            const type = parsed.toTree().children[0].children[3];
-            expect(type).to.eql({
-                type: 'Type',
-                children: [{
-                    type: 'StructType',
-                    children: [
-                        { type: 'LBRACE', image: '{' },
-                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
-                        { type: 'IDENT', image: 'a' },
-                        { type: 'Type', children: [{ type: 'STRING', image: 'string' }] },
-                        { type: 'IDENT', image: 'b' },
-                        { type: 'Type', children: [{ type: 'IDENT', image: 'myType' }] },
-                        { type: 'IDENT', image: 'c' },
-                        { type: 'RBRACE', image: '}' },
-                    ],
-                }],
-            });
-        });
-
-        it('should parse function types', () => {
-            const parsed = parser.parse('type t = (int, string, myType) => void');
-            const type = parsed.toTree().children[0].children[3];
-            expect(type).to.eql({
-                type: 'Type',
-                children: [{
-                    type: 'FunctionType',
-                    children: [
-                        { type: 'LPAREN', image: '(' },
-                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
-                        { type: 'COMMA', image: ',' },
-                        { type: 'Type', children: [{ type: 'STRING', image: 'string' }] },
-                        { type: 'COMMA', image: ',' },
-                        { type: 'Type', children: [{ type: 'IDENT', image: 'myType' }] },
-                        { type: 'RPAREN', image: ')' },
-                        { type: 'FAT_ARROW', image: '=>' },
-                        { type: 'Type', children: [{ type: 'VOID', image: 'void' }] },
-                    ],
-                }],
-            });
         });
 
         it('should parse parameterless function types', () => {

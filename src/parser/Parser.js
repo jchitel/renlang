@@ -7,6 +7,7 @@ import * as exprs from '../ast/expressions';
 import * as stmts from '../ast/statements';
 import ParserError from './ParserError';
 import * as mess from './ParserMessages';
+import accept, { Parser as Pc } from './parser-control';
 
 
 const AST = { ...decls, ..._types, ...exprs, ...stmts };
@@ -148,10 +149,6 @@ export default class Parser {
         throw new Error('Tokenizer had no elements');
     }
 
-    /**
-     * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON IDENT
-     *                       IMPORT FROM STRING_LITERAL LBRACE ImportComponent (COMMA ImportComponent)* RBRACE
-     */
     acceptImportDeclaration(tok) {
         if (tok.type !== 'IMPORT') return false;
         const fromToken = this.expectNextToken('FROM', mess.INVALID_IMPORT);
@@ -197,10 +194,6 @@ export default class Parser {
         }
     }
 
-    /**
-     * ImportComponent ::= IDENT
-     *                     IDENT AS IDENT
-     */
     acceptImportComponent(tok) {
         if (tok.type !== 'IDENT') return false;
         if (this.tokenizer.peek().type === 'AS') {
@@ -1176,16 +1169,12 @@ export default class Parser {
 }
 
 export function parse(source) {
-    // start with 'soft' as false because Program is implicitly definite
-    const parser = { soft: false, peeked: 0 };
-    // This is a triple-wrapped iterator:
-    // 1. the tokenizer yields tokens one at a time
-    // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
-    // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
-    parser.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
-    parser.tokenizer.peeked = 0;
-    return acceptProgram(parser);
+    return acceptProgram(new Pc(source));
 }
+
+// ///////////////
+// DECLARATIONS //
+// ///////////////
 
 /**
  * Program ::= ImportDeclaration* Declaration*
@@ -1212,8 +1201,7 @@ export function acceptImportDeclaration(parser) {
 }
 
 /**
- * ImportList ::= IDENT
- *              | NamedImports
+ * ImportList ::= IDENT | NamedImports
  */
 export function acceptImportList(parser) {
     return accept(parser, [{
@@ -1434,6 +1422,10 @@ export function acceptConstraintOp(parser) {
     }], AST.ConstraintOp);
 }
 
+// ////////
+// TYPES //
+// ////////
+
 /**
  * Type ::= U8 | I8 | BYTE |       # 8-bit integers:  unsigned, signed, unsigned
  *          U16 | I16 | SHORT |    # 16-bit integers: unsigned, signed, unsigned
@@ -1475,7 +1467,7 @@ export function acceptType(parser) {
                 { name: 'builtIn', type: 'ANY' },
                 { name: 'structType', parse: acceptStructType },
                 { name: 'functionType', parse: acceptFunctionType },
-                { name: 'parenthesized', parse: acceptParenthesizedType },
+                { name: 'inner', parse: acceptParenthesizedType },
                 { name: 'tupleType', parse: acceptTupleType },
                 { name: 'genericType', parse: acceptGenericType },
                 { name: 'nameToken', type: 'IDENT' },
@@ -1504,7 +1496,7 @@ export function acceptStructType(parser) {
  */
 export function acceptField(parser) {
     return accept(parser, [
-        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_FIELD_TYPE },
+        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_FIELD_TYPE, definite: true },
         { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_FIELD_NAME },
     ], AST.Field);
 }
@@ -1584,6 +1576,10 @@ export function acceptUnionTypeSuffix(parser) {
         { name: 'right', parse: acceptType, mess: mess.INVALID_UNION_TYPE },
     ], AST.UnionType);
 }
+
+// //////////////
+// EXPRESSIONS //
+// //////////////
 
 /**
  * Expression ::= INTEGER_LITERAL
@@ -1820,6 +1816,10 @@ export function acceptArrayAccessSuffix(parser) {
     ], AST.ArrayAccess);
 }
 
+// /////////////
+// STATEMENTS //
+// /////////////
+
 /**
  * Statement ::= Block
  *               Expression |
@@ -1974,260 +1974,4 @@ export function acceptContinueStatement(parser) {
         { name: 'continueToken', type: 'CONTINUE', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);
-}
-
-// ///////////////////////////
-// PARSER CONTROL FUNCTIONS //
-// ///////////////////////////
-
-/**
- * Gets the next token from the parser, taking into account the soft flag.
- */
-function getNextToken(parser) {
-    if (parser.soft) {
-        const tok = parser.tokenizer.peek(parser.tokenizer.peeked);
-        parser.tokenizer.peeked++;
-        return tok;
-    }
-    return parser.tokenizer.next().value;
-}
-
-/**
- * Fast forwards the iteration of tokens to the current peeked location
- */
-function consumePeekedTokens(parser) {
-    for (; parser.tokenizer.peeked > 0; --parser.tokenizer.peeked) parser.tokenizer.next();
-}
-
-/**
- * Resets the peeking of tokens to the previously consumed point
- */
-function resetPeekedTokens(parser) {
-    parser.tokenizer.peeked = 0;
-}
-
-/**
- * Creates a message from either a string or a function
- */
-function createMessage(message, tok) {
-    return (typeof message === 'string') ? message : message(tok);
-}
-
-/**
- * Given a definite flag, change the parser state if it is true
- */
-function processDefiniteFlag(definite, parser) {
-    if (!definite) return;
-    parser.soft = false;
-    consumePeekedTokens(parser);
-}
-
-/**
- * THE ENGINE OF THE PARSER
- * So this function has to be huge because there is a ton of control flow logic here, unfortunately.
- * The parser runs off of a configuration for each non-terminal in the grammar.
- *
- * Here are the options we require:
- * - 'name': specifies the field name on the resulting AST node object
- * - either 'type', 'image', or 'parse':
- *   - 'type' and 'image' are the corresponding fields on tokens used to check for terminals
- *   - 'parse' specifies a non-terminal parse function
- *
- * Here are the fields that are required to appear in the defs list somewhere in specific situations:
- * - 'definite': specifies the component which, when parsed, means that this expansion is the correct path chosen.
- *   - If, until this point, we have been parsing softly, we can consume all softly parsed tokens
- *   - After this point, if a token does not match, it is an actual error
- *   - This option must appear on AT LEAST ONE component of a sequential expansion, and cannot appear on any choice expansions
- * - 'mess': In the event of an error on this component, throw an error with this message or message generator function
- * - 'choices': Specifies a choice expansion, where each child is checked in order until one is matched definitely
- * - 'leftRecursive': A special kind of choice expansion where there are at least one left-recursive choices
- *   - 'bases': The list of non-left-recursive choices, which are normal choices
- *   - 'suffixes': The list of left-recursive choices, which should only parse the suffix of the choice, ignoring the left-recursive part
- *     - 'baseName': The name of the field in the left-recursive AST object that should be used for the prefix portion
- *
- * Here are optional fields:
- * - 'optional': specifies that this component is optional.
- *   - The component MUST be parsed softly, and in the event of a failure, it should be skipped
- * - 'zeroOrMore' or 'oneOrMore': specifies that this component can be repeated.
- *   - Either one or the other can appear, but not both.
- *   - 'zeroOrMore' means that the component can appear 0 or more times, and 'oneOrMore' means 1 or more times
- *   - In the event of oneOrMore, parse one instance of the component as if it were non-optional, then proceed to the repetition phase
- *   - In the repetition phase, parse softly, skipping the component and continuing in the event of a failure
- * - 'sep': specifies for a repeated component another component that must separate each instance
- *   - Obviously, this can only appear alongside 'zeroOrMore' and 'oneOrMore'
- *   - After each repeated instance, one of these MUST be parsed softly.
- *   - In the event of a failure parsing the separator, the entire repetition is broken out of
- *   - In the event of a success parsing the separator, the next instance MUST be parsed definitely
- *
- * Operation of the parser:
- * - So there are 4 "modes" of the parser:
- *   1. Sequential mode: parse expansion components in sequence
- *   2. Choice mode: parse choice expansions by trying each option separately until one works
- *   3. Left-recursive mode: same as choice mode, but check for left-recursive options after the non-left-recursive ones
- *   4. Repetition mode: same as sequential mode, but loop for components that can be repeated
- * - There is also a 'soft' flag in the parser to indicate whether tokens should be consumed or just peeked,
- *   and whether failures should simply return false or throw an error.
- *   Child components will inherit the parent's soft flag unless the parent overrides it.
- * - Sequential mode is default, each def is used to accept or reject the next sequence of n tokens.
- *   In the even of a failure, optional components are skipped, the soft flag will cause false to be returned, or an error will be thrown.
- *   A success will cause the parsed component to be queued for addition to the parent node.
- *   The 'definite' flag on a component will cause the soft flag to be turned off for the remainder of the parent's operation.
- *   Once each def is processed, the resulting enumerated children are used to create an instance of the provided AST node class.
- * - Choice mode is used if one def is provided with the 'choices' key.
- *   Each child choice is enumerated and accepted softly. A failure will cause the choice to be ignored.
- *   The first succcessful choice will be used as the resulting single child of the node.
- *   If none succeed, false is returned so the parent can handle the error accordingly.
- * - Left-recursive mode is used if one def is provided with the 'leftRecursive' key.
- *   The 'bases' key under that will be treated the same as the 'choices' key.
- *   Once a base is chosen, the parser iterates all of the left-recursive suffixes repeatedly
- *   until it reaches an iteration where none of the suffixes succeed.
- *   Each successful suffix wraps the previous base as the new base.
- *   Once that loop exits, the resulting base is the parse result.
- *   Any failed suffix parse is ignored.
- * - Repetition mode is used as a sub-mode of sequential mode if a component has the oneOrMore or zeroOrMore flags.
- *   The definition is accepted repeatedly until it fails, after which all successful parses are grouped into
- *   a list and used as the resulting child. A oneOrMore flag will treat the first repeated item as required.
- *   If the component also specifies a 'sep' key, that value will be parsed as a separator which must be
- *   found between each repetition. If a separator is parsed, the next item is required.
- *   If a separator is not parsed, another item cannot follow and the component will be finished.
- */
-export function accept(parser, defs, clss) {
-    if (!defs[0].choices && !defs[0].leftRecursive) {
-        // sequence expansion, process each def in order
-        const comps = {}, children = [];
-        sequentialLoop: for (const def of defs) {
-            // check for repetitive components
-            if (def.oneOrMore || def.zeroOrMore) {
-                // repetitive components are organized into a list, with separators put into a list as well (if used)
-                const list = [], seps = [];
-                // this flag indicates if there was a separator prior, in which case the next item is required
-                let wasSep = false;
-                // this flag indicates that it is a oneOrMore repetition where the first item is required
-                let handleFirst = !!def.oneOrMore;
-                // enter repetition mode
-                while (true) {
-                    // use soft if: 1) handleFirst and wasSep are both false (this item isn't required), or 2) the parser is already soft
-                    const soft = (!handleFirst && !wasSep) || parser.soft;
-                    const [node, accepted] = acceptUsingDef(def, { ...parser, soft });
-                    if (!accepted) {
-                        if (handleFirst) {
-                            // no match for first oneOrMore item, return false or throw error
-                            if (parser.soft || !def.mess) {
-                                resetPeekedTokens(parser);
-                                return false;
-                            }
-                            throw new ParserError(createMessage(def.mess, node), node.line, node.column);
-                        }
-                        // if there was no separator prior, we treat this as the end of repetition
-                        if (!wasSep) {
-                            comps[def.name] = list;
-                            children.push(...interleave(list, seps));
-                            resetPeekedTokens(parser);
-                            continue sequentialLoop;
-                        }
-                        if (parser.soft || !def.mess) {
-                            resetPeekedTokens(parser);
-                            return false;
-                        }
-                        throw new ParserError(createMessage(def.mess, node), node.line, node.column);
-                    }
-                    // after the first iteration this should always be false
-                    handleFirst = false;
-                    processDefiniteFlag(def.definite, parser);
-                    list.push(node);
-                    if (def.sep) {
-                        // if there is a separator, parse for it
-                        const [sep, accepted] = acceptUsingDef(def.sep, { ...parser, soft: true });
-                        if (!accepted) {
-                            // no separator, repetition has to stop here
-                            comps[def.name] = list;
-                            comps[def.sep.name] = seps;
-                            children.push(...interleave(list, seps));
-                            resetPeekedTokens(parser);
-                            continue sequentialLoop;
-                        } else {
-                            processDefiniteFlag(true, parser);
-                            seps.push(sep);
-                            wasSep = true;
-                        }
-                    }
-                }
-            } else {
-                // Sequential mode
-                const [node, accepted] = acceptUsingDef(def, parser);
-                if (!accepted) {
-                    // no match, if optional, skip it, if soft or no message, return false, otherwise throw an error
-                    if (def.optional) {
-                        resetPeekedTokens(parser);
-                        continue;
-                    }
-                    if (parser.soft || !def.mess) {
-                        resetPeekedTokens(parser);
-                        return false;
-                    }
-                    throw new ParserError(createMessage(def.mess, node), node.line, node.column);
-                }
-                processDefiniteFlag(def.definite, parser);
-                // add that component
-                children.push(comps[def.name] = node);
-            }
-        }
-        return new clss(comps, children);
-    } else {
-        // Choice mode and left-recursive mode
-        let base;
-        const choices = defs[0].choices || defs[0].leftRecursive.bases;
-        for (const choice of choices) {
-            const [node, accepted] = acceptUsingDef(choice, { ...parser, soft: true });
-            if (!accepted) {
-                resetPeekedTokens(parser);
-                continue;
-            }
-            base = new clss({ [choice.name]: node }, [node]);
-            consumePeekedTokens(parser);
-            break;
-        }
-        // if there was no match, the expansion failed
-        if (!base) return false;
-        // if this was not left-recursive, we're done
-        if (defs[0].choices) return base;
-        // Enter left-recursive mode
-        recursiveRetryLoop: while (true) {
-            for (const suff of defs[0].leftRecursive.suffixes) {
-                const suffNode = suff.parse({ ...parser, soft: true });
-                if (suffNode) {
-                    // suffix matched, add the current base to the suffix node, wrap the suffix node
-                    suffNode[suff.baseName] = base;
-                    suffNode.children.unshift(base);
-                    base = new clss({ [suff.name]: suffNode }, [suffNode]);
-                    consumePeekedTokens(parser);
-                    // try again
-                    continue recursiveRetryLoop;
-                } else {
-                    resetPeekedTokens(parser);
-                }
-            }
-            // we've gone a whole iteration with no matches, break out of the loop
-            break;
-        }
-        return base;
-    }
-}
-
-/**
- * Attempts to accept the next sequence according to the specified def and parser state.
- * Returns a tuple array containing [the next token or node, a flag indicating if the accept was successful]
- */
-function acceptUsingDef(def, parser) {
-    const subParser = { ...parser, soft: def.optional || parser.soft };
-    if (def.type || def.image) {
-        const tok = getNextToken(subParser);
-        const accepted = def.type && (tok.type === def.type) || def.image && (def.image === tok.image);
-        return [tok, accepted];
-    } else if (def.parse) {
-        const node = def.parse(subParser);
-        return [node, !!node];
-    } else {
-        throw new Error('this should never happen');
-    }
 }

@@ -147,6 +147,8 @@ export class StructType extends ASTNode {
     }
 }
 
+export class Field extends ASTNode {}
+
 export class ArrayType extends ASTNode {
     reduce() {
         const node = this._createNewNode();
