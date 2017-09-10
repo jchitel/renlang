@@ -1,13 +1,12 @@
 import Tokenizer from './Tokenizer';
-import LookaheadIterator from './LookaheadIterator';
-import NewLineCheckIterator from './NewLineCheckIterator';
+import LazyList from './LazyList';
 import * as decls from '../ast/declarations';
 import * as _types from '../ast/types';
 import * as exprs from '../ast/expressions';
 import * as stmts from '../ast/statements';
 import ParserError from './ParserError';
 import * as mess from './ParserMessages';
-import accept, { Parser as Pc } from './parser-control';
+import { Parser as Pc } from './parser-control';
 
 
 const AST = { ...decls, ..._types, ...exprs, ...stmts };
@@ -59,18 +58,24 @@ export default class Parser {
         // 1. the tokenizer yields tokens one at a time
         // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
         // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
-        this.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)));
+        this.tokenizer = new LazyList(new Tokenizer(source));
         return this.acceptProgram();
     }
 
     // COMMON UTIL FUNCTIONS
+
+    moveNext() {
+        let next;
+        [next, this.tokenizer] = this.tokenizer.shift(); // eslint-disable-line prefer-const
+        return next;
+    }
 
     /**
      * Using the next token as a starting point, use the 'parseFunc' to attempt to parse a tree node
      * from the input. Throw 'message' if the parse fails.
      */
     parseNextToken(parseFunc, message) {
-        const token = this.tokenizer.next().value;
+        const token = this.moveNext();
         const parsed = parseFunc(token);
         if (!parsed && message) throw new ParserError(message, token.line, token.column);
         return parsed;
@@ -81,13 +86,13 @@ export default class Parser {
      * throwing an error with message 'message' if it is not.
      */
     expectNextToken(type, message) {
-        const token = this.tokenizer.next().value;
+        const token = this.moveNext();
         this.enforceTokenType(token, type, message);
         return token.type === type ? token : false;
     }
 
     expectNextTokenImage(image, message) {
-        const token = this.tokenizer.next().value;
+        const token = this.moveNext();
         if (token.image !== image && message) {
             const formatted = (typeof message === 'function') ? message(token) : message;
             throw new ParserError(formatted, token.line, token.column);
@@ -106,14 +111,6 @@ export default class Parser {
         }
     }
 
-    /**
-     * Check if the token has a new line after it,
-     * throwing an error with the specified message if it is not.
-     */
-    enforceNewLine(token, message) {
-        if (!token.hasNewLine) throw new ParserError(message, token.line, token.column + token.image.length - 1);
-    }
-
     // PARSER FUNCTIONS
 
     /**
@@ -123,7 +120,8 @@ export default class Parser {
      */
     acceptProgram() {
         const imports = [], functions = [], types = [], exports = [], children = [];
-        for (const c of this.tokenizer) {
+        while (!this.tokenizer.empty()) {
+            const c = this.moveNext();
             let node;
             if (node = this.acceptImportDeclaration(c)) {
                 if (functions.length || types.length || exports.length) throw new ParserError(mess.IMPORT_AFTER_DECL, c.line, c.column);
@@ -154,11 +152,10 @@ export default class Parser {
         const fromToken = this.expectNextToken('FROM', mess.INVALID_IMPORT);
         const moduleNameToken = this.expectNextToken('STRING_LITERAL', mess.INVALID_IMPORT_MODULE);
 
-        const next = this.tokenizer.next().value;
+        const next = this.moveNext();
         if (next.type === 'COLON') {
             // default import
             const defaultImportNameToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
-            this.enforceNewLine(defaultImportNameToken, mess.IMPORT_NO_NEW_LINE);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
@@ -171,14 +168,13 @@ export default class Parser {
             // named imports
             const importComponents = [], commaTokens = [];
             importComponents.push(this.parseNextToken(t => this.acceptImportComponent(t), mess.INVALID_IMPORT));
-            let namedImportCloseBraceToken = this.tokenizer.next().value;
+            let namedImportCloseBraceToken = this.moveNext();
             while (namedImportCloseBraceToken.type === 'COMMA') {
                 commaTokens.push(namedImportCloseBraceToken);
                 importComponents.push(this.parseNextToken(t => this.acceptImportComponent(t), mess.INVALID_IMPORT));
-                namedImportCloseBraceToken = this.tokenizer.next().value;
+                namedImportCloseBraceToken = this.moveNext();
             }
             this.enforceTokenType(namedImportCloseBraceToken, 'RBRACE', mess.INVALID_IMPORT);
-            this.enforceNewLine(namedImportCloseBraceToken, mess.IMPORT_NO_NEW_LINE);
             return new AST.ImportDeclaration({
                 importToken: tok,
                 fromToken,
@@ -197,7 +193,7 @@ export default class Parser {
     acceptImportComponent(tok) {
         if (tok.type !== 'IDENT') return false;
         if (this.tokenizer.peek().type === 'AS') {
-            const asToken = this.tokenizer.next().value;
+            const asToken = this.moveNext();
             const importAliasToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
             return new AST.ImportComponent({
                 importNameToken: tok,
@@ -219,10 +215,10 @@ export default class Parser {
         const returnType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_RETURN_TYPE);
         const functionNameToken = this.expectNextToken('IDENT', mess.INVALID_FUNCTION_NAME);
         let typeParamList;
-        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.tokenizer.next().value);
+        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.moveNext());
         const params = this.parseNextToken(t => this.acceptParameterList(t), mess.INVALID_PARAMETER_LIST);
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_FAT_ARROW);
-        const next = this.tokenizer.next().value;
+        const next = this.moveNext();
         const functionBody = this.acceptFunctionBody(next);
         return new AST.FunctionDeclaration({
             funcToken: tok,
@@ -259,7 +255,7 @@ export default class Parser {
         if (tok.type !== 'TYPE') return false;
         const typeNameToken = this.expectNextToken('IDENT', mess.INVALID_TYPE_NAME);
         let typeParamList;
-        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.tokenizer.next().value);
+        if (this.tokenizer.peek().image === '<') typeParamList = this.acceptTypeParamList(this.moveNext());
         const equalsToken = this.expectNextToken('EQUALS', mess.TYPE_DECL_MISSING_EQUALS);
         const type = this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE);
         return new AST.TypeDeclaration({
@@ -279,7 +275,7 @@ export default class Parser {
         const commas = [];
         typeParams.push(this.parseNextToken(t => this.acceptTypeParam(t), mess.INVALID_TYPE_PARAM));
         while (this.tokenizer.peek().type === 'COMMA') {
-            commas.push(this.tokenizer.next().value);
+            commas.push(this.moveNext());
             typeParams.push(this.parseNextToken(t => this.acceptTypeParam(t), mess.INVALID_TYPE_PARAM));
         }
         const closeGtToken = this.expectNextTokenImage('>', mess.INVALID_TYPE_PARAM_LIST);
@@ -300,13 +296,13 @@ export default class Parser {
         if (tok.image === '+' || tok.image === '-') {
             varianceOpToken = tok;
             components.push(varianceOpToken);
-            tok = this.tokenizer.next().value;
+            tok = this.moveNext();
         }
         components.push(tok);
         this.enforceTokenType(tok, 'IDENT', mess.INVALID_TYPE_PARAM);
         let constraintOpToken, constraintType;
         if (this.tokenizer.peek().type === 'COLON' || this.tokenizer.peek().type === 'ASS_FROM') {
-            constraintOpToken = this.tokenizer.next().value;
+            constraintOpToken = this.moveNext();
             constraintType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_PARAM);
             components.push(constraintOpToken);
             components.push(constraintType);
@@ -327,11 +323,11 @@ export default class Parser {
      */
     acceptExportDeclaration(tok) {
         if (tok.type !== 'EXPORT') return false;
-        let next = this.tokenizer.next().value;
+        let next = this.moveNext();
         if (next.type === 'DEFAULT') {
             const defaultToken = next;
             let exportedValue;
-            next = this.tokenizer.next().value;
+            next = this.moveNext();
             if ((exportedValue = this.acceptFunctionDeclaration(next))
                     || (exportedValue = this.acceptTypeDeclaration(next))
                     || (exportedValue = this.acceptExpression(next))) {
@@ -348,9 +344,9 @@ export default class Parser {
             const exportName = next;
             next = this.tokenizer.peek();
             if (next.type === 'EQUALS') {
-                const equalsToken = this.tokenizer.next().value;
+                const equalsToken = this.moveNext();
                 let exportedValue;
-                next = this.tokenizer.next().value;
+                next = this.moveNext();
                 if ((exportedValue = this.acceptFunctionDeclaration(next))
                     || (exportedValue = this.acceptTypeDeclaration(next))
                     || (exportedValue = this.acceptExpression(next))) {
@@ -364,7 +360,6 @@ export default class Parser {
                     throw new ParserError(mess.INVALID_NAMED_EXPORT_VALUE, next.line, next.column);
                 }
             } else {
-                this.enforceNewLine(exportName, mess.EXPORT_NO_NEW_LINE);
                 return new AST.ExportDeclaration({
                     exportToken: tok,
                     exportName,
@@ -452,7 +447,7 @@ export default class Parser {
         const commas = [];
         types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_ARGUMENT));
         while (this.tokenizer.peek().type === 'COMMA') {
-            commas.push(this.tokenizer.next().value);
+            commas.push(this.moveNext());
             types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE_ARGUMENT));
         }
         const closeGtToken = this.expectNextTokenImage('>', mess.INVALID_TYPE_ARG_LIST);
@@ -465,9 +460,9 @@ export default class Parser {
     }
 
     tryArrayType(baseType) {
-        const [peek1, peek2] = this.tokenizer.peek(0, 2);
+        const [peek1, peek2] = this.tokenizer.peek(2);
         if (peek1.type !== 'LBRACK' || peek2.type !== 'RBRACK') return false;
-        const [openBracketToken, closeBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
+        const [openBracketToken, closeBracketToken] = [this.moveNext(), this.moveNext()];
         return new AST.ArrayType({
             baseType,
             openBracketToken,
@@ -477,7 +472,7 @@ export default class Parser {
 
     tryUnionType(left) {
         if (this.tokenizer.peek().image !== '|') return false;
-        const vbarToken = this.tokenizer.next().value;
+        const vbarToken = this.moveNext();
         const right = this.parseNextToken(t => this.acceptType(t), mess.INVALID_UNION_TYPE);
         return new AST.UnionType({
             left,
@@ -497,7 +492,7 @@ export default class Parser {
             // try to parse a parameter
             params.push(this.parseNextToken(t => this.acceptParam(t)));
             while ((peek = this.tokenizer.peek()).type === 'COMMA') {
-                commaTokens.push(this.tokenizer.next().value);
+                commaTokens.push(this.moveNext());
                 params.push(this.parseNextToken(t => this.acceptParam(t)));
             }
         }
@@ -624,10 +619,9 @@ export default class Parser {
         while (this.tokenizer.peek().type !== 'RBRACE') {
             fieldTypes.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_FIELD_TYPE));
             const identToken = this.expectNextToken('IDENT', mess.INVALID_FIELD_NAME);
-            this.enforceNewLine(identToken, mess.STRUCT_FIELD_NO_NEW_LINE);
             fieldNameTokens.push(identToken);
         }
-        const closeBraceToken = this.tokenizer.next().value;
+        const closeBraceToken = this.moveNext();
         return new AST.StructType({
             openBraceToken: tok,
             fieldTypes,
@@ -651,7 +645,7 @@ export default class Parser {
                 types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE));
             }
         }
-        const closeParenToken = this.tokenizer.next().value;
+        const closeParenToken = this.moveNext();
         if (this.tokenizer.peek().type !== 'FAT_ARROW') {
             // parse as tuple
             if (types.length === 1) {
@@ -723,7 +717,7 @@ export default class Parser {
         // if there is only one parameter and it is non-parenthesized, it could still be something else
         if (paramList.children.length === 1 && this.tokenizer.peek().type !== 'FAT_ARROW') return false;
         const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_LAMBDA_EXPRESSION_MISSING_FAT_ARROW);
-        const next = this.tokenizer.next().value;
+        const next = this.moveNext();
         const body = this.acceptFunctionBody(next);
         return new AST.LambdaExpression({ paramList, fatArrowToken, body }, [paramList, fatArrowToken, body]);
     }
@@ -744,7 +738,7 @@ export default class Parser {
             if (first) first = false;
             else commaTokens.push(this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA));
             // try to get a param
-            const next = this.tokenizer.next().value;
+            const next = this.moveNext();
             const param = this.acceptLambdaParam(next);
             if (param) {
                 items.push(param);
@@ -753,7 +747,7 @@ export default class Parser {
                 items.push(exp);
             }
         }
-        const closeParenToken = this.tokenizer.next().value;
+        const closeParenToken = this.moveNext();
         /**
          * Determine what it is:
          * ? Next is FAT_ARROW
@@ -809,7 +803,7 @@ export default class Parser {
             // if the type is an identifier and an identifier does not follow it, then it is an implicit parameter
             return new AST.LambdaParam({ identifierToken: type.name }, [type.name]);
         }
-        const identifierToken = this.tokenizer.next().value;
+        const identifierToken = this.moveNext();
         return new AST.LambdaParam({ type, identifierToken }, [type, identifierToken]);
     }
 
@@ -825,7 +819,7 @@ export default class Parser {
             else commaTokens.push(this.expectNextToken('COMMA', mess.ARRAY_LITERAL_MISSING_COMMA));
             items.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
         }
-        const closeBracketToken = this.tokenizer.next().value;
+        const closeBracketToken = this.moveNext();
         return new AST.ArrayLiteral({
             openBracketToken: tok,
             items,
@@ -848,7 +842,7 @@ export default class Parser {
             colonTokens.push(this.expectNextToken('COLON', mess.STRUCT_LITERAL_MISSING_COLON));
             values.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
         }
-        const closeBraceToken = this.tokenizer.next().value;
+        const closeBraceToken = this.moveNext();
         return new AST.StructLiteral({
             openBraceToken: tok,
             keyTokens,
@@ -906,7 +900,7 @@ export default class Parser {
             if (typeArgList) throw new ParserError(mess.INVALID_EXPRESSION, this.tokenizer.peek().line, this.tokenizer.peek().column);
             return false;
         }
-        const openParenToken = this.tokenizer.next().value;
+        const openParenToken = this.moveNext();
         const paramValues = [], commaTokens = [];
         let first = true;
         while (this.tokenizer.peek().type !== 'RPAREN') {
@@ -914,7 +908,7 @@ export default class Parser {
             else commaTokens.push(this.expectNextToken('COMMA', mess.FUNCTION_APPLICATION_MISSING_COMMA));
             paramValues.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
         }
-        const closeParenToken = this.tokenizer.next().value;
+        const closeParenToken = this.moveNext();
         return new AST.FunctionApplication({
             target,
             typeArgList,
@@ -932,7 +926,7 @@ export default class Parser {
     tryBinaryOrPostfixExpression(left) {
         const operatorToken = this.tokenizer.peek();
         if (operatorToken.type !== 'OPER') return false;
-        this.tokenizer.next();
+        this.moveNext();
         if (this.isStartOfExpression(this.tokenizer.peek())) {
             const right = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
             return new AST.BinaryExpression({
@@ -953,7 +947,7 @@ export default class Parser {
      */
     tryFieldAccess(target) {
         if (this.tokenizer.peek().type !== 'DOT') return false;
-        const dotToken = this.tokenizer.next().value;
+        const dotToken = this.moveNext();
         const fieldIdentToken = this.expectNextToken('IDENT', mess.FIELD_ACCESS_INVALID_FIELD_NAME);
         return new AST.FieldAccess({
             target,
@@ -967,7 +961,7 @@ export default class Parser {
      */
     tryArrayAccess(target) {
         if (this.tokenizer.peek().type !== 'LBRACK') return false;
-        const openBracketToken = this.tokenizer.next().value;
+        const openBracketToken = this.moveNext();
         const indexExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
         const closeBracketToken = this.expectNextToken('RBRACK', mess.ARRAY_ACCESS_MISSING_CLOSE_BRACKET);
         return new AST.ArrayAccess({ target, openBracketToken, indexExp, closeBracketToken }, [target, openBracketToken, indexExp, closeBracketToken]);
@@ -1017,12 +1011,12 @@ export default class Parser {
     acceptBlock(tok) {
         if (tok.type !== 'LBRACE') return false;
         const statements = [];
-        let next = this.tokenizer.next().value;
+        let next = this.moveNext();
         while (true) {
             const statement = this.acceptStatement(next);
             if (statement) statements.push(statement);
             else break;
-            next = this.tokenizer.next().value;
+            next = this.moveNext();
         }
         this.enforceTokenType(next, 'RBRACE', mess.MISSING_CLOSE_BRACE);
         return new AST.Block({
@@ -1106,7 +1100,7 @@ export default class Parser {
         const catchBlocks = [this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT)];
         // potentially more
         while (this.tokenizer.peek().type === 'CATCH') {
-            catchTokens.push(this.tokenizer.next().value);
+            catchTokens.push(this.moveNext());
             openParenTokens.push(this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN));
             catchParams.push(this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM));
             closeParenTokens.push(this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN));
@@ -1114,7 +1108,7 @@ export default class Parser {
         }
         // potential finally
         if (this.tokenizer.peek().type === 'FINALLY') {
-            const finallyToken = this.tokenizer.next().value;
+            const finallyToken = this.moveNext();
             const finallyBlock = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
             return new AST.TryCatchStatement({ tryToken: tok, tryBody, catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks, finallyToken, finallyBlock },
                 [tok, tryBody, ...interleave(catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks), finallyToken, finallyBlock]);
@@ -1152,7 +1146,7 @@ export default class Parser {
      */
     acceptBreakStatement(tok) {
         if (tok.type !== 'BREAK') return false;
-        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
+        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.moveNext();
         if (!loopNumber) return new AST.BreakStatement({ breakToken: tok }, [tok]);
         return new AST.BreakStatement({ breakToken: tok, loopNumber }, [tok, loopNumber]);
     }
@@ -1162,7 +1156,7 @@ export default class Parser {
      */
     acceptContinueStatement(tok) {
         if (tok.type !== 'CONTINUE') return false;
-        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
+        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.moveNext();
         if (!loopNumber) return new AST.ContinueStatement({ continueToken: tok }, [tok]);
         return new AST.ContinueStatement({ continueToken: tok, loopNumber }, [tok, loopNumber]);
     }
@@ -1180,7 +1174,7 @@ export function parse(source) {
  * Program ::= ImportDeclaration* Declaration*
  */
 export function acceptProgram(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true },
         { name: 'declarations', parse: acceptDeclaration, zeroOrMore: true },
         { name: 'eof', type: 'EOF' },
@@ -1191,7 +1185,7 @@ export function acceptProgram(parser) {
  * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON ImportList
  */
 export function acceptImportDeclaration(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'importToken', type: 'IMPORT', definite: true },
         { name: 'fromToken', type: 'FROM', mess: mess.INVALID_IMPORT },
         { name: 'moduleNameToken', type: 'STRING_LITERAL', mess: mess.INVALID_IMPORT_MODULE },
@@ -1204,7 +1198,7 @@ export function acceptImportDeclaration(parser) {
  * ImportList ::= IDENT | NamedImports
  */
 export function acceptImportList(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'defaultImportNameToken', type: 'IDENT' },
             { name: 'namedImports', parse: acceptNamedImports },
@@ -1216,7 +1210,7 @@ export function acceptImportList(parser) {
  * NamedImports ::= LBRACE ImportComponent(+ sep COMMA) RBRACE
  */
 export function acceptNamedImports(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'importComponents', parse: acceptImportComponent, mess: mess.INVALID_IMPORT, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeBraceToken', type: 'RBRACE', mess: mess.INVALID_IMPORT },
@@ -1227,7 +1221,7 @@ export function acceptNamedImports(parser) {
  * ImportComponent ::= IDENT | ImportWithAlias
  */
 export function acceptImportComponent(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'importWithAlias', parse: acceptImportWithAlias },
             { name: 'importNameToken', type: 'IDENT' },
@@ -1239,7 +1233,7 @@ export function acceptImportComponent(parser) {
  * ImportWithAlias ::= IDENT AS IDENT
  */
 export function acceptImportWithAlias(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'importNameToken', type: 'IDENT' },
         { name: 'asToken', type: 'AS', definite: true },
         { name: 'importAliasToken', type: 'IDENT', mess: mess.INVALID_IMPORT },
@@ -1250,7 +1244,7 @@ export function acceptImportWithAlias(parser) {
  * Declaration ::= FunctionDeclaration | TypeDeclaration | ExportDeclaration
  */
 export function acceptDeclaration(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'function', parse: acceptFunctionDeclaration },
             { name: 'typeNode', parse: acceptTypeDeclaration },
@@ -1263,7 +1257,7 @@ export function acceptDeclaration(parser) {
  * FunctionDeclaration ::= FUNC Type IDENT TypeParamList? ParameterList FAT_ARROW FunctionBody
  */
 export function acceptFunctionDeclaration(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'funcToken', type: 'FUNC', definite: true },
         { name: 'returnType', parse: acceptType, mess: mess.INVALID_RETURN_TYPE },
         { name: 'functionNameToken', type: 'IDENT', mess: mess.INVALID_FUNCTION_NAME },
@@ -1278,7 +1272,7 @@ export function acceptFunctionDeclaration(parser) {
  * ParameterList ::= LPAREN Param(+ sep COMMA) RPAREN
  */
 export function acceptParameterList(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'params', parse: acceptParam, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeParenToken', type: 'RPAREN', mess: mess.MISSING_CLOSE_PAREN },
@@ -1289,7 +1283,7 @@ export function acceptParameterList(parser) {
  * Param ::= Type IDENT
  */
 export function acceptParam(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'typeNode', parse: acceptType, mess: mess.INVALID_PARAMETER_TYPE },
         { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_PARAMETER_NAME },
     ], AST.Param);
@@ -1299,7 +1293,7 @@ export function acceptParam(parser) {
  * FunctionBody ::= Expression | Statement
  */
 export function acceptFunctionBody(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'expressionBody', parse: acceptExpression },
             { name: 'statementBody', parse: acceptStatement },
@@ -1311,7 +1305,7 @@ export function acceptFunctionBody(parser) {
  * TypeDeclaration ::= TYPE IDENT TypeParamList? EQUALS Type
  */
 export function acceptTypeDeclaration(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'typeToken', type: 'TYPE', definite: true },
         { name: 'typeNameToken', type: 'IDENT', mess: mess.INVALID_TYPE_NAME },
         { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
@@ -1324,7 +1318,7 @@ export function acceptTypeDeclaration(parser) {
  * ExportDeclaration ::= EXPORT ExportName ExportValue?
  */
 export function acceptExportDeclaration(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'exportToken', type: 'EXPORT', definite: true },
         { name: 'exportName', parser: acceptExportName },
         { name: 'exportDefinition', parser: acceptExportValue, optional: true },
@@ -1335,7 +1329,7 @@ export function acceptExportDeclaration(parser) {
  * ExportName ::= DEFAULT | NamedExport
  */
 export function acceptExportName(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'defaultToken', type: 'DEFAULT' },
             { name: 'namedExport', parser: acceptNamedExport },
@@ -1347,7 +1341,7 @@ export function acceptExportName(parser) {
  * NamedExport ::= IDENT EQUALS
  */
 export function acceptNamedExport(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'exportNameToken', type: 'IDENT' },
         { name: 'equalsToken', type: 'EQUALS' },
     ], AST.NamedExport);
@@ -1357,7 +1351,7 @@ export function acceptNamedExport(parser) {
  * ExportValue ::= FunctionDeclaration | TypeDeclaration | Expression
  */
 export function acceptExportValue(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'functionDeclaration', parse: acceptFunctionDeclaration },
             { name: 'typeDeclaration', parse: acceptTypeDeclaration },
@@ -1370,7 +1364,7 @@ export function acceptExportValue(parser) {
  * TypeParamList ::= LT TypeParam(+ sep COMMA) GT
  */
 export function acceptTypeParamList(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openLtToken', image: '<', definite: true },
         { name: 'typeParams', parse: acceptTypeParam, mess: mess.INVALID_TYPE_PARAM, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeGtToken', image: '<', definite: true },
@@ -1381,7 +1375,7 @@ export function acceptTypeParamList(parser) {
  * TypeParam ::= VarianceOp? IDENT TypeConstraint?
  */
 export function acceptTypeParam(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'varianceOp', parse: acceptVarianceOp, optional: true },
         { name: 'identToken', type: 'IDENT', mess: mess.INVALID_TYPE_PARAM },
         { name: 'typeConstraint', parse: acceptTypeConstraint, optional: true },
@@ -1392,7 +1386,7 @@ export function acceptTypeParam(parser) {
  * VarianceOp ::= PLUS | MINUS
  */
 export function acceptVarianceOp(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'covariantToken', image: '+' },
             { name: 'contravariantToken', image: '-' },
@@ -1404,7 +1398,7 @@ export function acceptVarianceOp(parser) {
  * TypeConstraint ::= ConstraintOp Type
  */
 export function acceptTypeConstraint(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'constraintOp', parse: acceptConstraintOp, definite: true },
         { name: 'constraintType', parse: acceptType, mess: mess.INVALID_TYPE_PARAM },
     ]);
@@ -1414,7 +1408,7 @@ export function acceptTypeConstraint(parser) {
  * ConstraintOp ::= COLON | ASS_FROM
  */
 export function acceptConstraintOp(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'assignableToToken', type: 'COLON' },
             { name: 'assignableFromToken', type: 'ASS_FROM' },
@@ -1450,7 +1444,7 @@ export function acceptConstraintOp(parser) {
  *              | UnionTypeSuffix
  */
 export function acceptType(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         leftRecursive: {
             bases: [
                 { name: 'builtIn', type: 'U8' }, { name: 'builtIn', type: 'I8' }, { name: 'builtIn', type: 'BYTE' },
@@ -1484,7 +1478,7 @@ export function acceptType(parser) {
  * StructType ::= LBRACE Field* RBRACE
  */
 export function acceptStructType(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'fields', parse: acceptField, zeroOrMore: true },
         { name: 'closeBraceToken', type: 'RBRACE', mess: mess.INVALID_STRUCT_NO_CLOSE_BRACE },
@@ -1495,7 +1489,7 @@ export function acceptStructType(parser) {
  * Field ::= Type IDENT
  */
 export function acceptField(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'typeNode', parse: acceptType, mess: mess.INVALID_FIELD_TYPE, definite: true },
         { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_FIELD_NAME },
     ], AST.Field);
@@ -1505,7 +1499,7 @@ export function acceptField(parser) {
  * FunctionType ::= LPAREN Type(* sep COMMA) RPAREN FAT_ARROW Type
  */
 export function acceptFunctionType(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
         { name: 'closeParenToken', type: 'RPAREN' },
@@ -1518,7 +1512,7 @@ export function acceptFunctionType(parser) {
  * ParenthesizedType ::= LPAREN Type RPAREN
  */
 export function acceptParenthesizedType(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'paramTypes', parse: acceptType, mess: mess.INVALID_TYPE },
         { name: 'closeParenToken', type: 'RPAREN', definite: true },
@@ -1529,7 +1523,7 @@ export function acceptParenthesizedType(parser) {
  * TupleType ::= LPAREN Type(* sep COMMA) RPAREN
  */
 export function acceptTupleType(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'paramTypes', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE, sep: { name: 'commaTokens', type: 'COMMA', definite: true, mess: mess.FUNCTION_TYPE_MISSING_COMMA } },
         { name: 'closeParenToken', type: 'RPAREN' },
@@ -1540,7 +1534,7 @@ export function acceptTupleType(parser) {
  * GenericType ::= IDENT TypeArgList
  */
 export function acceptGenericType(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'identToken', type: 'IDENT' },
         { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
     ], AST.GenericType);
@@ -1550,7 +1544,7 @@ export function acceptGenericType(parser) {
  * TypeArgList ::= LT Type(+ sep COMMA) GT
  */
 export function acceptTypeArgList(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openLtToken', image: '<', definite: true },
         { name: 'types', parse: acceptType, oneOrMore: true, mess: mess.INVALID_TYPE_ARGUMENT, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeGtToken', image: '>', mess: mess.INVALID_TYPE_ARG_LIST },
@@ -1561,7 +1555,7 @@ export function acceptTypeArgList(parser) {
  * ArrayTypeSuffix ::= LBRACK RBRACK
  */
 export function acceptArrayTypeSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBracketToken', type: 'LBRACK', definite: true },
         { name: 'closeBracketToken', type: 'RBRACK' },
     ], AST.ArrayType);
@@ -1571,7 +1565,7 @@ export function acceptArrayTypeSuffix(parser) {
  * UnionTypeSuffix ::= VBAR Type
  */
 export function acceptUnionTypeSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'vbarToken', image: '|', definite: true },
         { name: 'right', parse: acceptType, mess: mess.INVALID_UNION_TYPE },
     ], AST.UnionType);
@@ -1606,7 +1600,7 @@ export function acceptUnionTypeSuffix(parser) {
  *                    | ArrayAccessSuffix
  */
 export function acceptExpression(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         leftRecursive: {
             bases: [
                 { name: 'integerLiteralToken', type: 'INTEGER_LITERAL' },
@@ -1641,7 +1635,7 @@ export function acceptExpression(parser) {
  * VarDeclaration ::= IDENT EQUALS Expression
  */
 export function acceptVarDeclaration(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'varIdentToken', type: 'IDENT' },
         { name: 'equalsToken', type: 'EQUALS', definite: true },
         { name: 'initialValue', parse: acceptExpression, mess: mess.INVALID_INITIAL_VALUE },
@@ -1652,7 +1646,7 @@ export function acceptVarDeclaration(parser) {
  * ShorthandLambdaExpression ::= IDENT FAT_ARROW FunctionBody
  */
 export function acceptShorthandLambdaExpression(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'shorthandParam', type: 'IDENT' },
         { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
         { name: 'body', parse: acceptFunctionBody },
@@ -1663,7 +1657,7 @@ export function acceptShorthandLambdaExpression(parser) {
  * ArrayLiteral ::= LBRACK Expression(* sep COMMA) RBRACK
  */
 export function acceptArrayLiteral(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBracketToken', type: 'LBRACK', definite: true },
         { name: 'items', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.ARRAY_LITERAL_MISSING_COMMA } },
         { name: 'closeBracketToken', type: 'RBRACK' },
@@ -1674,7 +1668,7 @@ export function acceptArrayLiteral(parser) {
  * StructLiteral ::= LBRACE StructEntry(* sep COMMA) RBRACE
  */
 export function acceptStructLiteral(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'entries', parse: acceptStructEntry, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.STRUCT_LITERAL_MISSING_COMMA } },
         { name: 'closeBraceToken', type: 'RBRACE' },
@@ -1685,7 +1679,7 @@ export function acceptStructLiteral(parser) {
  * StructEntry ::= IDENT COLON Expression
  */
 export function acceptStructEntry(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'keyToken', type: 'IDENT', definite: true },
         { name: 'colonToken', type: 'COLON', mess: mess.STRUCT_LITERAL_MISSING_COLON },
         { name: 'value', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
@@ -1696,7 +1690,7 @@ export function acceptStructEntry(parser) {
  * IfElseExpression ::= IF LPAREN Expression RPAREN Expression ELSE Expression
  */
 export function acceptIfElseExpression(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'ifToken', type: 'IF', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.IF_MISSING_OPEN_PAREN },
         { name: 'condition', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
@@ -1711,7 +1705,7 @@ export function acceptIfElseExpression(parser) {
  * PrefixExpression ::= OPER Expression
  */
 export function acceptPrefixExpression(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'operatorToken', type: 'OPER', definite: true },
         { name: 'target', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
     ], AST.PrefixExpression);
@@ -1721,7 +1715,7 @@ export function acceptPrefixExpression(parser) {
  * LambdaExpression ::= LPAREN LambdaParam(* sep COMMA) RPAREN FAT_ARROW FunctionBody
  */
 export function acceptLambdaExpression(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'params', parse: acceptLambdaParam, zeroOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
         { name: 'closeParenToken', type: 'RPAREN' },
@@ -1734,7 +1728,7 @@ export function acceptLambdaExpression(parser) {
  * LambdaParam ::= Param | IDENT
  */
 export function acceptLambdaParam(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'typedParam', parse: acceptParam },
             { name: 'identToken', type: 'IDENT' },
@@ -1746,7 +1740,7 @@ export function acceptLambdaParam(parser) {
  * ParentheticalExpression ::= LPAREN Expression RPAREN
  */
 export function acceptParentheticalExpression(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
         { name: 'inner', parse: acceptExpression },
         { name: 'closeParenToken', type: 'RPAREN', definite: true },
@@ -1757,7 +1751,7 @@ export function acceptParentheticalExpression(parser) {
  * TupleLiteral ::= LPAREN Expression(* sep COMMA) RPAREN
  */
 export function acceptTupleLiteral(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openParenToken', type: 'LPAREN', definite: true },
         { name: 'items', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.TUPLE_LITERAL_MISSING_COMMA } },
         { name: 'closeParenToken', type: 'RPAREN' },
@@ -1768,7 +1762,7 @@ export function acceptTupleLiteral(parser) {
  * FunctionApplicationSuffix ::= TypeArgList? LPAREN Expression(* sep COMMA) RPAREN
  */
 export function acceptFunctionApplicationSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'typeArgList', parse: acceptTypeArgList, optional: true },
         { name: 'openParenToken', type: 'LPAREN', definite: true },
         { name: 'args', parse: acceptExpression, zeroOrMore: true, mess: mess.INVALID_EXPRESSION, sep: { name: 'commaTokens', type: 'COMMA', mess: mess.FUNCTION_APPLICATION_MISSING_COMMA } },
@@ -1780,7 +1774,7 @@ export function acceptFunctionApplicationSuffix(parser) {
  * BinaryExpressionSuffix ::= OPER Expression
  */
 export function acceptBinaryExpressionSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'operatorToken', type: 'OPER' },
         { name: 'right', parse: acceptExpression, definite: true },
     ], AST.BinaryExpression);
@@ -1790,7 +1784,7 @@ export function acceptBinaryExpressionSuffix(parser) {
  * PostfixExpressionSuffix ::= OPER
  */
 export function acceptPostfixExpressionSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'operatorToken', type: 'OPER', definite: true },
     ], AST.PostfixExpression);
 }
@@ -1799,7 +1793,7 @@ export function acceptPostfixExpressionSuffix(parser) {
  * FieldAccessSuffix ::= DOT IDENT
  */
 export function acceptFieldAccessSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'dotToken', type: 'DOT', definite: true },
         { name: 'fieldNameToken', type: 'IDENT', mess: mess.FIELD_ACCESS_INVALID_FIELD_NAME },
     ], AST.FieldAccess);
@@ -1809,7 +1803,7 @@ export function acceptFieldAccessSuffix(parser) {
  * ArrayAccessSuffix ::= LBRACK Expression RBRACK
  */
 export function acceptArrayAccessSuffix(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBracketToken', type: 'LBRACK', definite: true },
         { name: 'indexExp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
         { name: 'closeBracketToken', type: 'RBRACK', mess: mess.ARRAY_ACCESS_MISSING_CLOSE_BRACKET },
@@ -1832,7 +1826,7 @@ export function acceptArrayAccessSuffix(parser) {
  *               BreakStatement
  */
 export function acceptStatement(parser) {
-    return accept(parser, [{
+    return parser.accept([{
         choices: [
             { name: 'block', parse: acceptBlock },
             { name: 'exp', parse: acceptExpression },
@@ -1852,7 +1846,7 @@ export function acceptStatement(parser) {
  * Block ::= LBRACE Statement* RBRACE
  */
 export function acceptBlock(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'openBraceToken', type: 'LBRACE', definite: true },
         { name: 'statements', parse: acceptStatement, zeroOrMore: true },
         { name: 'closeBraceToken', type: 'RBRACE', mess: mess.MISSING_CLOSE_BRACE },
@@ -1863,7 +1857,7 @@ export function acceptBlock(parser) {
  * ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
  */
 export function acceptForStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'forToken', type: 'FOR', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.FOR_MISSING_OPEN_PAREN },
         { name: 'iterVarToken', type: 'IDENT', mess: mess.FOR_INVALID_ITER_IDENT },
@@ -1878,7 +1872,7 @@ export function acceptForStatement(parser) {
  * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
  */
 export function acceptWhileStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'whileToken', type: 'WHILE', definite: true },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.WHILE_MISSING_OPEN_PAREN },
         { name: 'conditionExp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
@@ -1891,7 +1885,7 @@ export function acceptWhileStatement(parser) {
  * DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
  */
 export function acceptDoWhileStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'doToken', type: 'DO', definite: true },
         { name: 'body', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
         { name: 'whileToken', type: 'WHILE', mess: mess.DO_WHILE_MISSING_WHILE },
@@ -1905,7 +1899,7 @@ export function acceptDoWhileStatement(parser) {
  * TryCatchStatement ::= TRY Statement CatchClause+ FinallyClause?
  */
 export function acceptTryCatchStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'tryToken', type: 'TRY', definite: true },
         { name: 'tryBody', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
         { name: 'catches', parse: acceptCatchClause, oneOrMore: true, mess: mess.TRY_CATCH_MISSING_CATCH },
@@ -1917,7 +1911,7 @@ export function acceptTryCatchStatement(parser) {
  * CatchClause ::= CATCH LPAREN Param RPAREN Statement
  */
 export function acceptCatchClause(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'catchToken', type: 'CATCH', mess: mess.TRY_CATCH_MISSING_CATCH },
         { name: 'openParenToken', type: 'LPAREN', mess: mess.TRY_CATCH_MISSING_OPEN_PAREN },
         { name: 'param', parse: acceptParam, mess: mess.CATCH_INVALID_PARAM },
@@ -1930,7 +1924,7 @@ export function acceptCatchClause(parser) {
  * FinallyClause ::= FINALLY Statement
  */
 export function acceptFinallyClause(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'finallyToken', type: 'FINALLY', definite: true },
         { name: 'finallyBlock', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
     ], AST.FinallyClause);
@@ -1940,7 +1934,7 @@ export function acceptFinallyClause(parser) {
  * ThrowStatement ::= THROW Expression
  */
 export function acceptThrowStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'throwToken', type: 'THROW', definite: true },
         { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
     ], AST.ThrowStatement);
@@ -1950,7 +1944,7 @@ export function acceptThrowStatement(parser) {
  * ReturnStatement ::= RETURN Expression?
  */
 export function acceptReturnStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'returnToken', type: 'RETURN', definite: true },
         { name: 'exp', parse: acceptExpression, optional: true, mess: mess.INVALID_EXPRESSION },
     ], AST.ReturnStatement);
@@ -1960,7 +1954,7 @@ export function acceptReturnStatement(parser) {
  * BreakStatement ::= BREAK INTEGER_LITERAL?
  */
 export function acceptBreakStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'breakToken', type: 'BREAK', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);
@@ -1970,7 +1964,7 @@ export function acceptBreakStatement(parser) {
  * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
  */
 export function acceptContinueStatement(parser) {
-    return accept(parser, [
+    return parser.accept([
         { name: 'continueToken', type: 'CONTINUE', definite: true },
         { name: 'loopNumber', type: 'INTEGER_LITERAL', optional: true },
     ], AST.ContinueStatement);

@@ -35,6 +35,8 @@ export class Type extends ASTNode {
     }
 }
 
+export class ParenthesizedType extends ASTNode {}
+
 export class PrimitiveType extends ASTNode {
     constructor(typeNode, location) {
         super({ typeNode });

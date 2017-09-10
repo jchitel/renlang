@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 
-import accept, { Parser } from '../../src/parser/parser-control';
+import { Parser } from '../../src/parser/parser-control';
 import ASTNode from '../../src/ast/ASTNode';
 
 
@@ -17,7 +17,7 @@ describe('parser control logic', () => {
                 { name: 'elseToken', type: 'ELSE' },
                 { name: 'alternateToken', type: 'IDENT' },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -43,7 +43,7 @@ describe('parser control logic', () => {
                 { name: 'elseToken', type: 'ELSE', optional: true },
                 { name: 'alternateToken', type: 'IDENT', optional: true },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -69,7 +69,7 @@ describe('parser control logic', () => {
                 { name: 'elseToken', type: 'ELSE', optional: true },
                 { name: 'alternateToken', type: 'IDENT', optional: true },
             ];
-            let node = accept(parser, defs, ASTNode);
+            let node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -82,7 +82,7 @@ describe('parser control logic', () => {
             });
             // try again with partial inclusion
             parser = new Parser('if (abc) bcd else');
-            node = accept(parser, defs, ASTNode);
+            node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -102,9 +102,8 @@ describe('parser control logic', () => {
                 { name: 'ifToken', type: 'IF', definite: true },
                 { name: 'thenToken', image: 'then' },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node).to.eql(false);
-            expect(parser.tokenizer.next().done).to.eql(true);
         });
 
         it('should throw error when required token not included and error message included', () => {
@@ -113,12 +112,12 @@ describe('parser control logic', () => {
                 { name: 'ifToken', type: 'IF', definite: true },
                 { name: 'thenToken', image: 'then', mess: 'NOT FOUND' },
             ];
-            expect(() => accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 3)');
+            expect(() => parser.accept(defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 3)');
         });
 
         it('should parse sequential definition with sub-parse', () => {
             const parser = new Parser('if (abc) def else xyz');
-            const acceptAlternate = p => accept(p, [
+            const acceptAlternate = p => p.accept([
                 { name: 'elseToken', type: 'ELSE', definite: true },
                 { name: 'alternateToken', type: 'IDENT' },
             ], ASTNode);
@@ -130,7 +129,7 @@ describe('parser control logic', () => {
                 { name: 'consequentToken', type: 'IDENT' },
                 { name: 'alternate', parse: acceptAlternate },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -152,7 +151,7 @@ describe('parser control logic', () => {
 
         it('should parse sequential definition with optional sub-parse', () => {
             const parser = new Parser('if (abc) def else xyz');
-            const acceptAlternate = p => accept(p, [
+            const acceptAlternate = p => p.accept([
                 { name: 'elseToken', type: 'ELSE', definite: true },
                 { name: 'alternateToken', type: 'IDENT' },
             ], ASTNode);
@@ -164,7 +163,7 @@ describe('parser control logic', () => {
                 { name: 'consequentToken', type: 'IDENT' },
                 { name: 'alternate', parse: acceptAlternate, optional: true },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -182,13 +181,13 @@ describe('parser control logic', () => {
                     },
                 ],
             });
-            expect(parser.tokenizer.next().value.type).to.eql('EOF');
+            expect(parser.tokenizer.peek().type).to.eql('EOF');
         });
 
 
         it('should ignore optional not-included sub-parses', () => {
             const parser = new Parser('if (abc) def');
-            const acceptAlternate = p => accept(p, [
+            const acceptAlternate = p => p.accept([
                 { name: 'elseToken', type: 'ELSE', definite: true },
                 { name: 'alternateToken', type: 'IDENT' },
             ], ASTNode);
@@ -200,7 +199,7 @@ describe('parser control logic', () => {
                 { name: 'consequentToken', type: 'IDENT' },
                 { name: 'alternate', parse: acceptAlternate, optional: true },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -215,7 +214,7 @@ describe('parser control logic', () => {
 
         it('should ignore a failed parse of an optional non-terminal', () => {
             const parser = new Parser('if (abc) def else 1');
-            const acceptAlternate = p => accept(p, [
+            const acceptAlternate = p => p.accept([
                 { name: 'elseToken', type: 'ELSE' },
                 { name: 'alternateToken', type: 'IDENT', definite: true },
             ], ASTNode);
@@ -227,7 +226,7 @@ describe('parser control logic', () => {
                 { name: 'consequentToken', type: 'IDENT' },
                 { name: 'alternate', parse: acceptAlternate, optional: true },
             ];
-            const node = accept(parser, defs, ASTNode);
+            const node = parser.accept(defs, ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
@@ -251,7 +250,7 @@ describe('parser control logic', () => {
                 { name: 'abcToken', image: 'abc' },
                 { name: 'abcdToken', image: 'abcd' },
             ];
-            const node = accept(parser, [{ choices }], ASTNode);
+            const node = parser.accept([{ choices }], ASTNode);
             expect(node.toTree()).to.eql({
                 type: 'ASTNode',
                 children: [{ type: 'IDENT', image: 'abc' }],
@@ -266,18 +265,18 @@ describe('parser control logic', () => {
                 { name: 'abcToken', image: 'abc' },
                 { name: 'abcdToken', image: 'abcd' },
             ];
-            expect(accept(parser, [{ choices }], ASTNode)).to.eql(false);
+            expect(parser.accept([{ choices }], ASTNode)).to.eql(false);
         });
 
         it('should parse from a set of non-terminal choices', () => {
             const parser = new Parser('a b');
             const choices = [
-                { name: 'abcd', parse: p => accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c' }, { name: 'dToken', image: 'd', definite: true }], ASTNode) },
-                { name: 'abc', parse: p => accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c', definite: true }], ASTNode) },
-                { name: 'ab', parse: p => accept(p, [{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b', definite: true }], ASTNode) },
-                { name: 'a', parse: p => accept(p, [{ name: 'aToken', image: 'a', definite: true }], ASTNode) },
+                { name: 'abcd', parse: p => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c' }, { name: 'dToken', image: 'd', definite: true }], ASTNode) },
+                { name: 'abc', parse: p => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c', definite: true }], ASTNode) },
+                { name: 'ab', parse: p => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b', definite: true }], ASTNode) },
+                { name: 'a', parse: p => p.accept([{ name: 'aToken', image: 'a', definite: true }], ASTNode) },
             ];
-            expect(accept(parser, [{ choices }], ASTNode).toTree()).to.eql({
+            expect(parser.accept([{ choices }], ASTNode).toTree()).to.eql({
                 type: 'ASTNode',
                 children: [{
                     type: 'ASTNode',
@@ -296,11 +295,11 @@ describe('parser control logic', () => {
             const parser = new Parser('a c');
             const bases = [{ name: 'aToken', image: 'a' }];
             const suffixes = [
-                { name: 'b', baseName: 'base', parse: p => accept(p, [{ name: 'bToken', image: 'b', definite: true }], ASTNode) },
-                { name: 'c', baseName: 'base', parse: p => accept(p, [{ name: 'cToken', image: 'c', definite: true }], ASTNode) },
-                { name: 'd', baseName: 'base', parse: p => accept(p, [{ name: 'dToken', image: 'd', definite: true }], ASTNode) },
+                { name: 'b', baseName: 'base', parse: p => p.accept([{ name: 'bToken', image: 'b', definite: true }], ASTNode) },
+                { name: 'c', baseName: 'base', parse: p => p.accept([{ name: 'cToken', image: 'c', definite: true }], ASTNode) },
+                { name: 'd', baseName: 'base', parse: p => p.accept([{ name: 'dToken', image: 'd', definite: true }], ASTNode) },
             ];
-            expect(accept(parser, [{ leftRecursive: { bases, suffixes } }], MyNode).toTree()).to.eql({
+            expect(parser.accept([{ leftRecursive: { bases, suffixes } }], MyNode).toTree()).to.eql({
                 type: 'MyNode',
                 children: [{
                     type: 'ASTNode',
@@ -317,7 +316,7 @@ describe('parser control logic', () => {
         it('should handle basic zeroOrMore expansion', () => {
             const parser = new Parser('a a a');
             const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true }];
-            expect(accept(parser, defs, ASTNode).toTree()).to.eql({
+            expect(parser.accept(defs, ASTNode).toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
                     { type: 'IDENT', image: 'a' },
@@ -330,7 +329,7 @@ describe('parser control logic', () => {
         it('should handle basic oneOrMore expansion', () => {
             const parser = new Parser('a a a');
             const defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true }];
-            expect(accept(parser, defs, ASTNode).toTree()).to.eql({
+            expect(parser.accept(defs, ASTNode).toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
                     { type: 'IDENT', image: 'a' },
@@ -343,17 +342,17 @@ describe('parser control logic', () => {
         it('should throw an error for unsatisfied oneOrMore expansion', () => {
             let parser = new Parser('b');
             let defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true }];
-            expect(accept(parser, defs, ASTNode)).to.eql(false);
+            expect(parser.accept(defs, ASTNode)).to.eql(false);
 
             parser = new Parser('b');
             defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true, mess: 'NOT FOUND' }];
-            expect(() => accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 1)');
+            expect(() => parser.accept(defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 1)');
         });
 
         it('should handle repetition with a separator', () => {
             const parser = new Parser('a | a | a');
             const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, sep: { name: 'bars', image: '|' } }];
-            expect(accept(parser, defs, ASTNode).toTree()).to.eql({
+            expect(parser.accept(defs, ASTNode).toTree()).to.eql({
                 type: 'ASTNode',
                 children: [
                     { type: 'IDENT', image: 'a' },
@@ -368,10 +367,10 @@ describe('parser control logic', () => {
         it('should error when a new item is expected after a separator but there isnt one', () => {
             let parser = new Parser('a | a |');
             let defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, sep: { name: 'bars', image: '|' } }];
-            expect(accept(parser, defs, ASTNode)).to.eql(false);
+            expect(parser.accept(defs, ASTNode)).to.eql(false);
             parser = new Parser('a | a |');
-            defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, mess: 'NOT FOUND', sep: { name: 'bars', image: '|' } }]
-            expect(() => accept(parser, defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 8)');
+            defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, mess: 'NOT FOUND', sep: { name: 'bars', image: '|' } }];
+            expect(() => parser.accept(defs, ASTNode)).to.throw('NOT FOUND (Line 1, Column 8)');
         });
     });
 });

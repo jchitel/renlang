@@ -11,9 +11,9 @@ function getTokens(str, flipIgnore = false) {
 }
 
 describe('Tokenizer', () => {
-    it('should construct an iterator', () => {
+    it('should construct a lazy list', () => {
         const tokenizer = new Tokenizer('hello');
-        expect(tokenizer.iterator[Symbol.iterator]().next().value).to.eql('h');
+        expect(tokenizer.list.peek()).to.eql('h');
     });
 
     it('should consume a single-line comment', () => {

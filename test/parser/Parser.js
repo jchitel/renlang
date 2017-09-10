@@ -1,11 +1,7 @@
 import { expect } from 'chai';
 
-import ASTNode from '../../src/ast/ASTNode';
 import * as pars from '../../src/parser/Parser';
 import { Parser } from '../../src/parser/parser-control';
-import Tokenizer from '../../src/parser/Tokenizer';
-import LookaheadIterator from '../../src/parser/LookaheadIterator';
-import NewLineCheckIterator from '../../src/parser/NewLineCheckIterator';
 
 
 describe('parser', () => {
@@ -57,7 +53,7 @@ describe('parser', () => {
                                 { type: 'IDENT', image: 'myImport' },
                                 { type: 'AS', image: 'as' },
                                 { type: 'IDENT', image: 'myAlias' },
-                            ]
+                            ],
                         }],
                     },
                     { type: 'RBRACE', image: '}' },
@@ -125,19 +121,29 @@ describe('parser', () => {
             expect(pars.acceptType(new Parser('void')).toTree()).to.eql({ type: 'Type', children: [{ type: 'VOID', image: 'void' }] });
             expect(pars.acceptType(new Parser('any')).toTree()).to.eql({ type: 'Type', children: [{ type: 'ANY', image: 'any' }] });
             expect(pars.acceptType(new Parser('{}')).toTree()).to.eql({ type: 'Type', children: [{ type: 'StructType', children: [{ type: 'LBRACE', image: '{' }, { type: 'RBRACE', image: '}' }] }] });
-            expect(pars.acceptType(new Parser('() => void', true)).toTree()).to.eql({
+            expect(pars.acceptType(new Parser('() => void')).toTree()).to.eql({
                 type: 'Type',
                 children: [{
                     type: 'FunctionType',
                     children: [
-                    { type: 'LPAREN', image: '(' },
-                    { type: 'RPAREN', image: ')' },
-                    { type: 'FAT_ARROW', image: '=>' },
-                    { type: 'Type', children: [{ type: 'VOID', image: 'void' }] },
+                        { type: 'LPAREN', image: '(' },
+                        { type: 'RPAREN', image: ')' },
+                        { type: 'FAT_ARROW', image: '=>' },
+                        { type: 'Type', children: [{ type: 'VOID', image: 'void' }] },
                     ],
                 }],
             });
-            // TODO: paren
+            expect(pars.acceptType(new Parser('(int)', true)).toTree()).to.eql({
+                type: 'Type',
+                children: [{
+                    type: 'ParenthesizedType',
+                    children: [
+                        { type: 'LPAREN', image: '(' },
+                        { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
+                        { type: 'RPAREN', image: ')' },
+                    ],
+                }],
+            });
             // TODO: tuple
             // TODO: generic
             // TODO: ident

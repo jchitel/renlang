@@ -1,5 +1,5 @@
-import LookaheadIterator from './LookaheadIterator';
 import ParserError from './ParserError';
+import LazyList from './LazyList';
 
 
 /**
@@ -10,13 +10,12 @@ import ParserError from './ParserError';
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
 export class Token {
-    constructor(type, line, column, image, value = null, hasNewLine = false) {
+    constructor(type, line, column, image, value = null) {
         this.type = type;
         this.line = line;
         this.column = column;
         this.image = image;
         this.value = value;
-        this.hasNewLine = hasNewLine;
     }
 
     getLocation() {
@@ -113,7 +112,7 @@ export default class Tokenizer {
      */
     constructor(string) {
         this.source = string;
-        this.iterator = new LookaheadIterator(string);
+        this.list = new LazyList(string);
         this.gen = this._generator();
         this.lineNumber = 1;
         this.currentLineOffset = 0;
@@ -145,7 +144,7 @@ export default class Tokenizer {
      * - token.column = 6 - 1 - 5 + 1 = 1
      */
     get columnNumber() {
-        return this.iterator.offset - this.currentLineOffset;
+        return this.list.start - this.currentLineOffset;
     }
 
     /**
@@ -164,15 +163,29 @@ export default class Tokenizer {
         return this.gen.next();
     }
 
+    moveNext() {
+        let next;
+        [next, this.list] = this.list.shift(); // eslint-disable-line prefer-const
+        return next;
+    }
+
+    appendTo(image) {
+        let next;
+        [next, this.list] = this.list.shift(); // eslint-disable-line prefer-const
+        return image + next;
+    }
+
     /**
      * Fully iterate the entire source string, extracting tokens according to the language's grammar rules and yielding each one.
      */
     *_generator() {
-        // iterate the lookahead iterator
-        for (const c of this.iterator) {
+        let c;
+        // fully evaluate the lazy list
+        while (!this.list.empty()) {
+            [c, this.list] = this.list.shift();
             // "kind" is either "uppercase", "lowercase", "number", or the character
             const kind = this.kind(c);
-            const c1 = this.iterator.peek();
+            const [c1] = this.list.shift();
 
             // This logic follows a specific order for attempting to extract tokens:
             // 1. Identifiers (also checks keywords that match an identifier string)
@@ -220,7 +233,7 @@ export default class Tokenizer {
                 // consume an equals, a fat arrow, or an operator starting with equals
                 if (c1 === '>') {
                     // fat arrow (NOTE: this will ignore any other operator characters that come immediately after, fat arrow takes precedence)
-                    this.iterator.next();
+                    this.moveNext();
                     yield new Token(Tokenizer.SYMBOL_MAP['=>'], this.lineNumber, this.columnNumber - 1, '=>');
                 } else if (Tokenizer.OPER_CHARS.includes(c1)) {
                     // other non-greater-than operator character, consume as operator
@@ -234,20 +247,20 @@ export default class Tokenizer {
                 yield this.consumeOperator(c);
             } else if (c === '\n' || c === ';') {
                 // new line character
-                yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
+                if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
                 if (c === '\n') {
                     // increment line number
                     this.lineNumber++;
-                    this.currentLineOffset = this.iterator.offset;
+                    this.currentLineOffset = this.list.start;
                 }
             } else if (c === '\r') {
                 if (c1 === '\n') {
                     // treat the whole thing as a new line
-                    this.iterator.next();
-                    yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
+                    this.moveNext();
+                    if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
                     // increment line number
                     this.lineNumber++;
-                    this.currentLineOffset = this.iterator.offset;
+                    this.currentLineOffset = this.list.start;
                 } else {
                     // otherwise treat it as normal whitespace
                     const w = this.consumeWhitespace(c);
@@ -278,26 +291,26 @@ export default class Tokenizer {
     }
 
     consumeSingleLineComment(image) {
-        while (this.iterator.peek() !== '\n' && this.iterator.peek()) {
-            image += this.iterator.next().value;
+        while (this.list.peek() !== '\n' && !this.list.empty()) {
+            image = this.appendTo(image);
         }
-        if (this.iterator.peek() === '\n') image += this.iterator.next().value;
+        if (this.list.peek() === '\n') image = this.appendTo(image);
         return new Token('COMMENT', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     consumeMultiLineComment(image) {
         const lineNumber = this.lineNumber;
         const columnNumber = this.getColumnNumber(1);
-        image += this.iterator.next().value;
-        while (this.iterator.peek() && this.iterator.peek() !== '*' && this.iterator.peek(1) !== '/') {
-            if (this.iterator.peek() === '\n') {
+        image = this.appendTo(image);
+        while (this.list.peek() && this.list.peek() !== '*' && this.list.peek(2)[1] !== '/') {
+            if (this.list.peek() === '\n') {
                 this.lineNumber++;
-                this.currentLineOffset = this.iterator.offset + 1;
+                this.currentLineOffset = this.list.start + 1;
             }
-            image += this.iterator.next().value;
+            image = this.appendTo(image);
         }
-        if (this.iterator.peek() === '*') image += this.iterator.next().value;
-        if (this.iterator.peek() === '/') image += this.iterator.next().value;
+        if (this.list.peek() === '*') image = this.appendTo(image);
+        if (this.list.peek() === '/') image = this.appendTo(image);
         return new Token('COMMENT', lineNumber, columnNumber, image);
     }
 
@@ -306,13 +319,13 @@ export default class Tokenizer {
      * This may match a keyword, in which case that will be returned instead.
      */
     consumeIdentifier(image) {
-        const next = this.iterator.peek();
+        const next = this.list.peek();
         const kind = this.kind(next);
         // if the next character is a valid identifier character, loop to get all the remaining ones
         if (kind === 'uppercase' || kind === 'lowercase' || kind === 'number' || next === '_') {
             while (true) {
-                image += this.iterator.next().value;
-                const kind1 = this.kind(this.iterator.peek());
+                image = this.appendTo(image);
+                const kind1 = this.kind(this.list.peek());
                 // if the next character will not be a valid identifier character, then break
                 if (kind1 !== 'uppercase' && kind1 !== 'lowercase' && kind1 !== 'number' && kind1 !== '_') break;
             }
@@ -330,11 +343,11 @@ export default class Tokenizer {
     consumeNumber(image) {
         if (image === '-') {
             // number starts with minus, save that information and shift forward
-            image += this.iterator.next().value;
+            image = this.appendTo(image);
             // it may be that next was the last character in the source. handle that here.
-            if (!this.iterator.peek()) return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
+            if (!this.list.peek()) return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
         }
-        const [c, c1] = this.iterator.peek(0, 2);
+        const [c, c1] = this.list.peek(2);
         if (image.endsWith('0') && c && c1) {
             // literals that start with 0 are a special case, check for alternative bases.
             if (c.toLowerCase() === 'x') {
@@ -366,11 +379,11 @@ export default class Tokenizer {
      */
     consumeHexLiteral(image) {
         // it has already been verified that next is 'x' and the following character is a hex digit, skip ahead to the hex digits.
-        image += this.iterator.next().value;
+        image = this.appendTo(image);
         // take the first digit
-        image += this.iterator.next().value;
+        image = this.appendTo(image);
         // while the next character is a hex digit, add it to the image
-        while (this.isHexidecimalDigit(this.iterator.peek())) image += this.iterator.next().value;
+        while (this.isHexidecimalDigit(this.list.peek())) image = this.appendTo(image);
         return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 16));
     }
 
@@ -380,11 +393,11 @@ export default class Tokenizer {
      */
     consumeBinaryLiteral(image) {
         // it has already been verified that next is 'b' and the following character is binary, skip ahead to the digits.
-        image += this.iterator.next().value;
+        image = this.appendTo(image);
         // take the first digit
-        image += this.iterator.next().value;
+        image = this.appendTo(image);
         // while the next character is a binary digit, add it to the image
-        while (this.isBinaryDigit(this.iterator.peek())) image += this.iterator.next().value;
+        while (this.isBinaryDigit(this.list.peek())) image = this.appendTo(image);
         // JS doesn't have binary literals, so we need to remove the prefix when parsing
         return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image.replace(/0b/i, ''), 2));
     }
@@ -396,16 +409,16 @@ export default class Tokenizer {
      * and it is know that the next lookahead character is a number, consume an entire floating point literal.
      */
     consumeFloatLiteral(image) {
-        const next = this.iterator.peek();
+        const next = this.list.peek();
         // next is either a dot or 'e', accept it, skip ahead two characters, next must be a number, accept it right away
-        image += this.iterator.next().value;
-        image += this.iterator.next().value;
+        image = this.appendTo(image);
+        image = this.appendTo(image);
 
         if (next === '.') {
             // handle fractional portion, consume all numbers following
-            while (this.kind(this.iterator.peek()) === 'number') image += this.iterator.next().value;
+            while (this.kind(this.list.peek()) === 'number') image = this.appendTo(image);
             // next character is e, handle exponent portion
-            const [c1, c2] = this.iterator.peek(0, 2);
+            const [c1, c2] = this.list.peek(2);
             if (c1 && c1.toLowerCase() === 'e') {
                 // but only do it if there is a number after e
                 if (this.kind(c2) === 'number') {
@@ -415,7 +428,7 @@ export default class Tokenizer {
             }
         } else {
             // must be e, handle exponent portion
-            while (this.kind(this.iterator.peek()) === 'number') image += this.iterator.next().value;
+            while (this.kind(this.list.peek()) === 'number') image = this.appendTo(image);
         }
         // we arrive here when we've consumed as much floating point characters as we can
         return new Token('FLOAT_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseFloat(image));
@@ -426,24 +439,24 @@ export default class Tokenizer {
      * consume an entire integer literal (may encounter a floating point literal)
      */
     consumeIntegerLiteral(image) {
-        let next = this.iterator.peek();
+        let next = this.list.peek();
         // if next is number, we want to consume more numbers if there are any
         if (this.kind(next) === 'number') {
-            image += this.iterator.next().value;
+            image = this.appendTo(image);
             // consume all subsequenct numbers
-            while (this.kind(this.iterator.peek()) === 'number') {
-                image += this.iterator.next().value;
+            while (this.kind(this.list.peek()) === 'number') {
+                image = this.appendTo(image);
             }
             // if the next is now a dot or e that is followed by a number, we have a float, defer to that logic
-            next = this.iterator.peek();
+            next = this.list.peek();
             if (next === '.' || next === 'e') {
-                if (this.kind(this.iterator.peek(1)) === 'number') {
+                if (this.kind(this.list.peek(2)[1]) === 'number') {
                     return this.consumeFloatLiteral(image);
                 }
             }
         } else if (next === '.' || next === 'e') {
             // if the current next is a dot or e followed by a number, parse as float
-            if (this.kind(this.iterator.peek(1)) === 'number') {
+            if (this.kind(this.list.peek(2)[1]) === 'number') {
                 return this.consumeFloatLiteral(image);
             }
         }
@@ -456,15 +469,15 @@ export default class Tokenizer {
      */
     consumeStringLiteral(image) {
         // if there is no next character, throw an error
-        if (!this.iterator.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
+        if (!this.list.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
 
         let value = '';
-        if (this.iterator.peek() !== '"') {
+        if (this.list.peek() !== '"') {
             do {
-                const c = this.iterator.next().value;
+                const c = this.moveNext();
                 image += c;
                 if (c === '\\') {
-                    const next = this.iterator.peek();
+                    const next = this.list.peek();
                     if (next !== 'x' && next !== 'u') {
                         switch (next) {
                             case 'n': value += '\n'; break; // new line
@@ -476,52 +489,52 @@ export default class Tokenizer {
                             default: value += next; break;
                         }
                         // skip ahead for a basic escape sequence because there are only two characters
-                        image += this.iterator.next().value;
+                        image = this.appendTo(image);
                     } else if (next === 'x') {
                         // ascii escape code
-                        const [c1, c2, c3] = this.iterator.peek(0, 3);
+                        const [c1, c2, c3] = this.list.peek(3);
                         if (this.isHexidecimalDigit(c2) && this.isHexidecimalDigit(c3)) {
                             image += (c1 + c2 + c3);
                             value += String.fromCodePoint(parseInt(c2 + c3, 16));
-                            for (let i = 0; i < 3; ++i) this.iterator.next();
+                            for (let i = 0; i < 3; ++i) this.moveNext();
                         } else {
                             // invalid escape code, treat it like \x
                             value += c1;
                             image += c1;
-                            this.iterator.next();
+                            this.moveNext();
                         }
                     } else {
                         // unicode escape code
-                        const [c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.peek(0, 9);
+                        const [c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.list.peek(9);
                         if ([c2, c3, c4, c5].every(ch => this.isHexidecimalDigit(ch))) {
                             image += (c1 + c2 + c3 + c4 + c5);
                             value += String.fromCodePoint(parseInt(c2 + c3 + c4 + c5, 16));
-                            for (let i = 0; i < 5; ++i) this.iterator.next();
+                            for (let i = 0; i < 5; ++i) this.moveNext();
                         } else if (c2 === '{' && [c3, c4, c5, c6, c7].every(ch => this.isHexidecimalDigit(ch)) && c8 === '}') {
                             image += [c1, c2, c3, c4, c5, c6, c7, c8].join('');
                             value += String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7, 16));
-                            for (let i = 0; i < 8; ++i) this.iterator.next();
+                            for (let i = 0; i < 8; ++i) this.moveNext();
                         } else if (c2 === '{' && [c3, c4, c5, c6, c7, c8].every(ch => this.isHexidecimalDigit(ch)) && c9 === '}') {
                             image += [c1, c2, c3, c4, c5, c6, c7, c8, c9].join('');
                             value += String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7 + c8, 16));
-                            for (let i = 0; i < 9; ++i) this.iterator.next();
+                            for (let i = 0; i < 9; ++i) this.moveNext();
                         } else {
                             // invalid, treat it like \u
                             value += c1;
                             image += c1;
-                            this.iterator.next();
+                            this.moveNext();
                         }
                     }
                 } else {
                     // just a normal everyday character
                     value += c;
                 }
-            } while (this.iterator.peek() && (this.iterator.peek() !== '"' || image.endsWith('\\')));
+            } while (this.list.peek() && (this.list.peek() !== '"' || image.endsWith('\\')));
             // no next character, throw an error
-            if (!this.iterator.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
+            if (!this.list.peek()) throw new ParserError('Unterminated string', this.lineNumber, this.columnNumber);
         }
         // next character is double quote
-        this.iterator.next();
+        this.moveNext();
         image += '"';
         return new Token('STRING_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
@@ -531,15 +544,15 @@ export default class Tokenizer {
      */
     consumeCharacterLiteral(image) {
         // if there is no next character, throw an error
-        if (!this.iterator.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
-        if (this.iterator.peek() === "'") throw new ParserError('Empty character', this.lineNumber, this.columnNumber + 1);
+        if (!this.list.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
+        if (this.list.peek() === "'") throw new ParserError('Empty character', this.lineNumber, this.columnNumber + 1);
 
         let value;
-        const c = this.iterator.next().value;
+        const c = this.moveNext();
         image += c;
         if (c === '\\') {
             // escape sequence
-            const next = this.iterator.peek();
+            const next = this.list.peek();
             if (next !== 'x' && next !== 'u') {
                 switch (next) {
                     case 'n': value = '\n'; break; // new line
@@ -551,40 +564,40 @@ export default class Tokenizer {
                     default: value = next; break;
                 }
                 // skip ahead for a basic escape sequence because there are only two characters
-                image += this.iterator.next().value;
+                image = this.appendTo(image);
             } else if (next === 'x') {
                 // ascii escape code
-                const [c1, c2, c3] = this.iterator.peek(0, 3);
+                const [c1, c2, c3] = this.list.peek(3);
                 if (this.isHexidecimalDigit(c2) && this.isHexidecimalDigit(c3)) {
                     image += (c1 + c2 + c3);
                     value = String.fromCodePoint(parseInt(c2 + c3, 16));
-                    for (let i = 0; i < 3; ++i) this.iterator.next();
+                    for (let i = 0; i < 3; ++i) this.moveNext();
                 } else {
                     // invalid escape code, treat it like \x
                     value = c1;
                     image += c1;
-                    this.iterator.next();
+                    this.moveNext();
                 }
             } else {
                 // unicode escape code
-                const [c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.iterator.peek(0, 9);
+                const [c1, c2, c3, c4, c5, c6, c7, c8, c9] = this.list.peek(9);
                 if ([c2, c3, c4, c5].every(ch => this.isHexidecimalDigit(ch))) {
                     image += (c1 + c2 + c3 + c4 + c5);
                     value = String.fromCodePoint(parseInt(c2 + c3 + c4 + c5, 16));
-                    for (let i = 0; i < 5; ++i) this.iterator.next();
+                    for (let i = 0; i < 5; ++i) this.moveNext();
                 } else if (c2 === '{' && [c3, c4, c5, c6, c7].every(ch => this.isHexidecimalDigit(ch)) && c8 === '}') {
                     image += [c1, c2, c3, c4, c5, c6, c7, c8].join('');
                     value = String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7, 16));
-                    for (let i = 0; i < 8; ++i) this.iterator.next();
+                    for (let i = 0; i < 8; ++i) this.moveNext();
                 } else if (c2 === '{' && [c3, c4, c5, c6, c7, c8].every(ch => this.isHexidecimalDigit(ch)) && c9 === '}') {
                     image += [c1, c2, c3, c4, c5, c6, c7, c8, c9].join('');
                     value = String.fromCodePoint(parseInt(c3 + c4 + c5 + c6 + c7 + c8, 16));
-                    for (let i = 0; i < 9; ++i) this.iterator.next();
+                    for (let i = 0; i < 9; ++i) this.moveNext();
                 } else {
                     // invalid, treat it like \u
                     value = c1;
                     image += c1;
-                    this.iterator.next();
+                    this.moveNext();
                 }
             }
         } else {
@@ -592,9 +605,9 @@ export default class Tokenizer {
             value = c;
         }
         // no next character, throw an error
-        if (!this.iterator.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
+        if (!this.list.peek()) throw new ParserError('Unterminated character', this.lineNumber, this.columnNumber);
         // next character is single quote
-        this.iterator.next();
+        this.moveNext();
         image += "'";
         return new Token('CHARACTER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
@@ -603,7 +616,7 @@ export default class Tokenizer {
      * Consume a sequence of valid operator characters
      */
     consumeOperator(image) {
-        while (Tokenizer.OPER_CHARS.includes(this.iterator.peek())) image += this.iterator.next().value;
+        while (Tokenizer.OPER_CHARS.includes(this.list.peek())) image = this.appendTo(image);
         return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
@@ -611,7 +624,7 @@ export default class Tokenizer {
      * Consume any amount of spaces and tabs
      */
     consumeWhitespace(image) {
-        while (this.isWhitespace(this.iterator.peek())) image += this.iterator.next().value;
+        while (this.isWhitespace(this.list.peek())) image = this.appendTo(image);
         return new Token('WHITESPACE', this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
