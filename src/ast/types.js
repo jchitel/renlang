@@ -8,8 +8,8 @@ export class Type extends ASTNode {
     reduce() {
         if (this.builtIn) {
             return new PrimitiveType(this.builtIn.image, this.builtIn.getLocation());
-        } else if (this.name) {
-            return new IdentifierType(this.name.image, this.name.getLocation());
+        } else if (this.nameToken) {
+            return new IdentifierType(this.nameToken.image, this.nameToken.getLocation());
         } else if (this.functionType) {
             return this.functionType.reduce();
         } else if (this.tupleType) {
@@ -20,22 +20,26 @@ export class Type extends ASTNode {
             return this.arrayType.reduce();
         } else if (this.unionType) {
             return this.unionType.reduce();
-        } else if (this.innerType) {
-            const node = this._createNewNode();
-            node.parenthesized = this.innerType.reduce();
-            node.createAndRegisterLocation('self', this.openParenToken.getLocation(), this.closeParenToken.getLocation());
-            return node;
+        } else if (this.parenthesized) {
+            return this.parenthesized.reduce();
         } else {
             throw new Error('Invalid Type node');
         }
     }
-
-    resolveType(typeChecker, module) {
-        return this.type = this.parenthesized.resolveType(typeChecker, module);
-    }
 }
 
-export class ParenthesizedType extends ASTNode {}
+export class ParenthesizedType extends ASTNode {
+    reduce() {
+        const node = this._createNewNode();
+        node.inner = this.inner.reduce();
+        node.createAndRegisterLocation('self', this.openParenToken.getLocation(), this.closeParenToken.getLocation());
+        return node;
+    }
+
+    resolveType(typeChecker, module) {
+        return this.type = this.inner.resolveType(typeChecker, module);
+    }
+}
 
 export class PrimitiveType extends ASTNode {
     constructor(typeNode, location) {
@@ -122,9 +126,10 @@ export class StructType extends ASTNode {
     reduce() {
         const node = this._createNewNode();
         node.fields = [];
-        for (let i = 0; i < this.fieldTypes.length; ++i) {
-            node.fields.push({ type: this.fieldTypes[i].reduce(), name: this.fieldNameTokens[i].image });
-            node.registerLocation(`field_${this.fieldNameTokens[i].image}`, this.fieldNameTokens[i].getLocation());
+        for (const field of this.fields) {
+            const { type, name, loc } = field.reduce();
+            node.fields.push({ type, name });
+            node.registerLocation(`field_${name}`, loc);
         }
         node.createAndRegisterLocation('self', this.openBraceToken.getLocation(), this.closeBraceToken.getLocation());
         return node;
@@ -149,7 +154,11 @@ export class StructType extends ASTNode {
     }
 }
 
-export class Field extends ASTNode {}
+export class Field extends ASTNode {
+    reduce() {
+        return { type: this.typeNode.reduce(), name: this.nameToken.image, loc: this.nameToken.getLocation() };
+    }
+}
 
 export class ArrayType extends ASTNode {
     reduce() {
@@ -189,6 +198,19 @@ export class UnionType extends ASTNode {
     }
 }
 
-export class GenericType extends ASTNode {}
+export class GenericType extends ASTNode {
+    reduce() {
+        const node = this._createNewNode();
+        node.name = this.nameToken.image;
+        node.registerLocation('name', this.nameToken.getLocation());
+        node.typeArgs = this.typeArgList.reduce();
+        node.createAndRegisterLocation('self', node.locations.name, this.typeArgList.closeGtToken.getLocation());
+        return node;
+    }
+}
 
-export class TypeArgList extends ASTNode {}
+export class TypeArgList extends ASTNode {
+    reduce() {
+        return this.types.map(t => t.reduce());
+    }
+}

@@ -247,11 +247,8 @@ export class TryCatchStatement extends Statement {
     reduce() {
         const node = this._createNewNode();
         node.try = this.tryBody.reduce();
-        node.catches = [];
-        for (let i = 0; i < this.catchParams.length; ++i) {
-            node.catches.push({ param: this.catchParams[i].reduce(), body: this.catchBlocks[i].reduce() });
-        }
-        if (this.finallyBlock) node.finally = this.finallyBlock.reduce();
+        node.catches = this.catches.map(c => c.reduce());
+        if (this.finally) node.finally = this.finally.reduce();
         node.createAndRegisterLocation('self', this.tryToken.getLocation(), node.finally ? node.finally.locations.self : node.catches[node.catches.length - 1].body.locations.self);
         return node;
     }
@@ -315,9 +312,17 @@ export class TryCatchStatement extends Statement {
     }
 }
 
-export class CatchClause extends ASTNode {}
+export class CatchClause extends ASTNode {
+    reduce() {
+        return { param: this.param.reduce(), body: this.body.reduce() };
+    }
+}
 
-export class FinallyClause extends ASTNode {}
+export class FinallyClause extends ASTNode {
+    reduce() {
+        return this.body.reduce();
+    }
+}
 
 export class ThrowStatement extends Statement {
     reduce() {

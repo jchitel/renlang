@@ -8,8 +8,8 @@ import { TInteger, TFunction, TUnknown } from '../../src/typecheck/types';
 const int = new TInteger(32, true);
 const loc = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 1 };
 
-function getDummyNode() {
-    return { reduce: () => ({}) };
+function getDummyNode(value = {}) {
+    return { reduce: () => (value) };
 }
 
 function getDummyReducedNode(type, locations = {}) {
@@ -24,14 +24,12 @@ describe('Declaration Nodes', () => {
         it('should reduce all declarations', () => {
             const program = new decl.Program({
                 imports: [getDummyNode()],
-                types: [getDummyNode()],
-                functions: [getDummyNode()],
-                exports: [getDummyNode()],
+                declarations: [getDummyNode(new decl.FunctionDeclaration()), getDummyNode(new decl.TypeDeclaration), getDummyNode(new decl.ExportDeclaration)],
             });
             expect(program.reduce()).to.eql(new decl.Program({
                 imports: [{}],
-                types: [{}],
                 functions: [{}],
+                types: [{}],
                 exports: [{}],
             }));
         });
@@ -41,8 +39,7 @@ describe('Declaration Nodes', () => {
         it('should reduce a default import', () => {
             const imp = new decl.ImportDeclaration({
                 moduleNameToken: new Token('STRING', 1, 1, '"myModule"', 'myModule'),
-                defaultImportNameToken: new Token('IDENT', 1, 11, 'myDefault'),
-                defaultImport: true,
+                imports: new decl.ImportList({ defaultImportNameToken: new Token('IDENT', 1, 11, 'myDefault') }),
             });
             expect(imp.reduce()).to.eql(new decl.ImportDeclaration({
                 moduleName: 'myModule',
@@ -61,16 +58,21 @@ describe('Declaration Nodes', () => {
         it('should reduce named imports', () => {
             const imp = new decl.ImportDeclaration({
                 moduleNameToken: new Token('STRING', 1, 1, '"myModule"', 'myModule'),
-                defaultImport: false,
-                importComponents: [
-                    new decl.ImportComponent({
-                        importNameToken: new Token('IDENT', 1, 11, 'myName'),
-                        importAliasToken: new Token('IDENT', 1, 17, 'myAlias'),
-                    }),
-                    new decl.ImportComponent({
-                        importNameToken: new Token('IDENT', 1, 24, 'myNameAlias'),
-                    }),
-                ],
+                imports: new decl.ImportList({
+                    namedImports: new decl.NamedImports({
+                        importComponents: [
+                            new decl.ImportComponent({
+                                importWithAlias: new decl.ImportWithAlias({
+                                    importNameToken: new Token('IDENT', 1, 11, 'myName'),
+                                    importAliasToken: new Token('IDENT', 1, 17, 'myAlias'),
+                                }),
+                            }),
+                            new decl.ImportComponent({
+                                importNameToken: new Token('IDENT', 1, 24, 'myNameAlias'),
+                            }),
+                        ]
+                    })
+                }),
             });
             expect(imp.reduce()).to.eql(new decl.ImportDeclaration({
                 moduleName: 'myModule',
@@ -99,12 +101,12 @@ describe('Declaration Nodes', () => {
                 params: new decl.ParameterList({
                     params: [
                         new decl.Param({
-                            type: getDummyNode(),
-                            identifierToken: new Token('IDENT', 1, 7, 'param1'),
+                            typeNode: getDummyNode(),
+                            nameToken: new Token('IDENT', 1, 7, 'param1'),
                         }),
                         new decl.Param({
-                            type: getDummyNode(),
-                            identifierToken: new Token('IDENT', 1, 13, 'param2'),
+                            typeNode: getDummyNode(),
+                            nameToken: new Token('IDENT', 1, 13, 'param2'),
                         }),
                     ],
                 }),
@@ -200,7 +202,7 @@ describe('Declaration Nodes', () => {
         it('should reduce a type declaration', () => {
             const type = new decl.TypeDeclaration({
                 typeNameToken: new Token('IDENT', 1, 1, 'myType'),
-                type: getDummyNode(),
+                typeNode: getDummyNode(),
             });
             expect(type.reduce()).to.eql(new decl.TypeDeclaration({
                 name: 'myType',
@@ -221,8 +223,8 @@ describe('Declaration Nodes', () => {
     describe('ExportDeclaration', () => {
         it('should reduce default exports', () => {
             const exp = new decl.ExportDeclaration({
-                defaultToken: new Token('DEFAULT', 1, 1, 'default'),
-                exportedValue: getDummyNode(),
+                exportName: new decl.ExportName({ defaultToken: new Token('DEFAULT', 1, 1, 'default') }),
+                exportValue: getDummyNode(),
             });
             expect(exp.reduce()).to.eql(new decl.ExportDeclaration({
                 name: 'default',
@@ -233,22 +235,14 @@ describe('Declaration Nodes', () => {
 
         it('should reduce named exports', () => {
             const exp = new decl.ExportDeclaration({
-                exportName: new Token('IDENT', 1, 1, 'myExport'),
-                exportedValue: getDummyNode(),
+                exportName:  new decl.ExportName({
+                    namedExport: new decl.NamedExport({ exportNameToken: new Token('IDENT', 1, 1, 'myExport') }),
+                }),
+                exportValue: getDummyNode(),
             });
             expect(exp.reduce()).to.eql(new decl.ExportDeclaration({
                 name: 'myExport',
                 value: {},
-                locations: { name: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } },
-            }));
-        });
-
-        it('should reduce already declared named exports', () => {
-            const exp = new decl.ExportDeclaration({
-                exportName: new Token('IDENT', 1, 1, 'myExport'),
-            });
-            expect(exp.reduce()).to.eql(new decl.ExportDeclaration({
-                name: 'myExport',
                 locations: { name: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } },
             }));
         });

@@ -8,9 +8,10 @@ export class Program extends ASTNode {
     reduce() {
         const node = this._createNewNode();
         node.imports = this.imports.map(i => i.reduce());
-        node.exports = this.exports.map(e => e.reduce());
-        node.types = this.types.map(t => t.reduce());
-        node.functions = this.functions.map(f => f.reduce());
+        const decls = this.declarations.map(d => d.reduce());
+        node.functions = decls.filter(d => d instanceof FunctionDeclaration);
+        node.types = decls.filter(d => d instanceof TypeDeclaration);
+        node.exports = decls.filter(d => d instanceof ExportDeclaration);
         return node;
     }
 }
@@ -21,42 +22,63 @@ export class ImportDeclaration extends ASTNode {
         node.moduleName = this.moduleNameToken.value;
         node.registerLocation('moduleName', this.moduleNameToken.getLocation());
         node.importNames = {};
-        if (this.defaultImport) {
-            node.importNames.default = this.defaultImportNameToken.image;
-            node.registerLocation('import_default', this.defaultImportNameToken.getLocation());
+        const imports = this.imports.reduce();
+        if (imports.default) {
+            node.importNames.default = imports.default.image;
+            node.registerLocation('import_default', imports.default.getLocation());
             node.registerLocation('importName_default', node.locations.import_default);
             node.registerLocation('importAlias_default', node.locations.import_default);
         } else {
-            for (const comp of this.importComponents.map(c => c.reduce())) {
-                node.importNames[comp.name] = comp.alias;
-                node.registerLocation(`import_${comp.name}`, comp.locations.self);
-                node.registerLocation(`importName_${comp.name}`, comp.locations.name);
-                node.registerLocation(`importAlias_${comp.name}`, comp.locations.alias);
+            for (const imp of imports) {
+                node.importNames[imp.name.image] = imp.alias.image;
+                node.createAndRegisterLocation(`import_${imp.name.image}`, imp.name.getLocation(), imp.alias.getLocation());
+                node.registerLocation(`importName_${imp.name.image}`, imp.name.getLocation());
+                node.registerLocation(`importAlias_${imp.name.image}`, imp.alias.getLocation());
             }
         }
         return node;
     }
 }
 
-export class ImportList extends ASTNode {}
-
-export class NamedImports extends ASTNode {}
-
-export class ImportComponent extends ASTNode {
+export class ImportList extends ASTNode {
     reduce() {
-        const node = this._createNewNode();
-        node.name = this.importNameToken.image;
-        node.registerLocation('name', this.importNameToken.getLocation());
-        node.alias = this.importAliasToken ? this.importAliasToken.image : node.name;
-        node.registerLocation('alias', this.importAliasToken ? this.importAliasToken.getLocation() : node.locations.name);
-        node.createAndRegisterLocation('self', node.locations.name, node.locations.alias);
-        return node;
+        if (this.defaultImportNameToken) {
+            return { default: this.defaultImportNameToken };
+        } else {
+            return this.namedImports.reduce();
+        }
     }
 }
 
-export class ImportWithAlias extends ASTNode {}
+export class NamedImports extends ASTNode {
+    reduce() {
+        return this.importComponents.map(c => c.reduce());
+    }
+}
 
-export class Declaration extends ASTNode {}
+export class ImportComponent extends ASTNode {
+    reduce() {
+        if (this.importNameToken) {
+            return { name: this.importNameToken, alias: this.importNameToken };
+        } else {
+            return this.importWithAlias.reduce();
+        }
+    }
+}
+
+export class ImportWithAlias extends ASTNode {
+    reduce() {
+        return { name: this.importNameToken, alias: this.importAliasToken };
+    }
+}
+
+export class Declaration extends ASTNode {
+    reduce() {
+        if (this.function) return this.function.reduce();
+        else if (this.typeNode) return this.typeNode.reduce();
+        else if (this.export) return this.export.reduce();
+    }
+}
 
 export class FunctionDeclaration extends ASTNode {
     reduce() {
@@ -64,6 +86,7 @@ export class FunctionDeclaration extends ASTNode {
         node.name = this.functionNameToken.image;
         node.registerLocation('name', this.functionNameToken.getLocation());
         node.returnType = this.returnType.reduce();
+        if (this.typeParamList) node.typeParams = this.typeParamList.reduce();
         node.params = this.params.reduce();
         node.body = this.functionBody.reduce();
         return node;
@@ -100,9 +123,9 @@ export class ParameterList extends ASTNode {
 export class Param extends ASTNode {
     reduce() {
         const node = this._createNewNode();
-        node.typeNode = this.type.reduce();
-        node.name = this.identifierToken.image;
-        node.registerLocation('name', this.identifierToken.getLocation());
+        node.typeNode = this.typeNode.reduce();
+        node.name = this.nameToken.image;
+        node.registerLocation('name', this.nameToken.getLocation());
         return node;
     }
 
@@ -116,7 +139,8 @@ export class TypeDeclaration extends ASTNode {
         const node = this._createNewNode();
         node.name = this.typeNameToken.image;
         node.registerLocation('name', this.typeNameToken.getLocation());
-        node.typeNode = this.type.reduce();
+        if (this.typeParamlist) node.typeParams = this.typeParamList.reduce();
+        node.typeNode = this.typeNode.reduce();
         return node;
     }
 
@@ -132,22 +156,73 @@ export class TypeParamList extends ASTNode {
     }
 }
 
-export class TypeParam extends ASTNode {}
+export class TypeParam extends ASTNode {
+    reduce() {
+        const node = this._createNewNode();
+        let start = this.nameToken.getLocation();
+        let end = start;
+        if (this.varianceOp) {
+            const { op, loc } = this.varianceOp.reduce();
+            node.varianceOp = op;
+            node.registerLocation('variance', loc);
+            start = loc;
+        }
+        node.name = this.nameToken.image;
+        node.registerLocation('name', this.nameToken.getLocation());
+        if (this.typeConstraint) {
+            const { con, loc } = this.typeConstraint.reduce();
+            node.typeConstraint = con;
+            node.registerLocation('constraint', loc);
+            end = loc;
+        }
+        node.createAndRegisterLocation('self', start, end);
+        return node;
+    }
+}
 
-export class VarianceOp extends ASTNode {}
+export class VarianceOp extends ASTNode {
+    reduce() {
+        if (this.covaraiantToken) {
+            return { op: this.covaraiantToken.image, loc: this.covaraiantToken.getLocation() };
+        } else {
+            return { op: this.contravariantToken.image, loc: this.contravariantToken.getLocation() };
+        }
+    }
+}
 
-export class TypeConstraint extends ASTNode {}
+export class TypeConstraint extends ASTNode {
+    reduce() {
+        const { op, opLoc } = this.constraintOp.reduce();
+        const type = this.constraintType.reduce();
+        return { con: { op, type }, loc: { startLine: opLoc.startLine, endLine: type.locations.self.endLine, startColumn: opLoc.startColumn, endColumn: type.locations.self.endColumn } };
+    }
+}
 
-export class ConstraintOp extends ASTNode {}
+export class ConstraintOp extends ASTNode {
+    reduce() {
+        if (this.assignableToToken) {
+            return { op: this.assignableToToken, opLoc: this.assignableToToken.getLocation() };
+        } else {
+            return { op: this.assignableFromToken, opLoc: this.assignableFromToken.getLocation() };
+        }
+    }
+}
 
-export class FunctionBody extends ASTNode {}
+export class FunctionBody extends ASTNode {
+    reduce() {
+        if (this.blockBody) return this.blockBody.reduce();
+        else if (this.expressionBody) return this.expressionBody.reduce();
+        else if (this.statementBody) return this.statementBody.reduce();
+    }
+}
 
 export class ExportDeclaration extends ASTNode {
     reduce() {
         const node = this._createNewNode();
-        node.name = this.defaultToken ? 'default' : this.exportName.image;
-        node.registerLocation('name', this.defaultToken ? this.defaultToken.getLocation() : this.exportName.getLocation());
-        if (this.exportedValue) node.value = this.exportedValue.reduce();
+        const { name, loc } = this.exportName.reduce();
+        node.name = name;
+        node.registerLocation('name', loc);
+        node.value = this.exportValue.reduce();
         return node;
     }
 
@@ -159,8 +234,26 @@ export class ExportDeclaration extends ASTNode {
     }
 }
 
-export class ExportName extends ASTNode {}
+export class ExportName extends ASTNode {
+    reduce() {
+        if (this.defaultToken) {
+            return { name: 'default', loc: this.defaultToken.getLocation() };
+        } else {
+            return this.namedExport.reduce();
+        }
+    }
+}
 
-export class NamedExport extends ASTNode {}
+export class NamedExport extends ASTNode {
+    reduce() {
+        return { name: this.exportNameToken.image, loc: this.exportNameToken.getLocation() };
+    }
+}
 
-export class ExportValue extends ASTNode {}
+export class ExportValue extends ASTNode {
+    reduce() {
+        if (this.function) return this.function.reduce();
+        if (this.typeNode) return this.typeNode.reduce();
+        if (this.expression) return this.expression.reduce();
+    }
+}

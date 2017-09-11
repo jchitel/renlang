@@ -34,7 +34,7 @@ describe('Translator', () => {
 
     it('should translate a function', () => {
         const src = 'func int add(int a, int b) => a + b';
-        const func = new Func(0, { ast: parse(src).functions[0].reduce() }, 0);
+        const func = new Func(0, { ast: parse(src).declarations[0].reduce() }, 0);
         const tr = new Translator();
         tr.translateFunction(func);
         expect(func.instructions.slice(0, 4)).to.eql([

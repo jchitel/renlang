@@ -7,17 +7,26 @@ import * as mess from './ParserMessages';
 
 const AST = { ...decls, ..._types, ...exprs, ...stmts };
 
+/**
+ * This file contains the IMPLEMENTATION of the Ren parser,
+ * using the framework provided by ./Parser.js.
+ * To run a parse, import the Parser class from ./Parser.js,
+ * instantiate it with the source string, and call acceptProgram()
+ * below with the parser. The output will be the resulting AST
+ * or a thrown ParserError.
+ */
+
 // ///////////////
 // DECLARATIONS //
 // ///////////////
 
 /**
- * Program ::= ImportDeclaration* Declaration*
+ * Program ::= ImportDeclaration* Declaration* EOF
  */
 export function acceptProgram(parser) {
     return parser.accept([
-        { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true },
-        { name: 'declarations', parse: acceptDeclaration, zeroOrMore: true },
+        { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true, definite: true },
+        { name: 'declarations', parse: acceptDeclaration, zeroOrMore: true, definite: true },
         { name: 'eof', type: 'EOF', definite: true },
     ], AST.Program);
 }
@@ -167,7 +176,7 @@ export function acceptExportDeclaration(parser) {
     return parser.accept([
         { name: 'exportToken', type: 'EXPORT', definite: true },
         { name: 'exportName', parse: acceptExportName },
-        { name: 'exportDefinition', parse: acceptExportValue },
+        { name: 'exportValue', parse: acceptExportValue },
     ], AST.ExportDeclaration);
 }
 
@@ -199,8 +208,8 @@ export function acceptNamedExport(parser) {
 export function acceptExportValue(parser) {
     return parser.accept([{
         choices: [
-            { name: 'functionDeclaration', parse: acceptFunctionDeclaration },
-            { name: 'typeDeclaration', parse: acceptTypeDeclaration },
+            { name: 'function', parse: acceptFunctionDeclaration },
+            { name: 'typeNode', parse: acceptTypeDeclaration },
             { name: 'expression', parse: acceptExpression },
         ],
     }], AST.ExportValue);
@@ -223,7 +232,7 @@ export function acceptTypeParamList(parser) {
 export function acceptTypeParam(parser) {
     return parser.accept([
         { name: 'varianceOp', parse: acceptVarianceOp, optional: true, definite: true },
-        { name: 'identToken', type: 'IDENT', mess: mess.INVALID_TYPE_PARAM, definite: true },
+        { name: 'nameToken', type: 'IDENT', mess: mess.INVALID_TYPE_PARAM, definite: true },
         { name: 'typeConstraint', parse: acceptTypeConstraint, optional: true },
     ], AST.TypeParam);
 }
@@ -307,7 +316,7 @@ export function acceptType(parser) {
                 { name: 'builtIn', type: 'ANY' },
                 { name: 'structType', parse: acceptStructType },
                 { name: 'functionType', parse: acceptFunctionType },
-                { name: 'inner', parse: acceptParenthesizedType },
+                { name: 'parenthesized', parse: acceptParenthesizedType },
                 { name: 'tupleType', parse: acceptTupleType },
                 { name: 'genericType', parse: acceptGenericType },
                 { name: 'nameToken', type: 'IDENT' },
@@ -360,7 +369,7 @@ export function acceptFunctionType(parser) {
 export function acceptParenthesizedType(parser) {
     return parser.accept([
         { name: 'openParenToken', type: 'LPAREN' },
-        { name: 'paramTypes', parse: acceptType, mess: mess.INVALID_TYPE },
+        { name: 'inner', parse: acceptType, mess: mess.INVALID_TYPE },
         { name: 'closeParenToken', type: 'RPAREN', definite: true },
     ], AST.ParenthesizedType);
 }
@@ -381,7 +390,7 @@ export function acceptTupleType(parser) {
  */
 export function acceptGenericType(parser) {
     return parser.accept([
-        { name: 'identToken', type: 'IDENT' },
+        { name: 'nameToken', type: 'IDENT' },
         { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
     ], AST.GenericType);
 }
@@ -463,7 +472,7 @@ export function acceptExpression(parser) {
                 { name: 'ifElse', parse: acceptIfElseExpression },
                 { name: 'unary', parse: acceptPrefixExpression },
                 { name: 'lambda', parse: acceptLambdaExpression },
-                { name: 'inner', parse: acceptParenthesizedExpression },
+                { name: 'parenthesized', parse: acceptParenthesizedExpression },
                 { name: 'tupleLiteral', parse: acceptTupleLiteral },
             ],
             suffixes: [
@@ -495,7 +504,7 @@ export function acceptShorthandLambdaExpression(parser) {
     return parser.accept([
         { name: 'shorthandParam', type: 'IDENT' },
         { name: 'fatArrowToken', type: 'FAT_ARROW', definite: true },
-        { name: 'body', parse: acceptFunctionBody },
+        { name: 'functionBody', parse: acceptFunctionBody },
     ], AST.LambdaExpression);
 }
 
@@ -776,7 +785,7 @@ export function acceptCatchClause(parser) {
 export function acceptFinallyClause(parser) {
     return parser.accept([
         { name: 'finallyToken', type: 'FINALLY', definite: true },
-        { name: 'finallyBlock', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
+        { name: 'body', parse: acceptStatement, mess: mess.INVALID_STATEMENT },
     ], AST.FinallyClause);
 }
 

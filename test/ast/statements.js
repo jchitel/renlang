@@ -471,8 +471,10 @@ describe('Statement Nodes', () => {
             const t = new stmts.TryCatchStatement({
                 tryToken: new Token('TRY', 1, 1, 'try'),
                 tryBody: getDummyNode(),
-                catchParams: [getDummyNode()],
-                catchBlocks: [getDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } })],
+                catches: [new stmts.CatchClause({
+                    param: getDummyNode(),
+                    body: getDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } }),
+                })],
             });
             expect(t.reduce()).to.eql(new stmts.TryCatchStatement({
                 try: {},
@@ -485,9 +487,8 @@ describe('Statement Nodes', () => {
             const t = new stmts.TryCatchStatement({
                 tryToken: new Token('TRY', 1, 1, 'try'),
                 tryBody: getDummyNode(),
-                catchParams: [getDummyNode()],
-                catchBlocks: [getDummyNode()],
-                finallyBlock: getDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } }),
+                catches: [new stmts.CatchClause({ param: getDummyNode(), body: getDummyNode() })],
+                finally: getDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } }),
             });
             expect(t.reduce()).to.eql(new stmts.TryCatchStatement({
                 try: {},

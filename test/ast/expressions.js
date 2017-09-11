@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 
 import * as exps from '../../src/ast/expressions';
+import { Param } from '../../src/ast/declarations';
 import { Token } from '../../src/parser/Tokenizer';
 import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnknown, TAny } from '../../src/typecheck/types';
 import { operator, Operator } from '../../src/runtime/operators';
@@ -194,15 +195,8 @@ describe('Expression Nodes', () => {
         });
 
         it('should reduce to a parenthesized expression', () => {
-            const exp = new exps.Expression({
-                openParenToken: new Token('LPAREN', 1, 1, '('),
-                innerExpression: getDummyNode(),
-                closeParenToken: new Token('RPAREN', 1, 2, ')'),
-            });
-            expect(exp.reduce()).to.eql(new exps.Expression({
-                parenthesized: {},
-                locations: { self: { ...loc, endColumn: 2 } },
-            }));
+            const exp = new exps.Expression({ parenthesized: getDummyNode() });
+            expect(exp.reduce()).to.eql({});
         });
 
         it('should error on an invalid expression node', () => {
@@ -399,8 +393,10 @@ describe('Expression Nodes', () => {
         it('should reduce struct literal', () => {
             const struct = new exps.StructLiteral({
                 openBraceToken: new Token('LBRACE', 1, 1, '{'),
-                keyTokens: [new Token('IDENT', 1, 2, 'field1'), new Token('IDENT', 1, 8, 'field2')],
-                values: [getDummyNode(), getDummyNode()],
+                entries: [
+                    new exps.StructEntry({ keyToken: new Token('IDENT', 1, 2, 'field1'), value: getDummyNode() }),
+                    new exps.StructEntry({ keyToken: new Token('IDENT', 1, 8, 'field2'), value: getDummyNode() }),
+                ],
                 closeBraceToken: new Token('RBRACE', 1, 14, '}'),
             });
             expect(struct.reduce()).to.eql(new exps.StructLiteral({
@@ -437,13 +433,11 @@ describe('Expression Nodes', () => {
         it('should reduce lambda expression', () => {
             const lambda = new exps.LambdaExpression({
                 openParenToken: new Token('LPAREN', 1, 1, '('),
-                paramList: new exps.LambdaParamList({
-                    params: [
-                        new exps.LambdaParam({ type: getDummyNode(), identifierToken: new Token('IDENT', 1, 2, 'p1') }),
-                        new exps.LambdaParam({ identifierToken: new Token('IDENT', 1, 4, 'p2') }),
-                    ],
-                }),
-                body: getDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
+                params: [
+                    new exps.LambdaParam({ typedParam: new Param({ typeNode: getDummyNode(), nameToken: new Token('IDENT', 1, 2, 'p1') }) }),
+                    new exps.LambdaParam({ identToken: new Token('IDENT', 1, 4, 'p2') }),
+                ],
+                functionBody: getDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
             });
             expect(lambda.reduce()).to.eql(new exps.LambdaExpression({
                 params: [
@@ -457,10 +451,8 @@ describe('Expression Nodes', () => {
 
         it('should handle paren-less single parameter', () => {
             const lambda = new exps.LambdaExpression({
-                paramList: new exps.LambdaParamList({
-                    params: [new exps.LambdaParam({ identifierToken: new Token('IDENT', 1, 1, 'p') })],
-                }),
-                body: getDummyNode({ locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } }),
+                shorthandParam: new Token('IDENT', 1, 1, 'p'),
+                functionBody: getDummyNode({ locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } }),
             });
             expect(lambda.reduce()).to.eql(new exps.LambdaExpression({
                 params: [new exps.LambdaParam({ name: 'p', locations: { name: loc } })],
@@ -519,13 +511,11 @@ describe('Expression Nodes', () => {
 
     describe('UnaryExpression', () => {
         it('should reduce prefix expression', () => {
-            const prefix = new exps.UnaryExpression({
-                prefix: true,
-                operatorToken: new Token('OPER', 1, 1, '+'),
+            const prefix = new exps.PrefixExpression({
+                operatorToken: [new Token('OPER', 1, 1, '+')],
                 target: getDummyNode({ locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } }),
             });
-            expect(prefix.reduce()).to.eql(new exps.UnaryExpression({
-                prefix: true,
+            expect(prefix.reduce()).to.eql(new exps.PostfixExpression({
                 oper: '+',
                 target: { locations: { self: { ...loc, startColumn: 2, endColumn: 2 } } },
                 locations: {
@@ -536,13 +526,11 @@ describe('Expression Nodes', () => {
         });
 
         it('should reduce postfix expression', () => {
-            const postfix = new exps.UnaryExpression({
-                prefix: false,
+            const postfix = new exps.PostfixExpression({
                 target: getDummyNode({ locations: { self: loc } }),
-                operatorToken: new Token('OPER', 1, 2, '+'),
+                operatorToken: [new Token('OPER', 1, 2, '+')],
             });
-            expect(postfix.reduce()).to.eql(new exps.UnaryExpression({
-                prefix: false,
+            expect(postfix.reduce()).to.eql(new exps.PostfixExpression({
                 target: { locations: { self: loc } },
                 oper: '+',
                 locations: {
@@ -610,7 +598,7 @@ describe('Expression Nodes', () => {
         it('should reduce binary expression', () => {
             const left = new exps.IntegerLiteral(1, loc);
             const right = new exps.IntegerLiteral(2, { ...loc, startColumn: 3, endColumn: 3 });
-            const binary = new exps.BinaryExpression({ left, operatorToken: new Token('OPER', 1, 2, '+'), right });
+            const binary = new exps.BinaryExpression({ left, operatorToken: [new Token('OPER', 1, 2, '+')], right });
             expect(binary.reduce()).to.eql(new exps.BinaryExpression({
                 left,
                 oper: '+',
@@ -961,12 +949,12 @@ describe('Expression Nodes', () => {
         it('should reduce function application', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyNode({ locations: { self: loc } }),
-                paramValues: [getDummyNode()],
+                args: [getDummyNode()],
                 closeParenToken: new Token('RPAREN', 1, 2, ')'),
             });
             expect(app.reduce()).to.eql(new exps.FunctionApplication({
                 target: { locations: { self: loc } },
-                paramValues: [{}],
+                args: [{}],
                 locations: { self: { ...loc, endColumn: 2 } },
             }));
         });
@@ -974,7 +962,7 @@ describe('Expression Nodes', () => {
         it('should resolve type of function application', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(new TFunction([int], new TBool())),
-                paramValues: [getDummyReducedNode(int)],
+                args: [getDummyReducedNode(int)],
             });
             expect(app.resolveType({}, {}, {})).to.eql(new TBool());
         });
@@ -982,7 +970,7 @@ describe('Expression Nodes', () => {
         it('should return unknown for unknown target type', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(new TUnknown()),
-                paramValues: [getDummyReducedNode(int)],
+                args: [getDummyReducedNode(int)],
             });
             expect(app.resolveType({}, {}, {})).to.eql(new TUnknown());
         });
@@ -990,7 +978,7 @@ describe('Expression Nodes', () => {
         it('should error for non-function target type', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(int, { locations: { self: loc } }),
-                paramValues: [getDummyReducedNode(int)],
+                args: [getDummyReducedNode(int)],
             });
             const tc = getDummyTypeChecker();
             expect(app.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
@@ -1000,7 +988,7 @@ describe('Expression Nodes', () => {
         it('should skip unknown argument values', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(new TFunction([int], new TBool())),
-                paramValues: [getDummyReducedNode(new TUnknown())],
+                args: [getDummyReducedNode(new TUnknown())],
             });
             expect(app.resolveType({}, {}, {})).to.eql(new TBool());
         });
@@ -1008,7 +996,7 @@ describe('Expression Nodes', () => {
         it('should error for non-assignable argument values', () => {
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(new TFunction([int], new TBool())),
-                paramValues: [getDummyReducedNode(new TChar(), { locations: { self: loc } })],
+                args: [getDummyReducedNode(new TChar(), { locations: { self: loc } })],
             });
             const tc = getDummyTypeChecker();
             expect(app.resolveType(tc, { path: '/index.ren' }, {})).to.eql(new TUnknown());
@@ -1023,7 +1011,7 @@ describe('Expression Nodes', () => {
             const functionType = new TFunction([paramType], new TBool());
             const app = new exps.FunctionApplication({
                 target: getDummyReducedNode(functionType),
-                paramValues: [lambda],
+                args: [lambda],
             });
             const tc = getDummyTypeChecker();
             expect(app.resolveType(tc, {}, {})).to.eql(new TBool());
@@ -1034,7 +1022,7 @@ describe('Expression Nodes', () => {
         it('should translate function application', () => {
             const exp = new exps.FunctionApplication({
                 target: getUntranslatedNode(0),
-                paramValues: [getUntranslatedNode(1), getUntranslatedNode(2)],
+                args: [getUntranslatedNode(1), getUntranslatedNode(2)],
             });
             const fn = getDummyFunc({}, { inum: 3 });
             expect(exp.translate({}, fn)).to.eql(3);
@@ -1046,7 +1034,7 @@ describe('Expression Nodes', () => {
         it('should reduce field access', () => {
             const acc = new exps.FieldAccess({
                 target: getDummyNode({ locations: { self: loc } }),
-                fieldIdentToken: new Token('IDENT', 1, 2, 'myField'),
+                fieldNameToken: new Token('IDENT', 1, 2, 'myField'),
             });
             expect(acc.reduce()).to.eql(new exps.FieldAccess({
                 target: { locations: { self: loc } },

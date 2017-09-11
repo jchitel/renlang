@@ -33,7 +33,7 @@ describe('Type Nodes', () => {
         });
 
         it('should reduce to an identifier type node', () => {
-            const type = new types.Type({ name: new Token('IDENT', 1, 1, 'myType') });
+            const type = new types.Type({ nameToken: new Token('IDENT', 1, 1, 'myType') });
             expect(type.reduce()).to.eql(new types.IdentifierType('myType', { ...loc, endColumn: 6 }));
         });
 
@@ -63,24 +63,12 @@ describe('Type Nodes', () => {
         });
 
         it('should reduce to a parenthesized type node', () => {
-            const type = new types.Type({
-                openParenToken: new Token('LPAREN', 1, 1, '('),
-                innerType: getDummyNode(),
-                closeParenToken: new Token('RPAREN', 1, 2, '('),
-            });
-            expect(type.reduce()).to.eql(new types.Type({
-                parenthesized: {},
-                locations: { self: { ...loc, endColumn: 2 } },
-            }));
+            const type = new types.Type({ parenthesized: getDummyNode() });
+            expect(type.reduce()).to.eql({});
         });
 
         it('should throw an error for an invalid type node', () => {
             expect(() => new types.Type({}).reduce()).to.throw('Invalid Type node');
-        });
-
-        it('should resolve type of parenthesized type node', () => {
-            const type = new types.Type({ parenthesized: getDummyReducedNode(int) });
-            expect(type.resolveType({}, {})).to.eql(int);
         });
     });
 
@@ -206,8 +194,7 @@ describe('Type Nodes', () => {
         it('should reduce a struct type', () => {
             const type = new types.StructType({
                 openBraceToken: new Token('LBRACE', 1, 1, '{'),
-                fieldTypes: [getDummyNode()],
-                fieldNameTokens: [new Token('IDENT', 1, 2, 'myField')],
+                fields: [new types.Field({ typeNode: getDummyNode(), nameToken: new Token('IDENT', 1, 2, 'myField') })],
                 closeBraceToken: new Token('RBRACE', 1, 9, '}'),
             });
             expect(type.reduce()).to.eql(new types.StructType({

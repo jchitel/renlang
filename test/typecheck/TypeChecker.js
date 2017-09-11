@@ -113,7 +113,7 @@ describe('TypeChecker', () => {
             // process the import
             tc.processImport(module, module.ast.imports[0]);
             // assert error
-            expect(tc.errors.map(e => e.message)).to.eql([`Module "." does not have an export with name "idontexist" [${path}:1:19]`]);
+            expect(tc.errors.map(e => e.message)).to.eql([`Module "." does not have an export with name "idontexist" [${path}:1:20]`]);
         });
 
         it('should error for name-clashed import', () => {
@@ -137,7 +137,7 @@ describe('TypeChecker', () => {
             tc.processImport(module, module.ast.imports[0]);
             tc.processImport(module, module.ast.imports[1]);
             // assert error
-            expect(tc.errors.map(e => e.message)).to.eql([`A value with name "myFunc" is already declared [${path}:1:46]`]);
+            expect(tc.errors.map(e => e.message)).to.eql([`A value with name "myFunc" is already declared [${path}:1:48]`]);
         });
     });
 

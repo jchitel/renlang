@@ -60,11 +60,8 @@ export class Expression extends ASTNode {
             return this.fieldAccess.reduce();
         } else if (this.arrayAccess) {
             return this.arrayAccess.reduce();
-        } else if (this.innerExpression) {
-            const node = this._createNewNode();
-            node.parenthesized = this.innerExpression.reduce();
-            node.createAndRegisterLocation('self', this.openParenToken.getLocation(), this.closeParenToken.getLocation());
-            return node;
+        } else if (this.parenthesized) {
+            return this.parenthesized.reduce();
         } else {
             throw new Error('Invalid Expression node');
         }
@@ -79,7 +76,14 @@ export class Expression extends ASTNode {
     }
 }
 
-export class ParenthesizedExpression extends Expression {}
+export class ParenthesizedExpression extends Expression {
+    reduce() {
+        const node = this._createNewNode();
+        node.inner = this.inner.reduce();
+        node.createAndRegisterLocation('self', this.openParenToken.getLocation(), this.closeParenToken.getLocation());
+        return node;
+    }
+}
 
 export class IntegerLiteral extends Expression {
     constructor(value, location) {
@@ -287,9 +291,10 @@ export class StructLiteral extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.entries = [];
-        for (let i = 0; i < this.keyTokens.length; ++i) {
-            node.entries.push({ key: this.keyTokens[i].image, value: this.values[i].reduce() });
-            node.registerLocation(`key_${this.keyTokens[i].image}`, this.keyTokens[i].getLocation());
+        for (const entry of this.entries) {
+            const { key, value, loc } = entry.reduce();
+            node.entries.push({ key, value });
+            node.registerLocation(`key_${key}`, loc);
         }
         node.createAndRegisterLocation('self', this.openBraceToken.getLocation(), this.closeBraceToken.getLocation());
         return node;
@@ -312,13 +317,18 @@ export class StructLiteral extends Expression {
     }
 }
 
-export class StructEntry extends ASTNode {}
+export class StructEntry extends ASTNode {
+    reduce() {
+        return { key: this.keyToken.image, value: this.value.reduce(), loc: this.keyToken.getLocation() };
+    }
+}
 
 export class LambdaExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
-        node.params = this.paramList.reduce();
-        node.body = this.body.reduce();
+        if (this.shorthandParam) node.params = [new LambdaParam({ identToken: this.shorthandParam }).reduce()];
+        else node.params = this.params.map(p => p.reduce());
+        node.body = this.functionBody.reduce();
         // lambda expression start location is complicated because it can either be a '(' or a param name
         node.createAndRegisterLocation('self',
             this.openParenToken ? this.openParenToken.getLocation() : node.params[0].locations.name,
@@ -354,22 +364,12 @@ export class LambdaExpression extends Expression {
     }
 }
 
-export class LambdaParamList extends ASTNode {
-    reduce() {
-        // semantically, this node is useless, just return the params list directly
-        if (this.params.length === 1 && this.params[0].type === 'IDENT') {
-            return [new LambdaParam({ identifierToken: this.params[0] }).reduce()];
-        }
-        return this.params.map(p => p.reduce());
-    }
-}
-
 export class LambdaParam extends ASTNode {
     reduce() {
+        if (this.typedParam) return this.typedParam.reduce();
         const node = this._createNewNode();
-        if (this.type) node.typeNode = this.type.reduce();
-        node.name = this.identifierToken.image;
-        node.registerLocation('name', this.identifierToken.getLocation());
+        node.name = this.identToken.image;
+        node.registerLocation('name', this.identToken.getLocation());
         return node;
     }
 
@@ -382,14 +382,11 @@ export class LambdaParam extends ASTNode {
 export class UnaryExpression extends Expression {
     reduce() {
         // verify that any multiple operator tokens are valid
-        this.operatorToken = verifyMultiOperator([this.operatorToken]); // TODO: remove brackets
+        this.operatorToken = verifyMultiOperator(this.operatorToken);
         const node = this._createNewNode();
-        node.prefix = this.prefix;
         node.oper = this.operatorToken.image;
         node.registerLocation('oper', this.operatorToken.getLocation());
         node.target = this.target.reduce();
-        // start and end location depends on if it is a prefix or postfix operation
-        node.createAndRegisterLocation('self', node.prefix ? node.locations.oper : node.target.locations.self, node.prefix ? node.target.locations.self : node.locations.oper);
         return node;
     }
 
@@ -417,14 +414,26 @@ export class UnaryExpression extends Expression {
     }
 }
 
-export class PrefixExpression extends Expression {}
+export class PrefixExpression extends UnaryExpression {
+    reduce() {
+        const node = super.reduce();
+        node.createAndRegisterLocation('self', node.locations.oper, node.target.locations.self);
+        return node;
+    }
+}
 
-export class PostfixExpression extends Expression {}
+export class PostfixExpression extends UnaryExpression {
+    reduce() {
+        const node = super.reduce();
+        node.createAndRegisterLocation('self', node.target.locations.self, node.locations.oper);
+        return node;
+    }
+}
 
 export class BinaryExpression extends Expression {
     reduce() {
         // handle < and > problems
-        verifyMultiOperator([this.operatorToken]); // TODO: remove brackets
+        this.operatorToken = verifyMultiOperator(this.operatorToken); // TODO: remove brackets
         // convert the current binary expression tree to a list
         const items = this.toList();
         // Shunting-yard algorithm to resolve precedence
@@ -590,7 +599,8 @@ export class FunctionApplication extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.target = this.target.reduce();
-        node.paramValues = this.paramValues.map(v => v.reduce());
+        if (this.typeArgList) node.typeArgs = this.typeArgList.reduce();
+        node.args = this.args.map(v => v.reduce());
         node.createAndRegisterLocation('self', node.target.locations.self, this.closeParenToken.getLocation());
         return node;
     }
@@ -604,19 +614,19 @@ export class FunctionApplication extends Expression {
             return this.type = new TUnknown();
         }
         // resolve parameters
-        for (let i = 0; i < this.paramValues.length; ++i) {
-            const paramType = this.paramValues[i].resolveType(typeChecker, module, symbolTable);
+        for (let i = 0; i < this.args.length; ++i) {
+            const paramType = this.args[i].resolveType(typeChecker, module, symbolTable);
             // skip arguments that have already been errored
             if (paramType instanceof TUnknown) continue;
             // resolve passed value against parameter type
             if (!funcType.paramTypes[i].isAssignableFrom(paramType)) {
-                typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(paramType, funcType.paramTypes[i]), module.path, this.paramValues[i].locations.self));
+                typeChecker.errors.push(new TypeCheckError(mess.TYPE_MISMATCH(paramType, funcType.paramTypes[i]), module.path, this.args[i].locations.self));
                 continue;
             }
-            if (this.paramValues[i] instanceof LambdaExpression) {
+            if (this.args[i] instanceof LambdaExpression) {
                 // function application is the only place that lambdas can be passed (for now), so we need to complete the resolution of the type and the lambda body
                 paramType.completeResolution(funcType.paramTypes[i]);
-                this.paramValues[i].completeResolution(typeChecker, module);
+                this.args[i].completeResolution(typeChecker, module);
             }
         }
         // resulting expression type is the return type of the function type
@@ -625,8 +635,8 @@ export class FunctionApplication extends Expression {
 
     translate(translator, func) {
         const targetRef = this.target.translate(translator, func);
-        const paramRefs = this.paramValues.map(p => p.translate(translator, func));
-        return func.addRefInstruction(translator, ref => new FunctionCallRef(ref, targetRef, paramRefs));
+        const argRefs = this.args.map(p => p.translate(translator, func));
+        return func.addRefInstruction(translator, ref => new FunctionCallRef(ref, targetRef, argRefs));
     }
 }
 
@@ -634,8 +644,8 @@ export class FieldAccess extends Expression {
     reduce() {
         const node = this._createNewNode();
         node.target = this.target.reduce();
-        node.field = this.fieldIdentToken.image;
-        node.registerLocation('field', this.fieldIdentToken.getLocation());
+        node.field = this.fieldNameToken.image;
+        node.registerLocation('field', this.fieldNameToken.getLocation());
         node.createAndRegisterLocation('self', node.target.locations.self, node.locations.field);
         return node;
     }

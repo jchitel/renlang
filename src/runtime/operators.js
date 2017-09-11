@@ -11,6 +11,8 @@ import { TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, dete
  * before doing anything else, passing the list of operator tokens.
  */
 export function verifyMultiOperator(tokens) {
+    // this can happen during testing
+    if (!Array.isArray(tokens)) return tokens;
     // single token, just return it
     if (tokens.length === 1) return tokens[0];
     // if there are multiple tokens, throw an error if any of them is not < or >
