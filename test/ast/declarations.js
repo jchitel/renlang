@@ -134,6 +134,32 @@ describe('Declaration Nodes', () => {
             }));
         });
 
+        it('should reduce a function declaration with type parameters', () => {
+            const func = new decl.FunctionDeclaration({
+                returnType: getDummyNode(),
+                functionNameToken: new Token('IDENT', 1, 1, 'myFunc'),
+                typeParamList: new decl.TypeParamList({
+                    typeParams: [
+                        new decl.TypeParam({ nameToken: new Token('IDENT', 1, 7, 'A') }),
+                        new decl.TypeParam({ nameToken: new Token('IDENT', 1, 8, 'B') }),
+                    ],
+                }),
+                params: new decl.ParameterList({ params: [] }),
+                functionBody: getDummyNode(),
+            });
+            expect(func.reduce()).to.eql(new decl.FunctionDeclaration({
+                name: 'myFunc',
+                returnType: {},
+                typeParams: [
+                    new decl.TypeParam({ name: 'A', locations: { name: { ...loc, startColumn: 7, endColumn: 7 }, self: { ...loc, startColumn: 7, endColumn: 7 } } }),
+                    new decl.TypeParam({ name: 'B', locations: { name: { ...loc, startColumn: 8, endColumn: 8 }, self: { ...loc, startColumn: 8, endColumn: 8 } } }),
+                ],
+                params: [],
+                body: {},
+                locations: { name: { ...loc, endColumn: 6 } },
+            }));
+        });
+
         it('should resolve the type of a function', () => {
             const func = new decl.FunctionDeclaration({
                 name: 'myFunc',
@@ -211,6 +237,28 @@ describe('Declaration Nodes', () => {
             }));
         });
 
+        it('should reduce a type declaration with type parameters', () => {
+            const func = new decl.TypeDeclaration({
+                typeNameToken: new Token('IDENT', 1, 1, 'myType'),
+                typeParamList: new decl.TypeParamList({
+                    typeParams: [
+                        new decl.TypeParam({ nameToken: new Token('IDENT', 1, 7, 'A') }),
+                        new decl.TypeParam({ nameToken: new Token('IDENT', 1, 8, 'B') }),
+                    ],
+                }),
+                typeNode: getDummyNode(),
+            });
+            expect(func.reduce()).to.eql(new decl.TypeDeclaration({
+                name: 'myType',
+                typeParams: [
+                    new decl.TypeParam({ name: 'A', locations: { name: { ...loc, startColumn: 7, endColumn: 7 }, self: { ...loc, startColumn: 7, endColumn: 7 } } }),
+                    new decl.TypeParam({ name: 'B', locations: { name: { ...loc, startColumn: 8, endColumn: 8 }, self: { ...loc, startColumn: 8, endColumn: 8 } } }),
+                ],
+                typeNode: {},
+                locations: { name: { ...loc, endColumn: 6 } },
+            }));
+        });
+
         it('should resolve a type declaration from the type node', () => {
             const type = new decl.TypeDeclaration({
                 typeNode: getDummyReducedNode(int),
@@ -253,6 +301,59 @@ describe('Declaration Nodes', () => {
                 value: getDummyReducedNode(int),
             });
             expect(exp.resolveType({}, {})).to.eql(int);
+        });
+    });
+
+    describe('TypeParam', () => {
+        it('should reduce type param with variance and constraints', () => {
+            let p = new decl.TypeParam({
+                varianceOp: new decl.VarianceOp({ covariantToken: new Token('OPER', 1, 1, '+') }),
+                nameToken: new Token('IDENT', 1, 2, 'A'),
+            });
+            expect(p.reduce()).to.eql(new decl.TypeParam({
+                varianceOp: '+',
+                name: 'A',
+                locations: {
+                    name: { ...loc, startColumn: 2, endColumn: 2 },
+                    variance: loc,
+                    self: { ...loc, endColumn: 2 },
+                },
+            }));
+            p = new decl.TypeParam({
+                nameToken: new Token('IDENT', 1, 1, 'A'),
+                typeConstraint: new decl.TypeConstraint({
+                    constraintOp: new decl.ConstraintOp({ assignableToToken: new Token('COLON', 1, 2, ':') }),
+                    constraintType: getDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
+                }),
+            });
+            expect(p.reduce()).to.eql(new decl.TypeParam({
+                name: 'A',
+                typeConstraint: { op: ':', type: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } } },
+                locations: {
+                    name: loc,
+                    constraint: { ...loc, startColumn: 2, endColumn: 3 },
+                    self: { ...loc, endColumn: 3 },
+                },
+            }));
+            p = new decl.TypeParam({
+                varianceOp: new decl.VarianceOp({ contravariantToken: new Token('OPER', 1, 1, '-') }),
+                nameToken: new Token('IDENT', 1, 2, 'A'),
+                typeConstraint: new decl.TypeConstraint({
+                    constraintOp: new decl.ConstraintOp({ assignableFromToken: new Token('ASS_FROM', 1, 3, '-:') }),
+                    constraintType: getDummyNode({ locations: { self: { ...loc, startColumn: 5, endColumn: 5 } } }),
+                }),
+            })
+            expect(p.reduce()).to.eql(new decl.TypeParam({
+                varianceOp: '-',
+                name: 'A',
+                typeConstraint: { op: '-:', type: { locations: { self: { ...loc, startColumn: 5, endColumn: 5 } } } },
+                locations: {
+                    name: { ...loc, startColumn: 2, endColumn: 2 },
+                    variance: loc,
+                    constraint: { ...loc, startColumn: 3, endColumn: 5 },
+                    self: { ...loc, endColumn: 5 },
+                },
+            }));
         });
     });
 });

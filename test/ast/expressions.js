@@ -2,6 +2,7 @@ import { expect } from 'chai';
 
 import * as exps from '../../src/ast/expressions';
 import { Param } from '../../src/ast/declarations';
+import { TypeArgList } from '../../src/ast/types';
 import { Token } from '../../src/parser/Tokenizer';
 import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnknown, TAny } from '../../src/typecheck/types';
 import { operator, Operator } from '../../src/runtime/operators';
@@ -212,6 +213,20 @@ describe('Expression Nodes', () => {
                 parenthesized: getUntranslatedNode(2),
             });
             expect(exp.translate({}, {})).to.eql(2);
+        });
+    });
+
+    describe('ParenthesizedExpression', () => {
+        it('should reduce a parenthesized expression', () => {
+            const exp = new exps.ParenthesizedExpression({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                inner: getDummyNode(),
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(exp.reduce()).to.eql(new exps.ParenthesizedExpression({
+                inner: {},
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
         });
     });
 
@@ -955,6 +970,21 @@ describe('Expression Nodes', () => {
             expect(app.reduce()).to.eql(new exps.FunctionApplication({
                 target: { locations: { self: loc } },
                 args: [{}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should reduce function application with type arguments', () => {
+            const app = new exps.FunctionApplication({
+                target: getDummyNode({ locations: { self: loc } }),
+                typeArgList: new TypeArgList({ types: [getDummyNode(), getDummyNode()] }),
+                args: [],
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(app.reduce()).to.eql(new exps.FunctionApplication({
+                target: { locations: { self: loc } },
+                typeArgs: [{}, {}],
+                args: [],
                 locations: { self: { ...loc, endColumn: 2 } },
             }));
         });

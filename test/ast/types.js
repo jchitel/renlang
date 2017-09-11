@@ -72,6 +72,20 @@ describe('Type Nodes', () => {
         });
     });
 
+    describe('ParenthesizedType', () => {
+        it('should reduce a parenthesized type', () => {
+            const t = new types.ParenthesizedType({
+                openParenToken: new Token('LPAREN', 1, 1, '('),
+                inner: getDummyNode(),
+                closeParenToken: new Token('RPAREN', 1, 2, ')'),
+            });
+            expect(t.reduce()).to.eql(new types.ParenthesizedType({
+                inner: {},
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+    });
+
     describe('PrimitiveType', () => {
         it('should resolve primitive types', () => {
             expect(new types.PrimitiveType('u8', loc).resolveType({}, {})).to.eql(new TInteger(8, false));
@@ -293,6 +307,23 @@ describe('Type Nodes', () => {
         it('should resolve to unknown for an unknown component type', () => {
             const type = new types.UnionType({ types: [getDummyReducedNode(int), getDummyReducedNode(new TUnknown())] });
             expect(type.resolveType({}, {})).to.eql(new TUnknown());
+        });
+    });
+
+    describe('GenericType', () => {
+        it('should reduce a generic type', () => {
+            const type = new types.GenericType({
+                nameToken: new Token('IDENT', 1, 1, 'MyType'),
+                typeArgList: new types.TypeArgList({
+                    types: [getDummyNode(), getDummyNode()],
+                    closeGtToken: new Token('OPER', 1, 7, '>'),
+                }),
+            });
+            expect(type.reduce()).to.eql(new types.GenericType({
+                name: 'MyType',
+                typeArgs: [{}, {}],
+                locations: { name: { ...loc, endColumn: 6 }, self: { ...loc, endColumn: 7 } },
+            }));
         });
     });
 });

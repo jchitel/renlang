@@ -139,7 +139,7 @@ export class TypeDeclaration extends ASTNode {
         const node = this._createNewNode();
         node.name = this.typeNameToken.image;
         node.registerLocation('name', this.typeNameToken.getLocation());
-        if (this.typeParamlist) node.typeParams = this.typeParamList.reduce();
+        if (this.typeParamList) node.typeParams = this.typeParamList.reduce();
         node.typeNode = this.typeNode.reduce();
         return node;
     }
@@ -182,8 +182,8 @@ export class TypeParam extends ASTNode {
 
 export class VarianceOp extends ASTNode {
     reduce() {
-        if (this.covaraiantToken) {
-            return { op: this.covaraiantToken.image, loc: this.covaraiantToken.getLocation() };
+        if (this.covariantToken) {
+            return { op: this.covariantToken.image, loc: this.covariantToken.getLocation() };
         } else {
             return { op: this.contravariantToken.image, loc: this.contravariantToken.getLocation() };
         }
@@ -201,9 +201,9 @@ export class TypeConstraint extends ASTNode {
 export class ConstraintOp extends ASTNode {
     reduce() {
         if (this.assignableToToken) {
-            return { op: this.assignableToToken, opLoc: this.assignableToToken.getLocation() };
+            return { op: this.assignableToToken.image, opLoc: this.assignableToToken.getLocation() };
         } else {
-            return { op: this.assignableFromToken, opLoc: this.assignableFromToken.getLocation() };
+            return { op: this.assignableFromToken.image, opLoc: this.assignableFromToken.getLocation() };
         }
     }
 }
