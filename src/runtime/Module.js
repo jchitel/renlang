@@ -1,7 +1,7 @@
 import { resolve, dirname, join } from 'path';
 import { existsSync as exists, lstatSync as lstat, readFileSync as readFile } from 'fs';
 
-import Parser from '../parser/Parser';
+import parse from '../parser';
 
 
 /**
@@ -80,7 +80,7 @@ export default class Module {
         // read the file
         const contents = readFile(this.path).toString();
         // parse it
-        const parsed = new Parser().parse(contents);
+        const parsed = parse(contents);
         // reduce it
         return parsed.reduce();
     }

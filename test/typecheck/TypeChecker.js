@@ -63,7 +63,7 @@ describe('TypeChecker', () => {
 
         it('should load cached module and process imports', () => {
             // set up main module
-            const ast = parse('import from "." { myFunc, myType }');
+            const ast = parse('import from ".": { myFunc, myType }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
             const module = new Module(0, path, ast.reduce());
             // set up imported module
@@ -95,7 +95,7 @@ describe('TypeChecker', () => {
 
         it('should error for non-exported import', () => {
             // set up main module
-            const ast = parse('import from "." { idontexist }');
+            const ast = parse('import from ".": { idontexist }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
             const module = new Module(0, path, ast.reduce());
             // set up imported module
@@ -118,7 +118,7 @@ describe('TypeChecker', () => {
 
         it('should error for name-clashed import', () => {
             // set up main module
-            const ast = parse('import from "." { myFunc };import from "." { myFunc }');
+            const ast = parse('import from ".": { myFunc };import from ".": { myFunc }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
             const module = new Module(0, path, ast.reduce());
             // set up imported module

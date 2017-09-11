@@ -1,5 +1,5 @@
 import from ".": One
-import from "." { myFunc, myType }
+import from ".": { myFunc, myType }
 
 func int getOne() => One
 func int getMyFuncOne() => myFunc(getOne())

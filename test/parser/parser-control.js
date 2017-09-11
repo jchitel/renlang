@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 
-import { Parser } from '../../src/parser/parser-control';
+import Parser from '../../src/parser/parser-control';
 import ASTNode from '../../src/ast/ASTNode';
 
 

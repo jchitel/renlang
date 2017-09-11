@@ -188,3 +188,7 @@ export class UnionType extends ASTNode {
         return this.type;
     }
 }
+
+export class GenericType extends ASTNode {}
+
+export class TypeArgList extends ASTNode {}

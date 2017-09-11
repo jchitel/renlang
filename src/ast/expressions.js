@@ -2,7 +2,7 @@ import ASTNode from './ASTNode';
 import { TInteger, TFloat, TChar, TBool, TArray, TTuple, TStruct, TFunction, TUnknown, TAny, determineGeneralType } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
-import { getOperator, createOperator } from '../runtime/operators';
+import { getOperator, createOperator, verifyMultiOperator } from '../runtime/operators';
 import {
     SetIntegerRef,
     SetFloatRef,
@@ -78,6 +78,8 @@ export class Expression extends ASTNode {
         return this.parenthesized.translate(translator, func);
     }
 }
+
+export class ParenthesizedExpression extends Expression {}
 
 export class IntegerLiteral extends Expression {
     constructor(value, location) {
@@ -310,6 +312,8 @@ export class StructLiteral extends Expression {
     }
 }
 
+export class StructEntry extends ASTNode {}
+
 export class LambdaExpression extends Expression {
     reduce() {
         const node = this._createNewNode();
@@ -377,6 +381,8 @@ export class LambdaParam extends ASTNode {
 
 export class UnaryExpression extends Expression {
     reduce() {
+        // verify that any multiple operator tokens are valid
+        this.operatorToken = verifyMultiOperator([this.operatorToken]); // TODO: remove brackets
         const node = this._createNewNode();
         node.prefix = this.prefix;
         node.oper = this.operatorToken.image;
@@ -411,8 +417,14 @@ export class UnaryExpression extends Expression {
     }
 }
 
+export class PrefixExpression extends Expression {}
+
+export class PostfixExpression extends Expression {}
+
 export class BinaryExpression extends Expression {
     reduce() {
+        // handle < and > problems
+        verifyMultiOperator([this.operatorToken]); // TODO: remove brackets
         // convert the current binary expression tree to a list
         const items = this.toList();
         // Shunting-yard algorithm to resolve precedence

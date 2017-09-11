@@ -315,6 +315,10 @@ export class TryCatchStatement extends Statement {
     }
 }
 
+export class CatchClause extends ASTNode {}
+
+export class FinallyClause extends ASTNode {}
+
 export class ThrowStatement extends Statement {
     reduce() {
         const node = this._createNewNode();

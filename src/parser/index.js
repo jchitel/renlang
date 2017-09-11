@@ -1,6 +1,7 @@
-import Parser from './Parser';
+import { acceptProgram } from './Parser';
+import Parser from './parser-control';
 
 
 export default function parse(source) {
-    return new Parser().parse(source);
+    return acceptProgram(new Parser(source));
 }

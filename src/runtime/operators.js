@@ -1,5 +1,25 @@
+import ParserError from '../parser/ParserError';
+import { INVALID_EXPRESSION } from '../parser/ParserMessages';
+import { Token } from '../parser/Tokenizer';
 import { TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGeneralType } from '../typecheck/types';
 
+
+/**
+ * Because the < and > characters are used for both operators and type parameters,
+ * we need to include logic that is not possible in the tokenizer or parser.
+ * Any parser node that uses operator tokens should call this method in reduce()
+ * before doing anything else, passing the list of operator tokens.
+ */
+export function verifyMultiOperator(tokens) {
+    // single token, just return it
+    if (tokens.length === 1) return tokens[0];
+    // if there are multiple tokens, throw an error if any of them is not < or >
+    if (tokens.some(t => t.image.indexOf('<') === -1 && t.image.indexOf('>') !== -1)) {
+        throw new ParserError(INVALID_EXPRESSION, tokens[0].line, tokens[0].column);
+    }
+    // otherwise just combine them all into one token
+    return new Token('OPER', tokens[0].line, tokens[0].column, tokens.map(t => t.image).join(''));
+}
 
 /**
  * Operator table, for lookups.

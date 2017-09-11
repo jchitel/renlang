@@ -56,6 +56,8 @@ export class ImportComponent extends ASTNode {
 
 export class ImportWithAlias extends ASTNode {}
 
+export class Declaration extends ASTNode {}
+
 export class FunctionDeclaration extends ASTNode {
     reduce() {
         const node = this._createNewNode();
@@ -130,6 +132,16 @@ export class TypeParamList extends ASTNode {
     }
 }
 
+export class TypeParam extends ASTNode {}
+
+export class VarianceOp extends ASTNode {}
+
+export class TypeConstraint extends ASTNode {}
+
+export class ConstraintOp extends ASTNode {}
+
+export class FunctionBody extends ASTNode {}
+
 export class ExportDeclaration extends ASTNode {
     reduce() {
         const node = this._createNewNode();
@@ -146,3 +158,9 @@ export class ExportDeclaration extends ASTNode {
         return this.type = this.value.resolveType(typeChecker, module, symbolTable);
     }
 }
+
+export class ExportName extends ASTNode {}
+
+export class NamedExport extends ASTNode {}
+
+export class ExportValue extends ASTNode {}

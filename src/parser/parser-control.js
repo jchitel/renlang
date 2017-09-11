@@ -21,7 +21,7 @@ import ParserError from './ParserError';
  * That way the parents' peeked value will be unaffected.
  * There will probably be more issues here but that's where you can start.
  */
-export class Parser {
+export default class Parser {
     constructor(source, debug = false) {
         // start with 'soft' as false because Program is implicitly definite
         this.soft = false;
@@ -172,9 +172,9 @@ export class Parser {
                     // if it was optional, ignore the failure and move on, otherwise fail
                     this.printDebug('COMPONENT NOT ACCEPTED', node);
                     if (!def.optional) {
-                        this.printDebug('WAS OPTIONAL, IGNORING');
+                        this.printDebug('FAIL');
                         return this.processParseFailure(def.mess, node);
-                    } else this.printDebug('FAIL');
+                    } else this.printDebug('WAS OPTIONAL, IGNORING');
                 } else {
                     // success, save tokenizer
                     this.printDebug('ITEM ACCEPTED', node);
@@ -274,14 +274,16 @@ export class Parser {
         for (const choice of choices) {
             this.printDebug('new choice', choice);
             const subParser = this.withSoft(true);
-            const [node, accepted] = subParser.acceptUsingDef(choice);
-            if (accepted) {
-                this.printDebug('CHOICE ACCEPTED', node);
-                this.tokenizer = subParser.tokenizer;
-                base = new clss({ [choice.name]: node }, [node]);
-                this.printDebug('created base', base);
-                break;
-            }
+            try {
+                const [node, accepted] = subParser.acceptUsingDef(choice);
+                if (accepted) {
+                    this.printDebug('CHOICE ACCEPTED', node);
+                    this.tokenizer = subParser.tokenizer;
+                    base = new clss({ [choice.name]: node }, [node]);
+                    this.printDebug('created base', base);
+                    break;
+                }
+            } catch (ignored) {} // error means it failed, but we don't care in this case
         }
         // no match, failure
         if (!base) {

@@ -215,8 +215,14 @@ export default class Tokenizer {
             } else if (c === '-') {
                 // if it is followed by a number, consume it as a number
                 if (this.kind(c1) === 'number') yield this.consumeNumber(c);
-                // otherwise, consume it as an operator
-                else yield this.consumeOperator(c);
+                else if (c1 === ':') {
+                    // ASS_FROM (NOTE: this will ignore any other operator characters that come immediately after, ASS_FROM takes precedence)
+                    this.moveNext();
+                    yield new Token(Tokenizer.SYMBOL_MAP['-:'], this.lineNumber, this.columnNumber - 1, '-:');
+                } else {
+                    // other non-colon operator character, consume as operator
+                    yield this.consumeOperator(c);
+                }
             } else if (kind === 'number') {
                 // consume the number
                 yield this.consumeNumber(c);
@@ -616,6 +622,8 @@ export default class Tokenizer {
      * Consume a sequence of valid operator characters
      */
     consumeOperator(image) {
+        // < and > have special behavior in the parser, so we tokenize them individually
+        if (image === '<' || image === '>') return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
         while (Tokenizer.OPER_CHARS.includes(this.list.peek())) image = this.appendTo(image);
         return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
     }
