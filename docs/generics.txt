@@ -55,7 +55,26 @@ NEW SEMANTIC FEATURES:
 - Each usage of a generic type has a resolved generic type
 - Any usage of a type parameter has to be checked against type parameter constraints, as well as type arguments against the constraints
 - Assignability between generic types depends on the variance of the type parameters
-- Any type doesn't exist anymore
+- Any type will no longer be implicitly resolved, but it can be used as an explicit "catch-all"
+- Likewise with union types, they must now be explicit
+
+Details (declarations):
+- A generic type or function is a type or function that has type parameters.
+- When resolving the type of one of these, a list of these type parameters (and any constraints) must be saved
+- With functions, any type parameters used in the parameters MUST be either contravariant or invariant,
+  any type parameters used in the return type MUST be covariant or invariant, and any type parameters
+  used in both MUST be invariant. The defaults for these cases are implied, and any invalid override is a type error.
+
+Details (types):
+- A generic type being used is effectively "instantiating" that type with a "concrete" set of type arguments.
+- The type resolves to a ConcreteGenericType, which is simply a generic type with a type definition and any type parameters "filled in".
+- The types that are allowed to be used for type parameters are dictated by the type constraint.
+- The assignability of concrete generic types is determined by the variance.
+
+Details (expressions):
+- A generic function being used is "filling in" the type parameters for that particular instance of the function.
+- Because functions have function types, there is no "concrete generic" equivalent, the resolved type is just a normal function type.
+- Type constraints and variance rules still apply, however.
 
 TRANSFORMATION:
 
