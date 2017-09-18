@@ -128,6 +128,7 @@ export class TBool extends TType {
 
 /**
  * Tuple type, represents a group of values of several heterogeneous types, including no values at all.
+ * TODO: handle type parameters
  */
 export class TTuple extends TType {
     constructor(types) {
@@ -156,6 +157,7 @@ export class TTuple extends TType {
 
 /**
  * Struct type, extension of tuple type where the values have names (fields).
+ * TODO: handle type parameters
  */
 export class TStruct extends TType {
     constructor(fields) {
@@ -184,6 +186,7 @@ export class TStruct extends TType {
 
 /**
  * Array type, variable sized list of homogeneous values (only one type).
+ * TODO: handle type parameters
  */
 export class TArray extends TType {
     constructor(baseType) {
@@ -211,10 +214,11 @@ export class TArray extends TType {
  * Function type, represented by a group of parameter types and a single return type.
  */
 export class TFunction extends TType {
-    constructor(paramTypes, returnType) {
+    constructor(paramTypes, returnType, typeParamTypes) {
         super();
         this.paramTypes = paramTypes;
         this.returnType = returnType;
+        if (typeParamTypes) this.typeParamtypes = typeParamTypes;
     }
 
     /**
@@ -234,6 +238,7 @@ export class TFunction extends TType {
      *
      * This means that the return type can be tested the same way,
      * but the param types must be reversed.
+     * TODO: handle type parameters
      */
     isAssignableFrom(t) {
         // unknown is assignable to all types
@@ -273,6 +278,7 @@ export class TFunction extends TType {
 /**
  * Union type, inverse of tuple, there is only one value, but it can be of potentially several types.
  * These are structured as a binary tree.
+ * TODO: handle type parameters
  */
 export class TUnion extends TType {
     constructor(types) {
@@ -308,6 +314,39 @@ export class TUnion extends TType {
 
     toString() {
         return this.types.map(t => t.toString()).join(' | ');
+    }
+}
+
+/**
+ * Represents a type with type params.
+ * 'typeParams' is an object mapping the type parameter names to TParam types.
+ * 'type' is the definition of the type, which makes use of the type parameters.
+ */
+export class TGeneric extends TType {
+    constructor(typeParams, type) {
+        super();
+        this.typeParams = typeParams;
+        this.type = type;
+    }
+
+    isAssignableFrom(t) {
+        // TODO
+    }
+}
+
+/**
+ * Represents the type of an untyped type parameter, used in TGeneric and wherever
+ * a type parameters is used.
+ */
+export class TParam extends TType {
+    constructor(variance, constraint) {
+        super();
+        this.variance = variance;
+        this.constraint = constraint;
+    }
+
+    isAssignableFrom(t) {
+        // TODO
     }
 }
 

@@ -64,16 +64,28 @@ Details (declarations):
 - With functions, any type parameters used in the parameters MUST be either contravariant or invariant,
   any type parameters used in the return type MUST be covariant or invariant, and any type parameters
   used in both MUST be invariant. The defaults for these cases are implied, and any invalid override is a type error.
+- For generic types (as opposed to generic functions) variance is determined by how the type parameter is used:
+  - Used in union type -> covariant/invariant
+  - Function type -> parameters: contravariant/invariant, return type: covariant/invariant
+  - Array type -> invariant
+  - Struct type -> field types: covariant/invariant
+  - Tuple type -> covariant/invariant
+  - Other generc type parameters -> variance carries over
+- Invariant will be used by default only if the parameter is used in both a contra- and covariant situation.
+  Otherwise it will default to whichever variance applies to the usage.
+  But we need to enumerate all usages before we can decide.
 
 Details (types):
 - A generic type being used is effectively "instantiating" that type with a "concrete" set of type arguments.
-- The type resolves to a ConcreteGenericType, which is simply a generic type with a type definition and any type parameters "filled in".
+- All generic types contain the type definition (whatever is on the right side of the equals sign).
+  When a generic type is used and the type parameters are filled in, that type definition can be made specific.
+  So a generic type usage simply resolves to that specific type.
 - The types that are allowed to be used for type parameters are dictated by the type constraint.
-- The assignability of concrete generic types is determined by the variance.
+- The variance still needs to be preserved, however, so we can determine assignability for the resolved type.
 
 Details (expressions):
 - A generic function being used is "filling in" the type parameters for that particular instance of the function.
-- Because functions have function types, there is no "concrete generic" equivalent, the resolved type is just a normal function type.
+- The resolved type is just a normal function type.
 - Type constraints and variance rules still apply, however.
 
 TRANSFORMATION:

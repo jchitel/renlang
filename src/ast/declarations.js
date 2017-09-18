@@ -1,5 +1,5 @@
 import ASTNode from './ASTNode';
-import { TFunction, TUnknown } from '../typecheck/types';
+import { TFunction, TUnknown, TGeneric, TParam, TAny } from '../typecheck/types';
 import TypeCheckError from '../typecheck/TypeCheckError';
 import * as mess from '../typecheck/TypeCheckerMessages';
 
@@ -96,9 +96,17 @@ export class FunctionDeclaration extends ASTNode {
         // resolve types of parameters and return type
         const paramTypes = this.params.map(p => p.resolveType(typeChecker, module));
         const returnType = this.returnType.resolveType(typeChecker, module);
+        let typeParamTypes;
+        if (this.typeParams) {
+            typeParamTypes = {};
+            for (const p of this.typeParams) {
+                typeParamTypes[p.name] = p.resolveType(typeChecker, module);
+            }
+            // TODO: the type parameters need to be placed in a list just like function parameters
+        }
         // the type of the function will be unknown if any component types are unknown, otherwise it has a function type
         if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) this.type = new TUnknown();
-        else this.type = new TFunction(paramTypes, returnType);
+        else this.type = new TFunction(paramTypes, returnType, typeParamTypes);
         // create a symbol table initialized to contain the parameters
         const symbolTable = {};
         for (let i = 0; i < this.params.length; ++i) {
@@ -145,6 +153,16 @@ export class TypeDeclaration extends ASTNode {
     }
 
     resolveType(typeChecker, module) {
+        // if there are type parameters, this is a generic type
+        if (this.typeParams) {
+            const typeParamTypes = {};
+            for (const p of this.typeParams) {
+                typeParamTypes[p.name] = p.resolveType(typeChecker, module);
+            }
+            // TODO: the type parameters need to be placed in a list just like function parameters
+            return this.type = new TGeneric(typeParamTypes, this.typeNode.resolveType(typeChecker, module));
+        }
+        // otherwise, it just resolves to the type of the type definition
         return this.type = this.typeNode.resolveType(typeChecker, module);
     }
 }
@@ -177,6 +195,16 @@ export class TypeParam extends ASTNode {
         }
         node.createAndRegisterLocation('self', start, end);
         return node;
+    }
+
+    resolveType() {
+        // no defined variance means it needs to be inferred from how it is used
+        const variance = this.varianceOp === '+' ? 'covariant' : this.varianceOp === '-' ? 'contravariant' : null;
+        // no defined constraint means it defaults to (: any)
+        const constraint = this.typeConstraint
+            ? { op: { ':': 'from', '-:': 'to' }[this.typeConstraint.op], type: this.typeConstraint.type }
+            : { op: 'from', type: new TAny() };
+        return this.type = new TParam(variance, constraint);
     }
 }
 

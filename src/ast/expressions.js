@@ -613,7 +613,7 @@ export class FunctionApplication extends Expression {
             typeChecker.errors.push(new TypeCheckError(mess.NOT_INVOKABLE, module.path, this.target.locations.self));
             return this.type = new TUnknown();
         }
-        // resolve parameters
+        // resolve parameters TODO handle type parameters
         for (let i = 0; i < this.args.length; ++i) {
             const paramType = this.args[i].resolveType(typeChecker, module, symbolTable);
             // skip arguments that have already been errored
