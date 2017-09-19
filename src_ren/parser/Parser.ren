@@ -1,1057 +1,382 @@
 import from "./Tokenizer": Tokenizer, { Token }
-import from "./LookaheadIterator": LookaheadIterator
-import from "./NewLineCheckIterator": NewLineCheckIterator
-import from "../ast": * as AST
+import from "./LazyList": LazyList
+import from "./ParserError": ParserError, { ParserMessage }
 import from "../ast/ASTNode": ASTNode
-import from "./ParserError": ParserError
-import from "./ParserMessages": * as mess
 
 
-type Node = (ASTNode | Token)
-type ParserMessage = (string | ((Token) => string))
+export type ParserNode = ASTNode | Token
+
+export type ParserDefinition = {
+    bool optional
+    bool definite
+    string type
+    string image
+    ((Parser) => ParserNode) parse
+}
+
+export default class Parser {
+    private bool soft
+    private LazyList<char> tokenizer
+    private bool debug
+    private int indent
+
+    public constructor(string source, bool debug = false) => {
+        // start with 'soft' as false because Program is implicitly definite
+        this.soft = false
+        // This is a double-wrapped iterator:
+        // 1. the tokenizer yields tokens one at a time
+        // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
+        this.tokenizer = new LazyList(new Tokenizer(source))
+        // debug flag (ONLY FOR TESTING)
+        this.debug = debug
+        this.indent = 0
+        return this
+    }
+
+    /**
+     * Copies this instance's fields onto a new instance of copy, changing the value of 'soft' to the one provided
+     */
+    private constructor(Parser parser, bool soft) => {
+        this.soft = soft
+        this.tokenizer = parser.tokenizer
+        this.debug = parser.debug
+        this.indent = parser.indent
+        return this
+    }
+
+    /**
+     * In the event of a parse failure, one of three things will happen:
+     * - we are parsing softly, in which case it is a soft failure and we should reset any peeked tokens and return false
+     * - we are parsing definitely but there is no message available, in which case we return false and let the parent take care of the message
+     * - we are parsing definitely, in which case we assemble an error and throw it
+     */
+    private bool processParseFailure(ParserMessage msg, ParserNode node) {
+        if (this.soft || !msg) return false
+        throw new ParserError(createMessage(msg, node), node.line, node.column)
+    }
+
+    /**
+     * Attempts to accept the next sequence according to the specified def and parser state.
+     * Returns a tuple array containing [the next token or node, a flag indicating if the accept was successful]
+     */
+    private (ParserNode, bool) acceptUsingDef(ParserDefinition def) => {
+        subParser = new Parser(this, def.optional || this.soft)
+        return if (def.type || def.image) {
+            const tok = subParser.getNextToken();
+            const accepted = def.type && (tok.type === def.type) || def.image && (def.image === tok.image);
+            this.tokenizer = subParser.tokenizer;
+            return [tok, accepted];
+        } else if (def.parse) {
+            const node = def.parse(subParser);
+            this.tokenizer = subParser.tokenizer;
+            return [node, !!node];
+        } else {
+            throw new Error('this should never happen');
+        }
+    }
+
+    /**
+     * Gets the next token from the parser, taking into account the soft flag.
+     */
+    getNextToken() {
+        const [next, newTokenizer] = this.tokenizer.shift();
+        this.tokenizer = newTokenizer;
+        return next;
+    }
+
+    /**
+    * Given a definite flag, change the parser state if it is true
+    */
+    processDefiniteFlag(definite) {
+        if (!definite) return;
+        this.soft = false;
+        this.printDebug('definite flag present, soft mode turned off');
+    }
+
+    /**
+     * THE ENGINE OF THE PARSER
+     * The parser runs off of a configuration for each non-terminal in the grammar.
+     *
+     * Here are the options we require:
+     * - 'name': specifies the field name on the resulting AST node object
+     * - either 'type', 'image', or 'parse':
+     *   - 'type' and 'image' are the corresponding fields on tokens used to check for terminals
+     *   - 'parse' specifies a non-terminal parse function
+     *
+     * Here are the fields that are required to appear in the defs list somewhere in specific situations:
+     * - 'definite': specifies the component which, when parsed, means that this expansion is the correct path chosen.
+     *   - If, until this point, we have been parsing softly, we can consume all softly parsed tokens
+     *   - After this point, if a token does not match, it is an actual error
+     *   - This option must appear on AT LEAST ONE component of a sequential expansion, and cannot appear on any choice expansions
+     * - 'mess': In the event of an error on this component, throw an error with this message or message generator function
+     * - 'choices': Specifies a choice expansion, where each child is checked in order until one is matched definitely
+     * - 'leftRecursive': A special kind of choice expansion where there are at least one left-recursive choices
+     *   - 'bases': The list of non-left-recursive choices, which are normal choices
+     *   - 'suffixes': The list of left-recursive choices, which should only parse the suffix of the choice, ignoring the left-recursive part
+     *     - 'baseName': The name of the field in the left-recursive AST object that should be used for the prefix portion
+     *
+     * Here are optional fields:
+     * - 'optional': specifies that this component is optional.
+     *   - The component MUST be parsed softly, and in the event of a failure, it should be skipped
+     * - 'zeroOrMore' or 'oneOrMore': specifies that this component can be repeated.
+     *   - Either one or the other can appear, but not both.
+     *   - 'zeroOrMore' means that the component can appear 0 or more times, and 'oneOrMore' means 1 or more times
+     *   - In the event of oneOrMore, parse one instance of the component as if it were non-optional, then proceed to the repetition phase
+     *   - In the repetition phase, parse softly, skipping the component and continuing in the event of a failure
+     * - 'sep': specifies for a repeated component another component that must separate each instance
+     *   - Obviously, this can only appear alongside 'zeroOrMore' and 'oneOrMore'
+     *   - After each repeated instance, one of these MUST be parsed softly.
+     *   - In the event of a failure parsing the separator, the entire repetition is broken out of
+     *   - In the event of a success parsing the separator, the next instance MUST be parsed definitely
+     */
+    accept(defs, clss) {
+        this.printDebug('accept()', defs, clss);
+        this.printDebug((defs[0].choices || defs[0].leftRecursive) ? 'entering choice mode' : 'entering sequential mode');
+        if (!defs[0].choices && !defs[0].leftRecursive) {
+            return this.acceptSequential(defs, clss);
+        } else {
+            return this.acceptChoice(defs[0], clss);
+        }
+    }
+
+    /**
+     * SEQUENTIAL MODE
+     * This is the basic mode of the parser, it simply parses expansion components in sequence.
+     * This mode can potentially branch to repetition mode for one or more components.
+     * The basic process is this:
+     * - for each component definition:
+     * - if repetitive, enter repetition mode and add the returned components as defined
+     * - otherwise, branch the parser and parse the definition normally
+     * - if not accepted, fail only if the component was not optional, otherwise ignore it
+     * - if accepted, save the tokenizer state, process additional flags, and save the accepted node
+     * - return a new node containing all accepted nodes as children
+     */
+    acceptSequential(defs, clss) {
+        // make sure that there is a definite flag on at least one component
+        checkForDefinite(defs);
+        const comps = {}, children = [];
+        for (const def of defs) {
+            this.printDebug('NEW SEQUENTIAL DEF', def);
+            if (def.oneOrMore || def.zeroOrMore) {
+                // repetitive component
+                this.printDebug('entering repetition mode');
+                const [accepted, items, seps] = this.acceptRepetition(def);
+                if (!accepted) return false;
+                // if success, the tokenizer state has already been saved, save the items
+                comps[def.name] = items;
+                if (def.sep) comps[def.sep.name] = seps;
+                children.push(...interleave(items, seps));
+            } else {
+                // normal
+                this.printDebug('normal component');
+                const subParser = this.withSoft(this.soft);
+                const [node, accepted] = subParser.acceptUsingDef(def);
+                if (!accepted) {
+                    // if it was optional, ignore the failure and move on, otherwise fail
+                    this.printDebug('COMPONENT NOT ACCEPTED', node);
+                    if (!def.optional) {
+                        this.printDebug('FAIL');
+                        return this.processParseFailure(def.mess, node);
+                    } else this.printDebug('WAS OPTIONAL, IGNORING');
+                } else {
+                    // success, save tokenizer
+                    this.printDebug('ITEM ACCEPTED', node);
+                    this.tokenizer = subParser.tokenizer;
+                    this.processDefiniteFlag(def.definite);
+                    children.push(comps[def.name] = node);
+                }
+                this.printDebug('comps:', comps, 'children:', children);
+            }
+        }
+        this.printDebug('DONE WITH SEQUENTIAL EXPANSION');
+        return new clss(comps, children);
+    }
+
+    /**
+     * REPETITION MODE
+     * This is a sub-mode of sequential mode that allows components to be repeatedly parsed.
+     * Process:
+     * - Loop infinitely
+     * - Branch the parser and parse the definition
+     * - If not accepted, fail only if the item was preceded by a separator or this is the first item of a oneOrMore definition
+     * - If not accepted otherwise, return items parsed so far as a success
+     * - If accepted, save the new item and the parser state
+     * - If there was a separator, branch and parse it
+     * - If not accepted, return items parsed so far as a success
+     * - If accepted, save the separator and parser state
+     * - Repeat until a failure or a successful completion
+     */
+    acceptRepetition(def) {
+        const items = [], seps = [];
+        let wasSeparator = false;
+        let handleOneOrMore = !!def.oneOrMore;
+        // enter repetition loop
+        while (true) {
+            const soft = (!handleOneOrMore && !wasSeparator) || this.soft;
+            const subParser = this.withSoft(soft);
+            const [node, accepted] = subParser.acceptUsingDef(def);
+            if (!accepted) {
+                this.printDebug('ITEM NOT ACCEPTED', node);
+                if (wasSeparator || handleOneOrMore) {
+                    // actual failure
+                    this.printDebug('BUT WAS REQUIRED, FAIL');
+                    return [this.processParseFailure(def.mess, node)];
+                } else {
+                    // this is fine, we just finish repetition
+                    this.printDebug('COMPLETED REPETITION', 'items:', items, 'seps:', seps);
+                    return [true, items, seps];
+                }
+            }
+            this.printDebug('ITEM ACCEPTED', node);
+            // after the first iteration this should always be false
+            handleOneOrMore = false;
+            // success, save tokenizer
+            this.tokenizer = subParser.tokenizer;
+            this.processDefiniteFlag(def.definite);
+            items.push(node);
+            this.printDebug('items parsed so far', items);
+            if (def.sep) {
+                // handle separator if there is one
+                this.printDebug('parsing separator', def.sep);
+                const sepParser = this.withSoft(true);
+                const [sep, sepAccepted] = sepParser.acceptUsingDef(def.sep);
+                if (!sepAccepted) {
+                    // this is fine, we just finish repetition
+                    this.printDebug('SEPARATOR NOT ACCEPTED, COMPLETING REPETITION', 'items:', items, 'seps:', seps);
+                    return [true, items, seps];
+                } else {
+                    // save separator
+                    this.printDebug('SEPARATOR ACCEPTED', sep);
+                    this.tokenizer = sepParser.tokenizer;
+                    this.processDefiniteFlag(def.definite);
+                    seps.push(sep);
+                    this.printDebug('separators parsed so far', seps);
+                    wasSeparator = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * CHOICE MODE
+     * Choice mode is the other primary mode, which parses each provided item as a choice until one is accepted.
+     * The first accepted choice is used as the result, and no successful choices is treated as a failure.
+     * Process:
+     * - Repeat for each choice
+     * - Branch the parser in soft mode, parse the choice
+     * - If accepted, save the parser state and create a node containing the successful node, then break
+     * - If not accepted, ignore and try the next choice
+     * - Once all are attempted, if there is not an accepted result, return false
+     * - If the choice is non-left recursive, return the current result as a success
+     * - Otherwise branch into left-recursive mode and return that result
+     */
+    acceptChoice(def, clss) {
+        let base;
+        this.printDebug(def.choices ? 'normal choice mode' : 'left-recursive mode');
+        const choices = def.choices || def.leftRecursive.bases;
+        for (const choice of choices) {
+            this.printDebug('new choice', choice);
+            const subParser = this.withSoft(true);
+            try {
+                const [node, accepted] = subParser.acceptUsingDef(choice);
+                if (accepted) {
+                    this.printDebug('CHOICE ACCEPTED', node);
+                    this.tokenizer = subParser.tokenizer;
+                    base = new clss({ [choice.name]: node }, [node]);
+                    this.printDebug('created base', base);
+                    break;
+                }
+            } catch (ignored) {} // error means it failed, but we don't care in this case
+        }
+        // no match, failure
+        if (!base) {
+            this.printDebug('NO BASE, FAIL');
+            return false;
+        }
+        // non-left-recursive, return what we have
+        if (def.choices) {
+            this.printDebug('DONE WITH CHOICE EXPANSION');
+            return base;
+        }
+        // left-recursive, handle suffixes
+        return this.acceptLeftRecursive(def, clss, base);
+    }
+
+    /**
+     * LEFT-RECURSIVE MODE
+     * This mode is a branch of choice mode, which allows certain suffixes to follow a "base" node.
+     * This process follows a similar process to choice mode:
+     * - Enter infinite loop
+     * - Enter a loop for each suffix choice
+     * - Branch the parser in soft mode, parse the suffix
+     * - If accepted, use the result to create a wrapper node around the current base, this is the new base
+     * - Restart the inner loop
+     * - If we go through all suffixes without a success, break out and return the current base
+     */
+    acceptLeftRecursive(def, clss, base) {
+        this.printDebug('ENTERING LEFT-RECURSIVE MODE');
+        retry: while (true) {
+            this.printDebug('starting suffix loop');
+            for (const suff of def.leftRecursive.suffixes) {
+                this.printDebug('new suffix', suff);
+                const subParser = this.withSoft(true);
+                const suffNode = suff.parse(subParser);
+                if (suffNode) {
+                    this.printDebug('SUFFIX ACCEPTED', suffNode);
+                    suffNode[suff.baseName] = base;
+                    suffNode.children.unshift(base);
+                    this.tokenizer = subParser.tokenizer;
+                    base = new clss({ [suff.name]: suffNode }, [suffNode]);
+                    this.printDebug('new base', base);
+                    continue retry;
+                }
+            }
+            break;
+        }
+        this.printDebug('DONE WITH LEFT-RECURSIVE EXPANSION');
+        return base;
+    }
+
+    /**
+     * Used to add debug statements to the parser logic, because this crap is hard to debug.
+     * This will only print if the 'debug' flag is set on the parser
+     */
+    printDebug(...things) {
+        /* eslint-disable no-console */
+        if (!this.debug) return;
+        if (things[0] === 'accept()') this.indent++;
+        console.log(`${' '.repeat(this.indent * 4)}Parser: soft:`, this.soft, ', next token: ', JSON.stringify(this.tokenizer.peek()));
+        for (const thing of things) {
+            console.log(`${' '.repeat(this.indent * 4)}DEBUG: `, typeof thing === 'string' ? thing : typeof thing === 'function' ? `function ${thing.name}` : thing === undefined ? 'undefined' : JSON.stringify(thing));
+        }
+        /* eslint-enable no-console */
+    }
+}
+
+/**
+ * Creates a message from either a string or a function
+ */
+function createMessage(message, tok) {
+    return (typeof message === 'string') ? message : message(tok);
+}
+
+/**
+ * This will be a common source of bugs, so we run a check for it for every sequential expansion
+ */
+function checkForDefinite(defs) {
+    if (defs.some(d => d.definite || d.sep && d.sep.definite)) return;
+    throw new Error('No definite set on a sequential expansion');
+}
 
 /**
  * Given an arbitrary number of lists of nodes, interleave them, starting with the first item of the first list.
  * Continue filling the combined list with available items from each list until all lists are empty.
  */
-func Node[] interleave(Node[][] lists) => {
-    combined = []
-    const max = lists.map(l => l.length).max()
-    for (i in range(max)) {
-        for (list in lists) if (i < list.length) combined.add(list[i]) else ()
+function interleave(...lists) {
+    const combined = [];
+    const max = Math.max(...lists.map(l => l.length));
+    for (let i = 0; i < max; ++i) {
+        for (const list of lists) if (list[i]) combined.push(list[i]);
     }
-    return combined
-}
-
-export default class Parser {
-    private Iterator tokenizer
-
-    constructor(string source) => {
-        // This is a triple-wrapped iterator:
-        // 1. the tokenizer yields tokens one at a time
-        // 2. the lookahead iterator allows us to peek at succeeding tokens without consuming them
-        // 3. the new line check iterator filters new lines and adds a new line flag to each token preceding a new line
-        this.tokenizer = new NewLineCheckIterator(new LookaheadIterator(new Tokenizer(source)))
-        return this
-    }
-
-    /**
-     * Top-level function.
-     * Given some source code string, parse it and return a syntax tree.
-     */
-    AST.Program parse() => this.acceptProgram()
-
-    // COMMON UTIL FUNCTIONS
-
-    /**
-     * Using the next token as a starting point, use the 'parseFunc' to attempt to parse a tree node
-     * from the input. Throw 'message' if the parse fails.
-     */
-    Node parseNextToken((Token => Node) parseFunc, ParserMessage message) => {
-        token = this.tokenizer.next().value
-        parsed = parseFunc(token)
-        if (!parsed && message) throw new ParserError(message, token.line, token.column)
-        return parsed
-    }
-
-    /**
-     * Get the next token, expecting it to be of type 'type',
-     * throwing an error with message 'message' if it is not.
-     */
-    Maybe<Token> expectNextToken(string type, ParserMessage message) => {
-        token = this.tokenizer.next().value
-        this.enforceTokenType(token, type, message)
-        return if (token.type == type) some(token) else none;
-    }
-
-    /**
-     * Check if the token is of the specified type,
-     * throwing an error with the specified message if it is not.
-     */
-    void enforceTokenType(Token token, string type, Maybe<ParserMessage> message) => {
-        if (token.type != type && message != none) {
-            formatted = if (message is (T1) => T2) message(token) else message
-            throw new ParserError(formatted, token.line, token.column)
-        } else ()
-    }
-
-    /**
-     * Check if the token has a new line after it,
-     * throwing an error with the specified message if it is not.
-     */
-    void enforceNewLine(Token token, string message) => {
-        if (!token.hasNewLine) throw new ParserError(message, token.line, token.column + token.image.length - 1)
-    }
-
-    // PARSER FUNCTIONS
-
-    /**
-     * Top-level AST node.
-     *
-     * Program ::= ImportDeclaration* (FunctionDeclaration | TypeDeclaration | ExportDeclaration)* EOF
-     */
-    AST.Program acceptProgram() => {
-        imports = []; functions = []; types = []; exports = []; children = []
-        for (c in this.tokenizer) {
-            if (node = this.acceptImportDeclaration(c)) {
-                if (functions.any() || types.any() || exports.any()) throw new ParserError(mess.IMPORT_AFTER_DECL, c.line, c.column)
-                imports.add(node)
-                children.add(node)
-            } else if (node = this.acceptFunctionDeclaration(c)) {
-                functions.add(node)
-                children.add(node)
-            } else if (node = this.acceptTypeDeclaration(c)) {
-                types.add(node)
-                children.add(node)
-            } else if (node = this.acceptExportDeclaration(c)) {
-                exports.add(node)
-                children.add(node)
-            } else if (c.type == 'EOF') {
-                children.add(c)
-                if (children.length == 1) throw new ParserError(mess.EMPTY_FILE, 1, 1) else ()
-                return new AST.Program({ imports, functions, types, exports }, children)
-            } else {
-                throw new ParserError(mess.INVALID_PROGRAM(c), c.line, c.column)
-            }
-        }
-        throw new Error('Tokenizer had no elements')
-    }
-
-    /**
-     * ImportDeclaration ::= IMPORT FROM STRING_LITERAL COLON IDENT
-     *                       IMPORT FROM STRING_LITERAL LBRACE ImportComponent (COMMA ImportComponent)* RBRACE
-     */
-    acceptImportDeclaration(tok) {
-        if (tok.type !== 'IMPORT') return false;
-        const fromToken = this.expectNextToken('FROM', mess.INVALID_IMPORT);
-        const moduleNameToken = this.expectNextToken('STRING_LITERAL', mess.INVALID_IMPORT_MODULE);
-
-        const next = this.tokenizer.next().value;
-        if (next.type === 'COLON') {
-            // default import
-            const defaultImportNameToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
-            this.enforceNewLine(defaultImportNameToken, mess.IMPORT_NO_NEW_LINE);
-            return new AST.ImportDeclaration({
-                importToken: tok,
-                fromToken,
-                moduleNameToken,
-                colonToken: next,
-                defaultImportNameToken,
-                defaultImport: true,
-            }, [tok, fromToken, moduleNameToken, next, defaultImportNameToken]);
-        } else if (next.type === 'LBRACE') {
-            // named imports
-            const importComponents = [], commaTokens = [];
-            importComponents.push(this.parseNextToken(t => this.acceptImportComponent(t), mess.INVALID_IMPORT));
-            let namedImportCloseBraceToken = this.tokenizer.next().value;
-            while (namedImportCloseBraceToken.type === 'COMMA') {
-                commaTokens.push(namedImportCloseBraceToken);
-                importComponents.push(this.parseNextToken(t => this.acceptImportComponent(t), mess.INVALID_IMPORT));
-                namedImportCloseBraceToken = this.tokenizer.next().value;
-            }
-            this.enforceTokenType(namedImportCloseBraceToken, 'RBRACE', mess.INVALID_IMPORT);
-            this.enforceNewLine(namedImportCloseBraceToken, mess.IMPORT_NO_NEW_LINE);
-            return new AST.ImportDeclaration({
-                importToken: tok,
-                fromToken,
-                moduleNameToken,
-                namedImportOpenBraceToken: next,
-                importComponents,
-                commaTokens,
-                namedImportCloseBraceToken,
-                defaultImport: false,
-            }, [tok, fromToken, moduleNameToken, next, ...interleave(importComponents, commaTokens), namedImportCloseBraceToken]);
-        } else {
-            throw new ParserError(mess.INVALID_IMPORT, next.line, next.column);
-        }
-    }
-
-    /**
-     * ImportComponent ::= IDENT
-     *                     IDENT AS IDENT
-     */
-    acceptImportComponent(tok) {
-        if (tok.type !== 'IDENT') return false;
-        if (this.tokenizer.peek().type === 'AS') {
-            const asToken = this.tokenizer.next().value;
-            const importAliasToken = this.expectNextToken('IDENT', mess.INVALID_IMPORT);
-            return new AST.ImportComponent({
-                importNameToken: tok,
-                asToken,
-                importAliasToken,
-            }, [tok, asToken, importAliasToken]);
-        } else {
-            return new AST.ImportComponent({
-                importNameToken: tok,
-            }, [tok]);
-        }
-    }
-
-    /**
-     * FunctionDeclaration ::= FUNC Type IDENT ParameterList FAT_ARROW (Expression | Block)
-     */
-    acceptFunctionDeclaration(tok) {
-        if (tok.type !== 'FUNC') return false;
-        const returnType = this.parseNextToken(t => this.acceptType(t), mess.INVALID_RETURN_TYPE);
-        const functionNameToken = this.expectNextToken('IDENT', mess.INVALID_FUNCTION_NAME);
-        const params = this.parseNextToken(t => this.acceptParameterList(t), mess.INVALID_PARAMETER_LIST);
-        const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_FAT_ARROW);
-        const next = this.tokenizer.next().value;
-        const functionBody = this.acceptFunctionBody(next);
-        return new AST.FunctionDeclaration({
-            funcToken: tok,
-            returnType,
-            functionNameToken,
-            params,
-            fatArrowToken,
-            functionBody,
-        }, [tok, returnType, functionNameToken, params, fatArrowToken, functionBody]);
-    }
-
-    /**
-     * This is NOT a normal parser function.
-     * There is ambiguity between blocks and struct literals, but only for function bodies.
-     * So when we hit a function body, if there is an open brace, we accept a statement.
-     * Otherwise, we always want an expression before a statement.
-     */
-    acceptFunctionBody(tok) {
-        if (tok.type === 'LBRACE') {
-            return this.acceptStatement(tok);
-        } else {
-            let body = this.acceptExpression(tok);
-            if (!body) body = this.acceptStatement(tok);
-            if (!body) throw new ParserError(mess.INVALID_FUNCTION_BODY, tok.line, tok.column);
-            return body;
-        }
-    }
-
-    /**
-     * TypeDeclaration ::= TYPE IDENT EQUALS Type
-     */
-    acceptTypeDeclaration(tok) {
-        if (tok.type !== 'TYPE') return false;
-        const typeNameToken = this.expectNextToken('IDENT', mess.INVALID_TYPE_NAME);
-        const equalsToken = this.expectNextToken('EQUALS', mess.TYPE_DECL_MISSING_EQUALS);
-        const type = this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE);
-        return new AST.TypeDeclaration({
-            typeToken: tok,
-            typeNameToken,
-            equalsToken,
-            type,
-        }, [tok, typeNameToken, equalsToken, type]);
-    }
-
-    /**
-     * ExportDeclaration ::= EXPORT DEFAULT Expression      -- default export
-     *                     | EXPORT IDENT EQUALS Expression -- named inline export
-     *                     | EXPORT IDENT EQUALS Type       -- named inline export
-     *                     | EXPORT IDENT                   -- named export of already declared name
-     */
-    acceptExportDeclaration(tok) {
-        if (tok.type !== 'EXPORT') return false;
-        let next = this.tokenizer.next().value;
-        if (next.type === 'DEFAULT') {
-            const defaultToken = next;
-            let exportedValue;
-            next = this.tokenizer.next().value;
-            if ((exportedValue = this.acceptFunctionDeclaration(next))
-                    || (exportedValue = this.acceptTypeDeclaration(next))
-                    || (exportedValue = this.acceptExpression(next))) {
-                return new AST.ExportDeclaration({
-                    exportToken: tok,
-                    defaultToken,
-                    exportedValue,
-                }, [tok, defaultToken, exportedValue]);
-            } else {
-                throw new ParserError(mess.INVALID_DEFAULT_EXPORT_VALUE, next.line, next.column);
-            }
-        }
-        if (next.type === 'IDENT') {
-            const exportName = next;
-            next = this.tokenizer.peek();
-            if (next.type === 'EQUALS') {
-                const equalsToken = this.tokenizer.next().value;
-                let exportedValue;
-                next = this.tokenizer.next().value;
-                if ((exportedValue = this.acceptFunctionDeclaration(next))
-                    || (exportedValue = this.acceptTypeDeclaration(next))
-                    || (exportedValue = this.acceptExpression(next))) {
-                    return new AST.ExportDeclaration({
-                        exportToken: tok,
-                        exportName,
-                        equalsToken,
-                        exportedValue,
-                    }, [tok, exportName, equalsToken, exportedValue]);
-                } else {
-                    throw new ParserError(mess.INVALID_NAMED_EXPORT_VALUE, next.line, next.column);
-                }
-            } else {
-                this.enforceNewLine(exportName, mess.EXPORT_NO_NEW_LINE);
-                return new AST.ExportDeclaration({
-                    exportToken: tok,
-                    exportName,
-                }, [tok, exportName]);
-            }
-        }
-        throw new ParserError(mess.INVALID_EXPORT_DECLARATION, next.line, next.column);
-    }
-
-    /**
-     * Type ::= U8 | I8 | BYTE |       # 8-bit integers:  unsigned, signed, unsigned
-     *          U16 | I16 | SHORT |    # 16-bit integers: unsigned, signed, unsigned
-     *          U32 | I32 | INTEGER |  # 32-bit integers: unsigned, signed, signed
-     *          U64 | I64 | LONG |     # 64-bit integers: unsigned, signed, signed
-     *          INT |                  # Unbounded integers
-     *          F32 | FLOAT |          # 32-bit floating point numbers
-     *          F64 | DOUBLE |         # 64-bit floating point numbers
-     *          STRING |               # Array of characters
-     *          CHAR |                 # UTF-8 Character
-     *          BOOL |                 # Boolean value
-     *          VOID |                 # No type (alias of ())
-     *          (Type LBRACK RBRACK) | # Array types
-     *          StructType |           # Structured type
-     *          TupleType |            # Tuple type
-     *          FunctionType |         # Function type
-     *          (LPAREN Type RPAREN) | # Explicitly bounded type
-     *          IDENT                  # Already defined type
-     */
-    acceptType(tok) {
-        let typeNode;
-        // handle single-token types
-        switch (tok.type) {
-            case 'U8': case 'I8': case 'BYTE':
-            case 'U16': case 'I16': case 'SHORT':
-            case 'U32': case 'I32': case 'INTEGER':
-            case 'U64': case 'I64': case 'LONG':
-            case 'INT':
-            case 'F32': case 'FLOAT':
-            case 'F64': case 'DOUBLE':
-            case 'STRING':
-            case 'CHAR':
-            case 'BOOL':
-            case 'VOID':
-            case 'ANY':
-                typeNode = new AST.Type({ builtIn: tok }, [tok]);
-                break;
-            case 'IDENT': typeNode = new AST.Type({ name: tok }, [tok]); break;
-            default: break;
-        }
-        if (!typeNode) {
-            // handle more complex types
-            let type;
-            if (type = this.acceptStructType(tok)) typeNode = new AST.Type({ structType: type }, [type]);
-            else if (type = this.acceptFunctionOrTupleType(tok)) {
-                if (type instanceof AST.FunctionType) typeNode = new AST.Type({ functionType: type }, [type]);
-                else if (type instanceof AST.TupleType) typeNode = new AST.Type({ tupleType: type }, [type]);
-                else typeNode = type; // the case of a single type in parentheses just returns a type
-            } else return false;
-        }
-        // handle left recursion, types that start with an inner type
-        while (this.tokenizer.peek()) {
-            let outer;
-            if (outer = this.tryArrayType(typeNode)) {
-                typeNode = new AST.Type({ arrayType: outer }, [outer]);
-            } else if (outer = this.tryUnionType(typeNode)) {
-                typeNode = new AST.Type({ unionType: outer }, [outer]);
-            } else {
-                break;
-            }
-        }
-        return typeNode;
-    }
-
-    tryArrayType(baseType) {
-        const [peek1, peek2] = this.tokenizer.peek(0, 2);
-        if (peek1.type !== 'LBRACK' || peek2.type !== 'RBRACK') return false;
-        const [arrayLeftBracketToken, arrayRightBracketToken] = [this.tokenizer.next().value, this.tokenizer.next().value];
-        return new AST.ArrayType({
-            baseType,
-            arrayLeftBracketToken,
-            arrayRightBracketToken,
-        }, [baseType, arrayLeftBracketToken, arrayRightBracketToken]);
-    }
-
-    tryUnionType(left) {
-        if (this.tokenizer.peek().image !== '|') return false;
-        const vbarToken = this.tokenizer.next().value;
-        const right = this.parseNextToken(t => this.acceptType(t), mess.INVALID_UNION_TYPE);
-        return new AST.UnionType({
-            left,
-            vbarToken,
-            right,
-        }, [left, vbarToken, right]);
-    }
-
-    /**
-     * ParameterList ::= LPAREN (Param (COMMA Param)*)? RPAREN
-     */
-    acceptParameterList(tok) {
-        if (tok.type !== 'LPAREN') return false;
-        let peek = this.tokenizer.peek();
-        const params = [], commaTokens = [];
-        if (peek.type !== 'RPAREN') {
-            // try to parse a parameter
-            params.push(this.parseNextToken(t => this.acceptParam(t)));
-            while ((peek = this.tokenizer.peek()).type === 'COMMA') {
-                commaTokens.push(this.tokenizer.next().value);
-                params.push(this.parseNextToken(t => this.acceptParam(t)));
-            }
-        }
-        // close param list
-        const closeParenToken = this.expectNextToken('RPAREN', mess.MISSING_CLOSE_PAREN);
-        return new AST.ParameterList({
-            openParenToken: tok,
-            params,
-            commaTokens,
-            closeParenToken,
-        }, [tok, ...interleave(params, commaTokens), closeParenToken]);
-    }
-
-    /**
-     * Param ::= Type IDENT
-     */
-    acceptParam(tok) {
-        const type = this.acceptType(tok);
-        if (!type) throw new ParserError(mess.INVALID_PARAMETER_TYPE, tok.line, tok.column);
-        const identifierToken = this.expectNextToken('IDENT', mess.INVALID_PARAMETER_NAME);
-        return new AST.Param({
-            type,
-            identifierToken,
-        }, [type, identifierToken]);
-    }
-
-    /**
-     * Expression ::= INTEGER_LITERAL |
-     *                FLOAT_LITERAL |
-     *                STRING_LITERAL |
-     *                CHARACTER_LITERAL |
-     *                IDENT |
-     *                ArrayLiteral |
-     *                StructLiteral |
-     *                TupleLiteral |
-     *                FunctionApplication |
-     *                UnaryOperation |
-     *                BinaryOperation |
-     *                VarDeclaration |
-     *                FieldAccess |
-     *                ArrayAccess |
-     *                LambdaExpression |
-     *                IfElseExpression |
-     *                LPAREN Expression RPAREN
-     */
-    acceptExpression(tok) {
-        let exp;
-        let inner;
-        // handle non-left-recursive and non-paren first
-        // simple 1 token expressions
-        switch (tok.type) {
-            case 'INTEGER_LITERAL': exp = new AST.Expression({ integerLiteralToken: tok }, [tok]); break;
-            case 'FLOAT_LITERAL': exp = new AST.Expression({ floatLiteralToken: tok }, [tok]); break;
-            case 'STRING_LITERAL': exp = new AST.Expression({ stringLiteralToken: tok }, [tok]); break;
-            case 'CHARACTER_LITERAL': exp = new AST.Expression({ characterLiteralToken: tok }, [tok]); break;
-            case 'TRUE': case 'FALSE': exp = new AST.Expression({ boolLiteralToken: tok }, [tok]); break;
-            case 'IDENT': {
-                if (inner = this.acceptVarDeclaration(tok)) {
-                    exp = new AST.Expression({ varDecl: inner }, [inner]);
-                } else if (inner = this.acceptLambdaExpressionOrTupleLiteral(tok)) {
-                    exp = new AST.Expression({ lambda: inner }, [inner]);
-                } else {
-                    exp = new AST.Expression({ identToken: tok }, [tok]);
-                }
-                break;
-            }
-            default: break;
-        }
-        if (!exp) {
-            // other literals/expressions
-            if (inner = this.acceptArrayLiteral(tok)) {
-                exp = new AST.Expression({ arrayLiteral: inner }, [inner]);
-            } else if (inner = this.acceptStructLiteral(tok)) {
-                exp = new AST.Expression({ structLiteral: inner }, [inner]);
-            } else if (inner = this.acceptIfElseExpression(tok)) {
-                exp = new AST.Expression({ ifElse: inner }, [inner]);
-            } else if (inner = this.acceptPrefixExpression(tok)) {
-                exp = new AST.Expression({ unary: inner }, [inner]);
-            } else if (tok.type === 'LPAREN') {
-                // handle parentheses
-                // the below function will never return false at this location, so there is no need to verify truthiness
-                inner = this.acceptLambdaExpressionOrTupleLiteral(tok);
-                if (inner instanceof AST.LambdaExpression) exp = new AST.Expression({ lambda: inner }, [inner]);
-                else if (inner instanceof AST.TupleLiteral) exp = new AST.Expression({ tupleLiteral: inner }, [inner]);
-                else exp = inner; // just a parenthetical expression
-            }
-            if (!exp) return false;
-        }
-        // handle left recursion, expressions that start with an inner expression
-        while (this.tokenizer.peek()) {
-            let outer;
-            if (outer = this.tryFunctionApplication(exp)) {
-                exp = new AST.Expression({ functionApplication: outer }, [outer]);
-            } else if (outer = this.tryBinaryOrPostfixExpression(exp)) {
-                if (outer instanceof AST.BinaryExpression) exp = new AST.Expression({ binary: outer }, [outer]);
-                else exp = new AST.Expression({ unary: outer }, [outer]);
-            } else if (outer = this.tryFieldAccess(exp)) {
-                exp = new AST.Expression({ fieldAccess: outer }, [outer]);
-            } else if (outer = this.tryArrayAccess(exp)) {
-                exp = new AST.Expression({ arrayAccess: outer }, [outer]);
-            } else {
-                break;
-            }
-        }
-        return exp;
-    }
-
-    /**
-     * We need this function because return statements can optionally not include an expression, and the binary/postfix logic also needs to determine if there
-     * is an expression without consuming tokens.
-     * Effectively, a token can be the start of an expression iff it is a literal token, an identifier, the start of a structured literal, the start of an if
-     * expression, or the start of one of the three wacky parenthesis expressions (tuples, lambdas, paren-expressions).
-     */
-    isStartOfExpression(tok) {
-        return ['INTEGER_LITERAL', 'FLOAT_LITERAL', 'STRING_LITERAL', 'CHARACTER_LITERAL', 'IDENT', 'LBRACK', 'LBRACE', 'IF', 'OPER', 'LPAREN'].includes(tok.type);
-    }
-
-    /**
-     * StructType ::= LBRACE (Type IDENT)* RBRACE
-     */
-    acceptStructType(tok) {
-        if (tok.type !== 'LBRACE') return false;
-        const fieldTypes = [], fieldNameTokens = [];
-        while (this.tokenizer.peek().type !== 'RBRACE') {
-            fieldTypes.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_FIELD_TYPE));
-            const identToken = this.expectNextToken('IDENT', mess.INVALID_FIELD_NAME);
-            this.enforceNewLine(identToken, mess.STRUCT_FIELD_NO_NEW_LINE);
-            fieldNameTokens.push(identToken);
-        }
-        const closeBraceToken = this.tokenizer.next().value;
-        return new AST.StructType({
-            openBraceToken: tok,
-            fieldTypes,
-            fieldNameTokens,
-            closeBraceToken,
-        }, [tok, ...interleave(fieldTypes, fieldNameTokens), closeBraceToken]);
-    }
-
-    /**
-     * FunctionType ::= LPAREN (Type (COMMA Type)*)? RPAREN FAT_ARROW Type
-     * TupleType ::= LPAREN (Type (COMMA Type)*)? RPAREN
-     */
-    acceptFunctionOrTupleType(tok) {
-        // function and tuple types are initially ambiguous, so they need a common parse function
-        if (tok.type !== 'LPAREN') return false;
-        const types = [], commaTokens = [];
-        if (this.tokenizer.peek().type !== 'RPAREN') {
-            types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE));
-            while (this.tokenizer.peek().type !== 'RPAREN') {
-                commaTokens.push(this.expectNextToken('COMMA', mess.FUNCTION_TYPE_MISSING_COMMA));
-                types.push(this.parseNextToken(t => this.acceptType(t), mess.INVALID_TYPE));
-            }
-        }
-        const closeParenToken = this.tokenizer.next().value;
-        if (this.tokenizer.peek().type !== 'FAT_ARROW') {
-            // parse as tuple
-            if (types.length === 1) {
-                // if there is only one type, it's just a type, not a tuple type
-                return new AST.Type({
-                    openParenToken: tok,
-                    innerType: types[0],
-                    closeParenToken,
-                }, [tok, types[0], closeParenToken]);
-            }
-            return new AST.TupleType({
-                openParenToken: tok,
-                types,
-                commaTokens,
-                closeParenToken,
-            }, [tok, ...interleave(types, commaTokens), closeParenToken]);
-        }
-        // parse as function
-        const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.FUNCTION_TYPE_MISSING_FAT_ARROW);
-        const returnType = this.parseNextToken(t => this.acceptType(t), mess.FUNCTION_TYPE_INVALID_RETURN_TYPE);
-        return new AST.FunctionType({
-            openParenToken: tok,
-            paramTypes: types,
-            commaTokens,
-            closeParenToken,
-            fatArrowToken,
-            returnType,
-        }, [tok, ...interleave(types, commaTokens), closeParenToken, fatArrowToken, returnType]);
-    }
-
-    /**
-     * VarDeclaration ::= IDENT EQUALS Expression
-     */
-    acceptVarDeclaration(tok) {
-        if (tok.type !== 'IDENT' || this.tokenizer.peek().type !== 'EQUALS') return false;
-        const equalsToken = this.expectNextToken('EQUALS', mess.INVALID_VAR_DECLARATION);
-        const initialValue = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_INITIAL_VALUE);
-        return new AST.VarDeclaration({
-            varIdentToken: tok,
-            equalsToken,
-            initialValue,
-        }, [tok, equalsToken, initialValue]);
-    }
-
-    /**
-     * LambdaExpression ::= LambdaParamList FAT_ARROW (Expression | Block)
-     *
-     * So this is interesting.
-     * Take the following expressions:
-     * - (a)             (parenthetical expression)
-     * - (a, b)          (tuple literal)
-     * - (a) => exp      (lambda)
-     * - (a, b) => exp   (lambda)
-     * How do we distinguish between 1 and 3, or 2 and 4?
-     * Initially, tuples are more free than lambdas. They can contain any expression as opposed to just identifiers.
-     * This means that we need to check for a tuple first, which coincidentally also checks for parenthetical expressions.
-     * If that comes back as matched, and the next token is a fat arrow, one of four things could happen:
-     * 1. It is a parenthetical expression whose inner expression is an identifier, in which case we parse as a lambda expression.
-     * 2. It is any other parenthetical expression, in which case it is returned as an expression.
-     * 3. It is a tuple where all contained expressions are identifiers, in which case we parse as a lambda expression.
-     * 4. It is any other tuple, in which case it is returned as a tuple.
-     * If it does not match either a tuple or an expression, then we proceed with the lambda parse starting with the param list.
-     */
-    acceptLambdaExpressionOrTupleLiteral(tok) {
-        const tuple = this.acceptTupleLiteralOrLambdaParamList(tok);
-        if (tuple instanceof AST.TupleLiteral || tuple instanceof AST.Expression) return tuple;
-        const paramList = tuple;
-        // acceptTupleLiteralOrLambdaParamList() will always return a valid node or throw an error, it will never be false
-        // if there is only one parameter and it is non-parenthesized, it could still be something else
-        if (paramList.children.length === 1 && this.tokenizer.peek().type !== 'FAT_ARROW') return false;
-        const fatArrowToken = this.expectNextToken('FAT_ARROW', mess.INVALID_LAMBDA_EXPRESSION_MISSING_FAT_ARROW);
-        const next = this.tokenizer.next().value;
-        const body = this.acceptFunctionBody(next);
-        return new AST.LambdaExpression({ paramList, fatArrowToken, body }, [paramList, fatArrowToken, body]);
-    }
-
-    /**
-     * TupleLiteral ::= LPAREN RPAREN | LPAREN Expression (COMMA Expression)+ RPAREN
-     * LambdaParamList ::= IDENT
-     *                   | LPAREN RPAREN
-     *                   | LPAREN LambdaParam (COMMA LambdaParam)* RPAREN
-     */
-    acceptTupleLiteralOrLambdaParamList(tok) {
-        // single identifier is params list
-        if (tok.type === 'IDENT') return new AST.LambdaParamList({ params: [tok] }, [tok]);
-        // we used to check for an LPAREN, but because of the logic leading to here, it is impossible for this not to be an LPAREN at this point
-        const items = [], commaTokens = [];
-        let first = true;
-        while (this.tokenizer.peek().type !== 'RPAREN') {
-            if (first) first = false;
-            else commaTokens.push(this.expectNextToken('COMMA', mess.TUPLE_LITERAL_MISSING_COMMA));
-            // try to get a param
-            const next = this.tokenizer.next().value;
-            const param = this.acceptLambdaParam(next);
-            if (param) {
-                items.push(param);
-            } else {
-                const exp = this.acceptExpression(next);
-                items.push(exp);
-            }
-        }
-        const closeParenToken = this.tokenizer.next().value;
-        /**
-         * Determine what it is:
-         * ? Next is FAT_ARROW
-         * 1. list of all lambda params = LambdaParamList
-         * 2. empty list = LambdaParamList
-         * 3. everything else = ERROR
-         * ? Next is not FAT_ARROW
-         * 1. one expression = Expression
-         * 2. list of all expressions = TupleLiteral
-         * 3. empty list = TupleLiteral
-         * 4. everything else = ERROR
-         */
-        const peek = this.tokenizer.peek();
-        if (peek.type === 'FAT_ARROW') {
-            // has to be a valid param list, otherwise it's an error
-            if (items.every(i => i instanceof AST.LambdaParam)) {
-                return new AST.LambdaParamList({
-                    openParenToken: tok,
-                    params: items,
-                    commaTokens,
-                    closeParenToken,
-                }, [tok, ...interleave(items, commaTokens), closeParenToken]);
-            } else {
-                throw new ParserError(mess.INVALID_LAMBDA_PARAM, tok.line, tok.column);
-            }
-        } else {
-            if (items.length === 1 && items[0] instanceof AST.Expression) {
-                return new AST.Expression({
-                    openParenToken: tok,
-                    innerExpression: items[0],
-                    closeParenToken,
-                }, [tok, items[0], closeParenToken]);
-            } else if (items.length === 0 || items.every(i => i instanceof AST.Expression)) {
-                return new AST.TupleLiteral({
-                    openParenToken: tok,
-                    items,
-                    commaTokens,
-                    closeParenToken,
-                }, [tok, ...interleave(items, commaTokens), closeParenToken]);
-            } else {
-                throw new ParserError(mess.INVALID_EXPRESSION, tok.line, tok.column);
-            }
-        }
-    }
-
-    /**
-     * LambdaParam ::= IDENT | (Type IDENT)
-     */
-    acceptLambdaParam(tok) {
-        const type = this.acceptType(tok);
-        if (!type) return false;
-        if (type.name && this.tokenizer.peek().type !== 'IDENT') {
-            // if the type is an identifier and an identifier does not follow it, then it is an implicit parameter
-            return new AST.LambdaParam({ identifierToken: type.name }, [type.name]);
-        }
-        const identifierToken = this.tokenizer.next().value;
-        return new AST.LambdaParam({ type, identifierToken }, [type, identifierToken]);
-    }
-
-    /**
-     * ArrayLiteral ::= LBRACK (Expression (COMMA Expression)*)? RBRACK
-     */
-    acceptArrayLiteral(tok) {
-        if (tok.type !== 'LBRACK') return false;
-        const items = [], commaTokens = [];
-        let first = true;
-        while (this.tokenizer.peek().type !== 'RBRACK') {
-            if (first) first = false;
-            else commaTokens.push(this.expectNextToken('COMMA', mess.ARRAY_LITERAL_MISSING_COMMA));
-            items.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
-        }
-        const closeBracketToken = this.tokenizer.next().value;
-        return new AST.ArrayLiteral({
-            openBracketToken: tok,
-            items,
-            commaTokens,
-            closeBracketToken,
-        }, [tok, ...interleave(items, commaTokens), closeBracketToken]);
-    }
-
-    /**
-     * StructLiteral ::= LBRACE (IDENT COLON Expression (COMMA IDENT COLON Expression)*)? RBRACE
-     */
-    acceptStructLiteral(tok) {
-        if (tok.type !== 'LBRACE') return false;
-        const keyTokens = [], colonTokens = [], values = [], commaTokens = [];
-        let first = true;
-        while (this.tokenizer.peek().type !== 'RBRACE') {
-            if (first) first = false;
-            else commaTokens.push(this.expectNextToken('COMMA', mess.STRUCT_LITERAL_MISSING_COMMA));
-            keyTokens.push(this.expectNextToken('IDENT', mess.STRUCT_LITERAL_MISSING_KEY));
-            colonTokens.push(this.expectNextToken('COLON', mess.STRUCT_LITERAL_MISSING_COLON));
-            values.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
-        }
-        const closeBraceToken = this.tokenizer.next().value;
-        return new AST.StructLiteral({
-            openBraceToken: tok,
-            keyTokens,
-            colonTokens,
-            values,
-            commaTokens,
-            closeBraceToken,
-        }, [tok, ...interleave(keyTokens, colonTokens, values, commaTokens), closeBraceToken]);
-    }
-
-    /**
-     * IfElseExpression :: IF LPAREN Expression RPAREN Expression ELSE Expression
-     */
-    acceptIfElseExpression(tok) {
-        if (tok.type !== 'IF') return false;
-        const openParenToken = this.expectNextToken('LPAREN', mess.IF_MISSING_OPEN_PAREN);
-        const condition = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const closeParenToken = this.expectNextToken('RPAREN', mess.IF_MISSING_CLOSE_PAREN);
-        const consequent = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const elseToken = this.expectNextToken('ELSE', mess.IF_MISSING_ELSE);
-        const alternate = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        return new AST.IfElseExpression({
-            ifToken: tok,
-            openParenToken,
-            condition,
-            closeParenToken,
-            consequent,
-            elseToken,
-            alternate,
-        }, [tok, openParenToken, condition, closeParenToken, consequent, elseToken, alternate]);
-    }
-
-    /**
-     * PrefixExpression ::= OPER Expression
-     */
-    acceptPrefixExpression(tok) {
-        if (tok.type !== 'OPER') return false;
-        const target = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        return new AST.UnaryExpression({
-            prefix: true,
-            operatorToken: tok,
-            target,
-        }, [tok, target]);
-    }
-
-    /**
-     * FunctionApplication ::= Expression LPAREN (Expression (COMMA Expression)*)? RPAREN
-     */
-    tryFunctionApplication(target) {
-        if (this.tokenizer.peek().type !== 'LPAREN') return false;
-        const openParenToken = this.tokenizer.next().value;
-        const paramValues = [], commaTokens = [];
-        let first = true;
-        while (this.tokenizer.peek().type !== 'RPAREN') {
-            if (first) first = false;
-            else commaTokens.push(this.expectNextToken('COMMA', mess.FUNCTION_APPLICATION_MISSING_COMMA));
-            paramValues.push(this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION));
-        }
-        const closeParenToken = this.tokenizer.next().value;
-        return new AST.FunctionApplication({
-            target,
-            openParenToken,
-            paramValues,
-            commaTokens,
-            closeParenToken,
-        }, [target, openParenToken, ...interleave(paramValues, commaTokens), closeParenToken]);
-    }
-
-    /**
-     * BinaryExpression ::= Expression OPER Expression
-     * PostfixExpression ::= Expression OPER
-     */
-    tryBinaryOrPostfixExpression(left) {
-        const operatorToken = this.tokenizer.peek();
-        if (operatorToken.type !== 'OPER') return false;
-        this.tokenizer.next();
-        if (this.isStartOfExpression(this.tokenizer.peek())) {
-            const right = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-            return new AST.BinaryExpression({
-                left,
-                operatorToken,
-                right,
-            }, [left, operatorToken, right]);
-        }
-        return new AST.UnaryExpression({
-            prefix: false,
-            operatorToken,
-            target: left,
-        }, [left, operatorToken]);
-    }
-
-    /**
-     * FieldAccess ::= Expression DOT IDENT
-     */
-    tryFieldAccess(target) {
-        if (this.tokenizer.peek().type !== 'DOT') return false;
-        const dotToken = this.tokenizer.next().value;
-        const fieldIdentToken = this.expectNextToken('IDENT', mess.FIELD_ACCESS_INVALID_FIELD_NAME);
-        return new AST.FieldAccess({
-            target,
-            dotToken,
-            fieldIdentToken,
-        }, [target, dotToken, fieldIdentToken]);
-    }
-
-    /**
-     * ArrayAccess ::= Expression LBRACK Expression RBRACK
-     */
-    tryArrayAccess(target) {
-        if (this.tokenizer.peek().type !== 'LBRACK') return false;
-        const openBracketToken = this.tokenizer.next().value;
-        const indexExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const closeBracketToken = this.expectNextToken('RBRACK', mess.ARRAY_ACCESS_MISSING_CLOSE_BRACKET);
-        return new AST.ArrayAccess({ target, openBracketToken, indexExp, closeBracketToken }, [target, openBracketToken, indexExp, closeBracketToken]);
-    }
-
-    /**
-     * Statement ::= Block
-     *               Expression |
-     *               ForStatement |
-     *               WhileStatement |
-     *               DoWhileStatement |
-     *               TryCatchStatement |
-     *               ReturnStatement |
-     *               ThrowStatement |
-     *               BreakStatement
-     */
-    acceptStatement(tok) {
-        let inner;
-        if (inner = this.acceptBlock(tok)) {
-            return new AST.Statement({ block: inner }, [inner]);
-        } else if (inner = this.acceptExpression(tok)) {
-            return new AST.Statement({ exp: inner }, [inner]);
-        } else if (inner = this.acceptForStatement(tok)) {
-            return new AST.Statement({ for: inner }, [inner]);
-        } else if (inner = this.acceptWhileStatement(tok)) {
-            return new AST.Statement({ while: inner }, [inner]);
-        } else if (inner = this.acceptDoWhileStatement(tok)) {
-            return new AST.Statement({ doWhile: inner }, [inner]);
-        } else if (inner = this.acceptTryCatchStatement(tok)) {
-            return new AST.Statement({ tryCatch: inner }, [inner]);
-        } else if (inner = this.acceptThrowStatement(tok)) {
-            return new AST.Statement({ throw: inner }, [inner]);
-        } else if (inner = this.acceptReturnStatement(tok)) {
-            return new AST.Statement({ return: inner }, [inner]);
-        } else if (inner = this.acceptBreakStatement(tok)) {
-            return new AST.Statement({ break: inner }, [inner]);
-        } else if (inner = this.acceptContinueStatement(tok)) {
-            return new AST.Statement({ continue: inner }, [inner]);
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Block ::= LBRACE Statement* RBRACE
-     */
-    acceptBlock(tok) {
-        if (tok.type !== 'LBRACE') return false;
-        const statements = [];
-        let next = this.tokenizer.next().value;
-        while (true) {
-            const statement = this.acceptStatement(next);
-            if (statement) statements.push(statement);
-            else break;
-            next = this.tokenizer.next().value;
-        }
-        this.enforceTokenType(next, 'RBRACE', mess.MISSING_CLOSE_BRACE);
-        return new AST.Block({
-            openBraceToken: tok,
-            statements,
-            closeBraceToken: next,
-        }, [tok, ...statements, next]);
-    }
-
-    /**
-     * ForStatement ::= FOR LPAREN IDENT IN Expression RPAREN Block
-     */
-    acceptForStatement(tok) {
-        if (tok.type !== 'FOR') return false;
-        const openParenToken = this.expectNextToken('LPAREN', mess.FOR_MISSING_OPEN_PAREN);
-        const iterVarToken = this.expectNextToken('IDENT', mess.FOR_INVALID_ITER_IDENT);
-        const inToken = this.expectNextToken('IN', mess.FOR_MISSING_IN);
-        const iterableExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const closeParenToken = this.expectNextToken('RPAREN', mess.FOR_MISSING_CLOSE_PAREN);
-        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
-        return new AST.ForStatement({
-            forToken: tok,
-            openParenToken,
-            iterVarToken,
-            inToken,
-            iterableExp,
-            closeParenToken,
-            body,
-        }, [tok, openParenToken, iterVarToken, inToken, iterableExp, closeParenToken, body]);
-    }
-
-    /**
-     * WhileStatement ::= WHILE LPAREN Expression RPAREN Block
-     */
-    acceptWhileStatement(tok) {
-        if (tok.type !== 'WHILE') return false;
-        const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
-        const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const closeParenToken = this.expectNextToken('RPAREN', mess.WHILE_MISSING_CLOSE_PAREN);
-        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
-        return new AST.WhileStatement({
-            whileToken: tok,
-            openParenToken,
-            conditionExp,
-            closeParenToken,
-            body,
-        }, [tok, openParenToken, conditionExp, closeParenToken, body]);
-    }
-
-    /**
-     * DoWhileStatement ::= DO Block WHILE LPAREN Expression RPAREN
-     */
-    acceptDoWhileStatement(tok) {
-        if (tok.type !== 'DO') return false;
-        const body = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
-        const whileToken = this.expectNextToken('WHILE', mess.DO_WHILE_MISSING_WHILE);
-        const openParenToken = this.expectNextToken('LPAREN', mess.WHILE_MISSING_OPEN_PAREN);
-        const conditionExp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        const closeParenToken = this.expectNextToken('RPAREN', mess.WHILE_MISSING_CLOSE_PAREN);
-        return new AST.DoWhileStatement({
-            doToken: tok,
-            body,
-            whileToken,
-            openParenToken,
-            conditionExp,
-            closeParenToken,
-        }, [tok, body, whileToken, openParenToken, conditionExp, closeParenToken]);
-    }
-
-    /**
-     * TryCatchStatement ::= TRY Block (CATCH LPAREN Param RPAREN Block)+ (FINALLY Block)?
-     */
-    acceptTryCatchStatement(tok) {
-        if (tok.type !== 'TRY') return false;
-        const tryBody = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
-        // at least one catch block
-        const catchTokens = [this.expectNextToken('CATCH', mess.TRY_CATCH_MISSING_CATCH)];
-        const openParenTokens = [this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN)];
-        const catchParams = [this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM)];
-        const closeParenTokens = [this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN)];
-        const catchBlocks = [this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT)];
-        // potentially more
-        while (this.tokenizer.peek().type === 'CATCH') {
-            catchTokens.push(this.tokenizer.next().value);
-            openParenTokens.push(this.expectNextToken('LPAREN', mess.CATCH_MISSING_OPEN_PAREN));
-            catchParams.push(this.parseNextToken(t => this.acceptParam(t), mess.CATCH_INVALID_PARAM));
-            closeParenTokens.push(this.expectNextToken('RPAREN', mess.CATCH_MISSING_CLOSE_PAREN));
-            catchBlocks.push(this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT));
-        }
-        // potential finally
-        if (this.tokenizer.peek().type === 'FINALLY') {
-            const finallyToken = this.tokenizer.next().value;
-            const finallyBlock = this.parseNextToken(t => this.acceptStatement(t), mess.INVALID_STATEMENT);
-            return new AST.TryCatchStatement({ tryToken: tok, tryBody, catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks, finallyToken, finallyBlock },
-                [tok, tryBody, ...interleave(catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks), finallyToken, finallyBlock]);
-        }
-        return new AST.TryCatchStatement({ tryToken: tok, tryBody, catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks },
-            [tok, tryBody, ...interleave(catchTokens, openParenTokens, catchParams, closeParenTokens, catchBlocks)]);
-    }
-
-    /**
-     * ThrowStatement ::= THROW Expression
-     */
-    acceptThrowStatement(tok) {
-        if (tok.type !== 'THROW') return false;
-        const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-        return new AST.ThrowStatement({
-            throwToken: tok,
-            exp,
-        }, [tok, exp]);
-    }
-
-    /**
-     * ReturnStatement ::= RETURN Expression?
-     */
-    acceptReturnStatement(tok) {
-        if (tok.type !== 'RETURN') return false;
-        if (this.isStartOfExpression(this.tokenizer.peek())) {
-            const exp = this.parseNextToken(t => this.acceptExpression(t), mess.INVALID_EXPRESSION);
-            return new AST.ReturnStatement({ returnToken: tok, exp }, [tok, exp]);
-        }
-        return new AST.ReturnStatement({ returnToken: tok }, [tok]);
-    }
-
-    /**
-     * BreakStatement ::= BREAK INTEGER_LITERAL?
-     */
-    acceptBreakStatement(tok) {
-        if (tok.type !== 'BREAK') return false;
-        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
-        if (!loopNumber) return new AST.BreakStatement({ breakToken: tok }, [tok]);
-        return new AST.BreakStatement({ breakToken: tok, loopNumber }, [tok, loopNumber]);
-    }
-
-    /**
-     * ContinueStatement ::= CONTINUE INTEGER_LITERAL?
-     */
-    acceptContinueStatement(tok) {
-        if (tok.type !== 'CONTINUE') return false;
-        const loopNumber = this.tokenizer.peek().type === 'INTEGER_LITERAL' && this.tokenizer.next().value;
-        if (!loopNumber) return new AST.ContinueStatement({ continueToken: tok }, [tok]);
-        return new AST.ContinueStatement({ continueToken: tok, loopNumber }, [tok, loopNumber]);
-    }
+    return combined;
 }

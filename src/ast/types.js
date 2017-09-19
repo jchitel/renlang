@@ -36,8 +36,8 @@ export class ParenthesizedType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        return this.type = this.inner.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, typeParams) {
+        return this.type = this.inner.resolveType(typeChecker, module, typeParams);
     }
 }
 
@@ -77,8 +77,12 @@ export class IdentifierType extends ASTNode {
         this.registerLocation('self', location);
     }
 
-    resolveType(typeChecker, module) {
-        if (!module.types[this.name]) {
+    resolveType(typeChecker, module, typeParams) {
+        // check for a type param first
+        if (typeParams[this.name]) {
+            this.type = typeParams[this.name];
+        } else if (!module.types[this.name]) {
+            // no type param, no module-scoped type, it's an error
             typeChecker.errors.push(new TypeCheckError(mess.TYPE_NOT_DEFINED(this.name), module.path, this.locations.self));
             this.type = new TUnknown();
         } else {
@@ -97,9 +101,13 @@ export class FunctionType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const paramTypes = this.paramTypes.map(t => t.resolveType(typeChecker, module));
-        const returnType = this.returnType.resolveType(typeChecker, module);
+    /**
+     * TODO: does it make sense for explicit function types to have type params?
+     * If so, the syntax will have to be extended to allow for that...
+     */
+    resolveType(typeChecker, module, typeParams) {
+        const paramTypes = this.paramTypes.map(t => t.resolveType(typeChecker, module, typeParams));
+        const returnType = this.returnType.resolveType(typeChecker, module, typeParams);
         if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) this.type = new TUnknown();
         else this.type = new TFunction(paramTypes, returnType);
         return this.type;
@@ -114,8 +122,8 @@ export class TupleType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const types = this.types.map(t => t.resolveType(typeChecker, module));
+    resolveType(typeChecker, module, typeParams) {
+        const types = this.types.map(t => t.resolveType(typeChecker, module, typeParams));
         if (types.some(t => t instanceof TUnknown)) this.type = new TUnknown();
         else this.type = new TTuple(types);
         return this.type;
@@ -135,7 +143,7 @@ export class StructType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
+    resolveType(typeChecker, module, typeParams) {
         const fields = {};
         for (const field of this.fields) {
             if (fields[field.name]) {
@@ -143,7 +151,7 @@ export class StructType extends ASTNode {
                 this.type = new TUnknown();
                 break;
             }
-            fields[field.name] = field.type.resolveType(typeChecker, module);
+            fields[field.name] = field.type.resolveType(typeChecker, module, typeParams);
             if (fields[field.name] instanceof TUnknown) {
                 this.type = new TUnknown();
                 break;
@@ -168,8 +176,8 @@ export class ArrayType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const baseType = this.baseType.resolveType(typeChecker, module);
+    resolveType(typeChecker, module, typeParams) {
+        const baseType = this.baseType.resolveType(typeChecker, module, typeParams);
         if (baseType instanceof TUnknown) this.type = new TUnknown();
         else this.type = new TArray(baseType);
         return this.type;
@@ -190,8 +198,8 @@ export class UnionType extends ASTNode {
         return node;
     }
 
-    resolveType(typeChecker, module) {
-        const types = this.types.map(t => t.resolveType(typeChecker, module));
+    resolveType(typeChecker, module, typeParams) {
+        const types = this.types.map(t => t.resolveType(typeChecker, module, typeParams));
         if (types.some(t => t instanceof TUnknown)) this.type = new TUnknown();
         else this.type = new TUnion(types);
         return this.type;
@@ -206,6 +214,39 @@ export class GenericType extends ASTNode {
         node.typeArgs = this.typeArgList.reduce();
         node.createAndRegisterLocation('self', node.locations.name, this.typeArgList.closeGtToken.getLocation());
         return node;
+    }
+
+    /**
+     * So, this "generic type" is an "instantiation" of some type declaration with type parameters.
+     * In reality, this should be called a "specific type" because it is no longer generic.
+     * So what type does this resolve to?
+     * Well, a generic type is a combination of the type parameters and the type definition, which uses the type parameters.
+     * When it is made specific, there are no longer any type parameters; they are "filled in".
+     * So all that we are left with will be the type definition, with type parameter usages "filled in".
+     * What does this mean for us?
+     * Well, here we have the name of the generic type, and the type arguments, which we will use to "fill in" the type.
+     * So we need to do what an IdentifierType does and look up the type name, which will resolve to a TGeneric.
+     * We then iterate over the type arguments (resolving their types first), link them with the type parameters of the TGeneric,
+     * then take the type definition of the TGeneric and visit it with the type arguments, filling in the type parameters.
+     * The result will be a copy of the type definition with all type parameters filled in.
+     * To do the "filling in" we will need yet another visitor method for each type node class, call it specifyTypeParams.
+     */
+    resolveType(typeChecker, module, typeParams) {
+        // first, resolve the TGeneric associated with the name TODO: this logic is duplicated from IdentifierType
+        let genericType;
+        if (typeParams[this.name]) {
+            genericType = typeParams[this.name];
+        } else if (!module.types[this.name]) {
+            // no type param, no module-scoped type, it's an error
+            typeChecker.errors.push(new TypeCheckError(mess.TYPE_NOT_DEFINED(this.name), module.path, this.locations.self));
+            return this.type = new TUnknown();
+        } else {
+            genericType = typeChecker.getType(module, this.name);
+        }
+        // second, resolve all type arguments
+        const typeArgs = this.typeArgs.map(a => a.resolveType(typeChecker, module, typeParams));
+        // third, specify the generic type
+        return this.type = genericType.specifyTypeParams(typeArgs);
     }
 }
 

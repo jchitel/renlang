@@ -332,6 +332,14 @@ export class TGeneric extends TType {
     isAssignableFrom(t) {
         // TODO
     }
+
+    /**
+     * Here, we need to clone the type definition and visit it, specifying
+     * all instances of TParam. This is where we check the type constraint.
+     */
+    specifyTypeParams(args) {
+        const specific = this.type.clone();
+    }
 }
 
 /**
