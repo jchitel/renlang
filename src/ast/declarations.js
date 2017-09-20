@@ -156,10 +156,12 @@ export class TypeDeclaration extends ASTNode {
         // if there are type parameters, this is a generic type
         if (this.typeParams) {
             const typeParamTypes = {};
+            const typeParamNames = [];
             for (const p of this.typeParams) {
                 typeParamTypes[p.name] = p.resolveType(typeChecker, module, typeParamTypes);
+                typeParamNames.push(p.name);
             }
-            return this.type = new TGeneric(typeParamTypes, this.typeNode.resolveType(typeChecker, module, typeParamTypes));
+            return this.type = new TGeneric(typeParamTypes, typeParamNames, this.typeNode.resolveType(typeChecker, module, typeParamTypes));
         }
         // otherwise, it just resolves to the type of the type definition
         return this.type = this.typeNode.resolveType(typeChecker, module);
@@ -203,7 +205,7 @@ export class TypeParam extends ASTNode {
         const constraint = this.typeConstraint
             ? { op: { ':': 'from', '-:': 'to' }[this.typeConstraint.op], type: this.typeConstraint.typeNode.resolveType(typeChecker, module, typeParams) }
             : { op: 'from', type: new TAny() };
-        return this.type = new TParam(variance, constraint);
+        return this.type = new TParam(this.name, variance, constraint);
     }
 }
 

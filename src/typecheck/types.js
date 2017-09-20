@@ -22,6 +22,13 @@ export class TType {
      * {variable of type this} = {variable of type t}
      */
     // implement isAssignableFrom(type)
+
+    /**
+     * Return an exact (shallow) copy of this instance
+     */
+    clone() {
+        return Object.assign(Object.create(Object.getPrototypeOf(this)), this);
+    }
 }
 
 /**
@@ -49,6 +56,10 @@ export class TInteger extends TType {
         if (this.size === t.size && this.signed && !t.signed) return false;
         // we have an integer type which represents either the same or a subset of this's set
         return true;
+    }
+
+    specifyTypeParams() {
+        return this.clone();
     }
 
     toString() {
@@ -87,6 +98,10 @@ export class TFloat extends TType {
         return true;
     }
 
+    specifyTypeParams() {
+        return this.clone();
+    }
+
     toString() {
         return `${this.size}-bit float`;
     }
@@ -104,6 +119,10 @@ export class TChar extends TType {
         return t instanceof TChar;
     }
 
+    specifyTypeParams() {
+        return this.clone();
+    }
+
     toString() {
         return 'char';
     }
@@ -119,6 +138,10 @@ export class TBool extends TType {
         if (t instanceof TUnknown) return true;
         // only bools can be assigned to other bools
         return t instanceof TBool;
+    }
+
+    specifyTypeParams() {
+        return this.clone();
     }
 
     toString() {
@@ -150,6 +173,12 @@ export class TTuple extends TType {
         return true;
     }
 
+    specifyTypeParams(args) {
+        const specific = this.clone();
+        specific.types = specific.types.map(t => t.specifyTypeParams(args));
+        return specific;
+    }
+
     toString() {
         return `(${this.types.map(t => t.toString()).join(', ')})`;
     }
@@ -179,6 +208,15 @@ export class TStruct extends TType {
         return true;
     }
 
+    specifyTypeParams(args) {
+        const specific = this.clone();
+        specific.fields = {};
+        for (const k of Object.keys(this.fields)) {
+            specific.fields[k] = this.fields[k].specifyTypeParams(args);
+        }
+        return specific;
+    }
+
     toString() {
         return `{ ${Object.entries(this.fields).map(([k, v]) => `'${v}' ${k}`).join('; ')} }`;
     }
@@ -203,6 +241,12 @@ export class TArray extends TType {
         if (this.baseType === null) return true;
         // the base type needs to be assignable
         return this.baseType.isAssignableFrom(t.baseType);
+    }
+
+    specifyTypeParams(args) {
+        const specific = this.clone();
+        specific.baseType = specific.baseType.specifyTypeParams(args);
+        return specific;
     }
 
     toString() {
@@ -270,6 +314,13 @@ export class TFunction extends TType {
         this.returnType = explicitType.returnType;
     }
 
+    specifyTypeParams(args) {
+        const specific = this.clone();
+        specific.paramTypes = specific.paramTypes.map(t => t.specifyTypeParams(args));
+        specific.returnType = specific.returnType.specifyTypeParams(args);
+        return specific;
+    }
+
     toString() {
         return `(${this.params.map(p => p.toString()).join(', ')}) => ${this.returnType}`;
     }
@@ -312,6 +363,12 @@ export class TUnion extends TType {
         }
     }
 
+    specifyTypeParams(args) {
+        const specific = this.clone();
+        specific.types = specific.types.map(t => t.specifyTypeParams(args));
+        return specific;
+    }
+
     toString() {
         return this.types.map(t => t.toString()).join(' | ');
     }
@@ -323,9 +380,10 @@ export class TUnion extends TType {
  * 'type' is the definition of the type, which makes use of the type parameters.
  */
 export class TGeneric extends TType {
-    constructor(typeParams, type) {
+    constructor(typeParams, paramNames, type) {
         super();
         this.typeParams = typeParams;
+        this.paramNames = paramNames;
         this.type = type;
     }
 
@@ -336,9 +394,17 @@ export class TGeneric extends TType {
     /**
      * Here, we need to clone the type definition and visit it, specifying
      * all instances of TParam. This is where we check the type constraint.
+     * TODO: what about generic types that contain generic types?
      */
     specifyTypeParams(args) {
         const specific = this.type.clone();
+        // create map of param name -> provided arg
+        const argMap = {};
+        for (let i = 0; i < args.length; ++i) {
+            argMap[this.paramNames[i]] = args[i];
+        }
+        // visit the type with the map so that params can be replaced with actual types
+        return specific.specifyTypeParams(argMap);
     }
 }
 
@@ -347,14 +413,22 @@ export class TGeneric extends TType {
  * a type parameters is used.
  */
 export class TParam extends TType {
-    constructor(variance, constraint) {
+    constructor(name, variance, constraint) {
         super();
+        this.name = name;
         this.variance = variance;
         this.constraint = constraint;
     }
 
     isAssignableFrom(t) {
         // TODO
+    }
+
+    specifyTypeParams(args) {
+        const arg = args[this.name];
+        if (this.constraint.op === 'to') {
+            //
+        }
     }
 }
 
