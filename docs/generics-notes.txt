@@ -42,13 +42,71 @@ There are three kinds of variance:
 - Invariance
 - Covariance
 - Contravariance
-Invariance on a type parameter indicates that, given two specific types of a generic type using that type parameter, the only valid assignability relationships are those where the arguments provided for that parameter exactly match. That is, the type argument of one must be both assignable from and to the type argument of the other. The same relationship must apply for assignability between a type and a specified type parameter in any case, such as in a function body. This is always the case when a type parameter is going to be used in both read and write scenarios, such as a mutable structure like an array or struct.
-Covariance on a type parameter indicates that, given two specific types of a generic type using that type parameter, the only valid assignability relationships are those where the 'from' type argument is assignable to the 'to' type argument. This is always the case when a type parameter is going to be used only in read-only scenarios such as a function return type, or getting a value, but NOT write/set scenarios.
-Contravariance is the opposite of covariance. The 'to' type argument must be assignable to the 'from' type argument, and not the other way around. This is always the case when a type parameter is going to be used only in write-only/set scenarios, such as a function parameter (and really not much else), but NEVER in a read/get scenario.
-Variance is taken into account when working out where a type parameter is used. You can set a type parameter as covariant or contravariant explicitly, but if not Ren will infer the variance of the parameter based on where it is used. Anything that will be applied as a type parameter of a function must be either invariant or contravariant, anything else must be either covariant or invariant, and anything that will be used in both cases must be invariant.
+
+Invariance on a type parameter indicates that, given two specific types of a generic type using that type parameter,
+the only valid assignability relationships are those where the arguments provided for that parameter exactly match.
+That is, the type argument of one must be both assignable from and to the type argument of the other.
+The same relationship must apply for assignability between a type and a specified type parameter in any case, such as in a function body.
+This is always the case when a type parameter is going to be used in both read and write scenarios, such as a mutable structure like an array or struct.
+
+Covariance on a type parameter indicates that, given two specific types of a generic type using that type parameter,
+the only valid assignability relationships are those where the 'from' type argument is assignable to the 'to' type argument.
+This is always the case when a type parameter is going to be used only in read-only scenarios such as a function return type,
+or getting a value, but NOT write/set scenarios.
+
+Contravariance is the opposite of covariance.
+The 'to' type argument must be assignable to the 'from' type argument, and not the other way around.
+This is always the case when a type parameter is going to be used only in write-only/set scenarios, such as a function parameter (and really not much else),
+but NEVER in a read/get scenario.
+
+Variance is taken into account when working out where a type parameter is used.
+You can set a type parameter as covariant or contravariant explicitly, but if not Ren will infer the variance of the parameter based on where it is used.
+Anything that will be applied as a parameter of a function must be either invariant or contravariant,
+anything else must be either covariant or invariant, and anything that will be used in both cases must be invariant.
+There is no way to make a type parameter explicitly invariant, but as this is only necessary in instances where it is required,
+there isn't any other option anyway.
+
+Variance does NOT apply when dealing with type parameters themselves.
+Any unset type parameter can be set to any type (ignoring the type constraint).
+It is only when there IS a set type parameter that variance applies:
+- A specific type of a generic type is attempted to be assigned to another specific type of the same generic type.
+  - In this case the variance of each type parameter is checked to determine the assignability between the type arguments.
+- A type parameter is set with a type argument, and a type is attempted to be used in an instance of that type parameter.
+  - In this case the instance of the type parameter preserves the variance information to determine assignability.
+  - THIS MAY NOT BE NECESSARY
+
+Type constraints control which types are allowed to be assigned to type parameters.
+As of now there is only one type of type constraint: an assignability constraint.
+There are two types of assignability constraints:
+- Assignable from constraint
+- Assignable to constraint
+These constraints require an operator to determine which one is being used, and a type to use as the constraint.
+These constraints are useful when you want to ensure that values of the type parameter's type have at least a certain type's behavior.
+
+"Assignable to" is the one expected to be used most of the time.
+It means that the only allowed types are those that are assignable to the provided type.
+
+"Assignable from" is the reverse.
+The only allowed types are those to which the provided type is assignable.
+These MAY only be useful when using contravariance.
+THIS MAY NOT EVEN MAKE ANY SENSE.
+
+Type constraints apply any time a type is being assigned to a type parameter.
+Once a type parameter is set, they will no longer come into play.
 
 There are several new logical problems that come with adding generic types:
 - Specifying generic types
 - Assignability to generic types
 - Assignability to specific types
 - Assignability to type parameters
+
+When **specifying a generic type**, all that applies is type constraints.
+Whatever type is provided has to satisfy the constraint, and then the constraint no longer applies.
+
+Technically, it is not possible to **assign to a generic type**.
+Any usage of a generic type has to incorporate the type parameters, meaning that something has to be provided for the type parameters.
+This means that it will no longer be generic, but specific, even if other type parameters from a containing type or function are used as arguments.
+
+**Assignability to specific types** works just like any other type primarily.
+The underlying types are compared with the type parameters filled in.
+Any time one of the types is a type parameter, the variance is used to determine if the assignment is valid.
