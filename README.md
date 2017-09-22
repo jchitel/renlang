@@ -57,13 +57,13 @@ The module system is heavily inspired by the ECMAScript module system, with a bu
 
 This project is starting from scratch, and will build a full compiler using no external dependencies. This is the TODO list:
 
-- [ ] Grammar
-- [ ] AST logic
-- [ ] Lexical grammar
-- [ ] Lexer
-- [ ] Parser
-- [ ] Type checker
-- [ ] IR code generator
+- [x] Grammar
+- [x] AST logic
+- [x] Lexical grammar
+- [x] Lexer
+- [x] Parser
+- [x] Type checker
+- [x] IR code generator
 - [ ] Runtime library
 - [ ] Interpreter
 - [ ] Self-hosting
