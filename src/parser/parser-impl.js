@@ -254,21 +254,9 @@ export function acceptVarianceOp(parser) {
  */
 export function acceptTypeConstraint(parser) {
     return parser.accept([
-        { name: 'constraintOp', parse: acceptConstraintOp, definite: true },
+        { name: 'colonToken', type: 'COLON', definite: true },
         { name: 'constraintType', parse: acceptType, mess: mess.INVALID_TYPE_PARAM },
     ], AST.TypeConstraint);
-}
-
-/**
- * ConstraintOp ::= COLON | ASS_FROM
- */
-export function acceptConstraintOp(parser) {
-    return parser.accept([{
-        choices: [
-            { name: 'assignableToToken', type: 'COLON' },
-            { name: 'assignableFromToken', type: 'ASS_FROM' },
-        ],
-    }], AST.ConstraintOp);
 }
 
 // ////////

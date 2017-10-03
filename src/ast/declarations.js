@@ -202,9 +202,7 @@ export class TypeParam extends ASTNode {
         // no defined variance means it needs to be inferred from how it is used
         const variance = this.varianceOp === '+' ? 'covariant' : this.varianceOp === '-' ? 'contravariant' : null;
         // no defined constraint means it defaults to (: any)
-        const constraint = this.typeConstraint
-            ? { op: { ':': 'from', '-:': 'to' }[this.typeConstraint.op], type: this.typeConstraint.typeNode.resolveType(typeChecker, module, typeParams) }
-            : { op: 'from', type: new TAny() };
+        const constraint = this.typeConstraint ? this.typeConstraint.typeNode.resolveType(typeChecker, module, typeParams) : new TAny();
         return this.type = new TParam(this.name, variance, constraint);
     }
 }
@@ -221,19 +219,17 @@ export class VarianceOp extends ASTNode {
 
 export class TypeConstraint extends ASTNode {
     reduce() {
-        const { op, opLoc } = this.constraintOp.reduce();
+        const opLoc = this.colonToken.getLocation();
         const typeNode = this.constraintType.reduce();
-        return { con: { op, typeNode }, loc: { startLine: opLoc.startLine, endLine: typeNode.locations.self.endLine, startColumn: opLoc.startColumn, endColumn: typeNode.locations.self.endColumn } };
-    }
-}
-
-export class ConstraintOp extends ASTNode {
-    reduce() {
-        if (this.assignableToToken) {
-            return { op: this.assignableToToken.image, opLoc: this.assignableToToken.getLocation() };
-        } else {
-            return { op: this.assignableFromToken.image, opLoc: this.assignableFromToken.getLocation() };
-        }
+        return {
+            typeNode,
+            loc: {
+                startLine: opLoc.startLine,
+                endLine: typeNode.locations.self.endLine,
+                startColumn: opLoc.startColumn,
+                endColumn: typeNode.locations.self.endColumn,
+            },
+        };
     }
 }
 

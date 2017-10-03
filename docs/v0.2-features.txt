@@ -488,6 +488,10 @@ For classes and structs, the with operator allows setting multiple fields in a s
 
 The expression must be struct-assignable to the assignable value, and will return a new reference.
 
+## Use-site variance
+
+## Pointers
+
 # Tooling
 
 ## Type evaluator

@@ -99,7 +99,6 @@ export default class Tokenizer {
         '=>': 'FAT_ARROW', // used to separate a function's parameter list from its body
         '`': 'BACKTICK',   // used to allow certain functions to be used akin to an operator, either prefix, postfix, or infix
         '.': 'DOT',        // used in field access expressions
-        '-:': 'ASS_FROM',
     };
 
     /**
@@ -215,11 +214,7 @@ export default class Tokenizer {
             } else if (c === '-') {
                 // if it is followed by a number, consume it as a number
                 if (this.kind(c1) === 'number') yield this.consumeNumber(c);
-                else if (c1 === ':') {
-                    // ASS_FROM (NOTE: this will ignore any other operator characters that come immediately after, ASS_FROM takes precedence)
-                    this.moveNext();
-                    yield new Token(Tokenizer.SYMBOL_MAP['-:'], this.lineNumber, this.columnNumber - 1, '-:');
-                } else {
+                else {
                     // other non-colon operator character, consume as operator
                     yield this.consumeOperator(c);
                 }

@@ -426,9 +426,7 @@ export class TParam extends TType {
 
     specifyTypeParams(args) {
         const arg = args[this.name];
-        if (this.constraint.op === 'to') {
-            //
-        }
+        // TODO: continue
     }
 }
 

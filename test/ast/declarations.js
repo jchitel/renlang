@@ -322,13 +322,13 @@ describe('Declaration Nodes', () => {
             p = new decl.TypeParam({
                 nameToken: new Token('IDENT', 1, 1, 'A'),
                 typeConstraint: new decl.TypeConstraint({
-                    constraintOp: new decl.ConstraintOp({ assignableToToken: new Token('COLON', 1, 2, ':') }),
+                    colonToken: new Token('COLON', 1, 2, ':'),
                     constraintType: getDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
                 }),
             });
             expect(p.reduce()).to.eql(new decl.TypeParam({
                 name: 'A',
-                typeConstraint: { op: ':', type: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } } },
+                typeConstraint: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } },
                 locations: {
                     name: loc,
                     constraint: { ...loc, startColumn: 2, endColumn: 3 },
@@ -339,14 +339,14 @@ describe('Declaration Nodes', () => {
                 varianceOp: new decl.VarianceOp({ contravariantToken: new Token('OPER', 1, 1, '-') }),
                 nameToken: new Token('IDENT', 1, 2, 'A'),
                 typeConstraint: new decl.TypeConstraint({
-                    constraintOp: new decl.ConstraintOp({ assignableFromToken: new Token('ASS_FROM', 1, 3, '-:') }),
+                    colonToken: new Token('COLON', 1, 3, ':'),
                     constraintType: getDummyNode({ locations: { self: { ...loc, startColumn: 5, endColumn: 5 } } }),
                 }),
-            })
+            });
             expect(p.reduce()).to.eql(new decl.TypeParam({
                 varianceOp: '-',
                 name: 'A',
-                typeConstraint: { op: '-:', type: { locations: { self: { ...loc, startColumn: 5, endColumn: 5 } } } },
+                typeConstraint: { locations: { self: { ...loc, startColumn: 5, endColumn: 5 } } },
                 locations: {
                     name: { ...loc, startColumn: 2, endColumn: 2 },
                     variance: loc,
