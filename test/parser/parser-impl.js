@@ -164,16 +164,11 @@ describe('parser', () => {
             expect(pars.acceptVarianceOp(new Parser('-')).toTree()).to.eql({ type: 'VarianceOp', children: [{ type: 'OPER', image: '-' }] });
         });
 
-        it('should parse ConstraintOp', () => {
-            expect(pars.acceptConstraintOp(new Parser(':')).toTree()).to.eql({ type: 'ConstraintOp', children: [{ type: 'COLON', image: ':' }] });
-            expect(pars.acceptConstraintOp(new Parser('-:')).toTree()).to.eql({ type: 'ConstraintOp', children: [{ type: 'ASS_FROM', image: '-:' }] });
-        });
-
         it('should parse TypeConstraint', () => {
             expect(pars.acceptTypeConstraint(new Parser(': int')).toTree()).to.eql({
                 type: 'TypeConstraint',
                 children: [
-                    { type: 'ConstraintOp', children: [{ type: 'COLON', image: ':' }] },
+                    { type: 'COLON', image: ':' },
                     { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
                 ],
             });
@@ -195,7 +190,7 @@ describe('parser', () => {
                     {
                         type: 'TypeConstraint',
                         children: [
-                            { type: 'ConstraintOp', children: [{ type: 'COLON', image: ':' }] },
+                            { type: 'COLON', image: ':' },
                             { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
                         ],
                     },
@@ -209,7 +204,7 @@ describe('parser', () => {
                     {
                         type: 'TypeConstraint',
                         children: [
-                            { type: 'ConstraintOp', children: [{ type: 'COLON', image: ':' }] },
+                            { type: 'COLON', image: ':' },
                             { type: 'Type', children: [{ type: 'INT', image: 'int' }] },
                         ],
                     },

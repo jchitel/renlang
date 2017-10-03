@@ -189,8 +189,8 @@ export class TypeParam extends ASTNode {
         node.name = this.nameToken.image;
         node.registerLocation('name', this.nameToken.getLocation());
         if (this.typeConstraint) {
-            const { con, loc } = this.typeConstraint.reduce();
-            node.typeConstraint = con;
+            const { typeNode, loc } = this.typeConstraint.reduce();
+            node.typeConstraint = typeNode;
             node.registerLocation('constraint', loc);
             end = loc;
         }

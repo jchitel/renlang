@@ -122,7 +122,7 @@ describe('Type Nodes', () => {
             const type = new types.IdentifierType('myType', loc);
             const module = { types: {}, path: '/index.ren' };
             const typeChecker = { errors: [] };
-            const resolved = type.resolveType(typeChecker, module);
+            const resolved = type.resolveType(typeChecker, module, {});
             expect(resolved).to.eql(new TUnknown());
             expect(typeChecker.errors.length).to.eql(1);
             expect(typeChecker.errors[0].message).to.eql('Type "myType" is not defined [/index.ren:1:1]');
@@ -132,7 +132,7 @@ describe('Type Nodes', () => {
             const type = new types.IdentifierType('myType', loc);
             const module = { types: { myType: {} } };
             const typeChecker = getDummyTypeChecker(int);
-            expect(type.resolveType(typeChecker, module)).to.eql(int);
+            expect(type.resolveType(typeChecker, module, {})).to.eql(int);
         });
     });
 
