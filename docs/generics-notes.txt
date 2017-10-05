@@ -60,11 +60,10 @@ This is always the case when a type parameter is going to be used only in write-
 but NEVER in a read/get scenario.
 
 Variance is taken into account when working out where a type parameter is used.
-You can set a type parameter as covariant or contravariant explicitly, but if not Ren will infer the variance of the parameter based on where it is used.
+You can only set a type parameter as covariant or contravariant explicitly; parameters are always invariant by default.
 Anything that will be applied as a parameter of a function must be either invariant or contravariant,
 anything else must be either covariant or invariant, and anything that will be used in both cases must be invariant.
-There is no way to make a type parameter explicitly invariant, but as this is only necessary in instances where it is required,
-there isn't any other option anyway.
+This logic may be adjusted one day to always be implicit.
 
 Variance does NOT apply when dealing with type parameters themselves.
 Any unset type parameter can be set to any type (ignoring the type constraint).
@@ -77,19 +76,8 @@ It is only when there IS a set type parameter that variance applies:
 
 Type constraints control which types are allowed to be assigned to type parameters.
 As of now there is only one type of type constraint: an assignability constraint.
-There are two types of assignability constraints:
-- Assignable from constraint
-- Assignable to constraint
-These constraints require an operator to determine which one is being used, and a type to use as the constraint.
 These constraints are useful when you want to ensure that values of the type parameter's type have at least a certain type's behavior.
-
-"Assignable to" is the one expected to be used most of the time.
-It means that the only allowed types are those that are assignable to the provided type.
-
-"Assignable from" is the reverse.
-The only allowed types are those to which the provided type is assignable.
-These MAY only be useful when using contravariance.
-THIS MAY NOT EVEN MAKE ANY SENSE.
+A type constraint means that the only allowed types are those that are assignable to the provided type.
 
 Type constraints apply any time a type is being assigned to a type parameter.
 Once a type parameter is set, they will no longer come into play.
