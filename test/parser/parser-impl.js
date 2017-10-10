@@ -499,7 +499,7 @@ describe('parser', () => {
             expect(pars.acceptType(new Parser('MyType<>')).toTree()).to.eql({
                 type: 'Type',
                 children: [{
-                    type: 'GenericType',
+                    type: 'SpecificType',
                     children: [
                         { type: 'IDENT', image: 'MyType' },
                         { type: 'TypeArgList', children: [{ type: 'OPER', image: '<' }, { type: 'OPER', image: '>' }] },
@@ -617,10 +617,10 @@ describe('parser', () => {
             });
         });
 
-        it('should parse GenericType', () => {
-            const parsed = pars.acceptGenericType(new Parser('MyType<int, string, void>'));
+        it('should parse SpecificType', () => {
+            const parsed = pars.acceptSpecificType(new Parser('MyType<int, string, void>'));
             expect(parsed.toTree()).to.eql({
-                type: 'GenericType',
+                type: 'SpecificType',
                 children: [
                     { type: 'IDENT', image: 'MyType' },
                     {

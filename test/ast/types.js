@@ -310,16 +310,16 @@ describe('Type Nodes', () => {
         });
     });
 
-    describe('GenericType', () => {
-        it('should reduce a generic type', () => {
-            const type = new types.GenericType({
+    describe('SpecificType', () => {
+        it('should reduce a specific type', () => {
+            const type = new types.SpecificType({
                 nameToken: new Token('IDENT', 1, 1, 'MyType'),
                 typeArgList: new types.TypeArgList({
                     types: [getDummyNode(), getDummyNode()],
                     closeGtToken: new Token('OPER', 1, 7, '>'),
                 }),
             });
-            expect(type.reduce()).to.eql(new types.GenericType({
+            expect(type.reduce()).to.eql(new types.SpecificType({
                 name: 'MyType',
                 typeArgs: [{}, {}],
                 locations: { name: { ...loc, endColumn: 6 }, self: { ...loc, endColumn: 7 } },

@@ -409,6 +409,23 @@ export class TGeneric extends TType {
 }
 
 /**
+ * Represents a "specification" of a generic type,
+ * with type params filled in.
+ * TODO: we don't really know what's needed here
+ */
+export class TSpecific extends TType {
+    constructor(generic, type) {
+        super();
+        this.generic = generic;
+        this.type = type;
+    }
+
+    isAssignableFrom(t) {
+        // TODO
+    }
+}
+
+/**
  * Represents the type of an untyped type parameter, used in TGeneric and wherever
  * a type parameters is used.
  */

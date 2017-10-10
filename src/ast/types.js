@@ -206,7 +206,7 @@ export class UnionType extends ASTNode {
     }
 }
 
-export class GenericType extends ASTNode {
+export class SpecificType extends ASTNode {
     reduce() {
         const node = this._createNewNode();
         node.name = this.nameToken.image;
@@ -217,8 +217,7 @@ export class GenericType extends ASTNode {
     }
 
     /**
-     * So, this "generic type" is an "instantiation" of some type declaration with type parameters.
-     * In reality, this should be called a "specific type" because it is no longer generic.
+     * So, this "specific type" is an "instantiation" of some generic type.
      * So what type does this resolve to?
      * Well, a generic type is a combination of the type parameters and the type definition, which uses the type parameters.
      * When it is made specific, there are no longer any type parameters; they are "filled in".
@@ -228,7 +227,7 @@ export class GenericType extends ASTNode {
      * So we need to do what an IdentifierType does and look up the type name, which will resolve to a TGeneric.
      * We then iterate over the type arguments (resolving their types first), link them with the type parameters of the TGeneric,
      * then take the type definition of the TGeneric and visit it with the type arguments, filling in the type parameters.
-     * The result will be a copy of the type definition with all type parameters filled in.
+     * The result will be a TSpecific copy of the TGeneric with all type parameters filled in.
      * To do the "filling in" we will need yet another visitor method for each type node class, call it specifyTypeParams.
      */
     resolveType(typeChecker, module, typeParams) {

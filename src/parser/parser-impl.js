@@ -279,7 +279,7 @@ export function acceptTypeConstraint(parser) {
  *          TupleType |            # Tuple type
  *          FunctionType |         # Function type
  *          ParenthesizedType |    # Parenthesized type
- *          GenericType |          # Generic type
+ *          SpecificType |         # Specific type ("instantiation" of generic type)
  *          IDENT |                # Already defined type
  *          Type TypeSuffix
  *
@@ -306,7 +306,7 @@ export function acceptType(parser) {
                 { name: 'functionType', parse: acceptFunctionType },
                 { name: 'parenthesized', parse: acceptParenthesizedType },
                 { name: 'tupleType', parse: acceptTupleType },
-                { name: 'genericType', parse: acceptGenericType },
+                { name: 'specificType', parse: acceptSpecificType },
                 { name: 'nameToken', type: 'IDENT' },
             ],
             suffixes: [
@@ -374,13 +374,13 @@ export function acceptTupleType(parser) {
 }
 
 /**
- * GenericType ::= IDENT TypeArgList
+ * SpecificType ::= IDENT TypeArgList
  */
-export function acceptGenericType(parser) {
+export function acceptSpecificType(parser) {
     return parser.accept([
         { name: 'nameToken', type: 'IDENT' },
         { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
-    ], AST.GenericType);
+    ], AST.SpecificType);
 }
 
 /**
