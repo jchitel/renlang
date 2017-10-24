@@ -1,0 +1,12 @@
+export { default as RArray } from './RArray';
+export { default as RBool } from './RBool';
+export { default as RChar } from './RChar';
+export { default as RFloat } from './RFloat';
+export { default as RInteger } from './RInteger';
+export { default as RString } from './RString';
+export { default as RStruct } from './RStruct';
+export { default as RTuple } from './RTuple';
+export { default as RFunction } from './RFunction';
+export { ReferenceValue } from './RValue';
+import RValue from './RValue';
+export default RValue;
