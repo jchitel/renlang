@@ -5,7 +5,6 @@ import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { VALUE_NOT_DEFINED, INVALID_BINARY_OPERATOR } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import { BinaryOperatorRef } from '../../runtime/instructions';
@@ -24,17 +23,11 @@ export class BinaryExpression extends Expression {
         const rightType = this.right.getType(typeChecker, module, context);
         // create the operator of the specific type
         const oper = createBinary(this.symbol, 'infix', leftType, rightType);
-        if (!oper) {
-            // no infix operator of that kind
-            typeChecker.errors.push(new TypeCheckError(VALUE_NOT_DEFINED(this.symbol), module.path, this.locations.oper));
-            return new TUnknown();
-        }
+        // no infix operator of that kind
+        if (!oper) return typeChecker.pushError(VALUE_NOT_DEFINED(this.symbol), module.path, this.locations.oper);
         this.operator = oper;
-        if (this.operator.functionType instanceof TUnknown) {
-            // invalid left/right types
-            typeChecker.errors.push(new TypeCheckError(INVALID_BINARY_OPERATOR(this.symbol, leftType, rightType), module.path, this.locations.self));
-            return new TUnknown();
-        }
+        // invalid left/right types
+        if (this.operator.functionType instanceof TUnknown) return typeChecker.pushError(INVALID_BINARY_OPERATOR(this.symbol, leftType, rightType), module.path, this.locations.self);
         // the return type of the operator type is the type of this expression
         return (this.operator.functionType as TFunction).returnType;
     }

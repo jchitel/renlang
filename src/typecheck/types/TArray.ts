@@ -5,7 +5,6 @@ import { SymbolTable } from '../TypeCheckContext';
 
 /**
  * Array type, variable sized list of homogeneous values (only one type).
- * TODO: handle type parameters
  */
 export default class TArray extends TType {
     baseType: TType;
@@ -31,6 +30,10 @@ export default class TArray extends TType {
         specific.baseType = specific.baseType.specifyTypeParams(args);
         return specific;
     }
+
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        this.baseType.visitInferTypeArgumentTypes(argMap, argType);
+    }
     
     isInteger() { return false; }
     isFloat() { return false; }
@@ -40,13 +43,16 @@ export default class TArray extends TType {
     isStruct() { return false; }
     isArray() { return true; }
     isFunction() { return false; }
+    isGeneric() { return false; }
 
     hasField() { return false; }
 
     getBaseType() { return this.baseType; }
     getFieldType(): never { throw new Error('never'); }
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType(): never { throw new Error('never'); }
 
     toString() {

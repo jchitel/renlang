@@ -1,6 +1,7 @@
 import TType from './TType';
 import TNever from './TNever';
 import { TypeDeclaration } from '../../syntax/declarations';
+import { SymbolTable } from '../TypeCheckContext';
 
 
 /**
@@ -27,6 +28,10 @@ export default class TRecursive extends TType {
     specifyTypeParams() {
         return this;
     }
+
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        return this.decl.type.visitInferTypeArgumentTypes(argMap, argType);
+    }
     
     isInteger() { return this.decl.type.isInteger(); }
     isFloat() { return this.decl.type.isFloat(); }
@@ -36,6 +41,7 @@ export default class TRecursive extends TType {
     isStruct() { return this.decl.type.isStruct(); }
     isArray() { return this.decl.type.isArray(); }
     isFunction() { return this.decl.type.isFunction(); }
+    isGeneric() { return this.decl.type.isGeneric(); }
 
     hasField(field: string) { return this.decl.type.hasField(field); }
 
@@ -59,10 +65,24 @@ export default class TRecursive extends TType {
         }
         throw new Error('never');
     }
+    
+    getTypeParamCount() {
+        if (this.isGeneric()) {
+            return this.decl.type.getTypeParamCount();
+        }
+        throw new Error('never');
+    }
 
     getParamTypes() {
         if (this.isFunction()) {
             return this.decl.type.getParamTypes();
+        }
+        throw new Error('never');
+    }
+    
+    getTypeParamTypes() {
+        if (this.isGeneric()) {
+            return this.decl.type.getTypeParamTypes();
         }
         throw new Error('never');
     }

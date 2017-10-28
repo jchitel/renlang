@@ -8,7 +8,6 @@ import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import Module from '../../runtime/Module';
 import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
 
@@ -36,13 +35,16 @@ export class LambdaExpression extends Expression {
         }
         // type check the function body, passing along the starting symbol table
         const actualReturnType = this.body.getType(typeChecker, module, context);
-        if (!this.type.returnType.isAssignableFrom(actualReturnType)) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(actualReturnType, this.type.returnType.toString()), module.path, this.locations.self));
-        }
+        if (!this.type.returnType.isAssignableFrom(actualReturnType))
+            typeChecker.pushError(TYPE_MISMATCH(actualReturnType, this.type.returnType.toString()), module.path, this.locations.self);
     }
 
     translate(translator: Translator, func: Func) {
         return func.addRefInstruction(translator, ref => translator.lambda(this, ref, func.moduleId));
+    }
+
+    prettyName() {
+        return `<lambda>(${this.params.map(p => p.prettyName()).join(', ')})`;
     }
 }
 
@@ -77,6 +79,10 @@ export class LambdaParam extends ASTNode implements TypedNode {
     resolveType(_typeChecker: TypeChecker, _module: Module, _context: TypeCheckContext) {
         // if the type isn't explicit, we can't infer it, that will happen during type checking
         return new TUnknown(); // TODO: we need something else here
+    }
+
+    prettyName() {
+        return this.name;
     }
 }
 

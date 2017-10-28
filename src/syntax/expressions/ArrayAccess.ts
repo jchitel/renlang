@@ -1,11 +1,9 @@
 import { Expression, STExpression } from './Expression';
 import { Token } from '../../parser/Tokenizer';
-import { TUnknown } from '../../typecheck/types';
 import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { NOT_ARRAY, TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import { ArrayAccessRef } from '../../runtime/instructions';
@@ -17,16 +15,12 @@ export class ArrayAccess extends Expression {
 
     resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
         const arrayType = this.target.getType(typeChecker, module, context);
-        if (!arrayType.isArray()) {
-            // type is not an array type so it can't be inferred
-            typeChecker.errors.push(new TypeCheckError(NOT_ARRAY, module.path, this.target.locations.self));
-            return new TUnknown();
-        }
+        // type is not an array type so it can't be inferred
+        if (!arrayType.isArray()) return typeChecker.pushError(NOT_ARRAY, module.path, this.target.locations.self);
         // verify that the index expression is an integer
         const indexExpType = this.indexExp.getType(typeChecker, module, context);
-        if (!indexExpType.isInteger()) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(indexExpType, 'unsigned int'), module.path, this.indexExp.locations.self));
-        }
+        if (!indexExpType.isInteger())
+            typeChecker.pushError(TYPE_MISMATCH(indexExpType, 'unsigned int'), module.path, this.indexExp.locations.self);
         // type is the base type of the array
         return arrayType.getBaseType();
     }

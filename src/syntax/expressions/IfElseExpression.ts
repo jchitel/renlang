@@ -5,7 +5,6 @@ import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import { FalseBranch, CopyRef, Jump, Noop } from '../../runtime/instructions';
@@ -18,9 +17,7 @@ export class IfElseExpression extends Expression {
 
     resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
         const conditionType = this.condition.getType(typeChecker, module, context);
-        if (!conditionType.isBool()) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.condition.locations.self));
-        }
+        if (!conditionType.isBool()) typeChecker.pushError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.condition.locations.self);
         const type = this.consequent.getType(typeChecker, module, context);
         const altType = this.alternate.getType(typeChecker, module, context);
         return determineGeneralType(type, altType) as TType;

@@ -16,16 +16,18 @@ export default abstract class Func {
     id: number;
     ast: ASTNode;
     moduleId: number;
+    modulePath: string;
     instructions: Instruction[];
     scope: { [key: string]: number }[];
 
-    constructor(id: number, moduleFunction: { ast: ASTNode }, moduleId: number) {
+    constructor(id: number, moduleFunction: { ast: ASTNode }, moduleId: number, modulePath: string = '') {
         // id of the function, a target for callers
         this.id = id;
         // the AST of the code that represents this function
         this.ast = moduleFunction.ast;
         // the id of the module containing the function
         this.moduleId = moduleId;
+        this.modulePath = modulePath;
         // the list of instructions that make up this function
         this.instructions = [];
         // the scope stack (just for the translation process, not the runtime table)
@@ -33,6 +35,7 @@ export default abstract class Func {
     }
 
     abstract translate(translator: Translator): void;
+    abstract getStackEntry(): string;
 
     /**
      * It is a common use case to create an instruction that might be modified later,
@@ -119,8 +122,8 @@ export default abstract class Func {
 export class FunctionFunc extends Func {
     ast: ASTFunction;
 
-    constructor(id: number, moduleFunction: { ast: ASTFunction }, moduleId: number) {
-        super(id, moduleFunction, moduleId);
+    constructor(id: number, moduleFunction: { ast: ASTFunction }, moduleId: number, modulePath: string = '') {
+        super(id, moduleFunction, moduleId, modulePath);
     }
     
     /**
@@ -149,5 +152,10 @@ export class FunctionFunc extends Func {
         } else {
             body.translate(translator, this);
         }
+    }
+
+    getStackEntry() {
+        const { startLine: line, startColumn: column } = this.ast.locations.self;
+        return `${this.ast.prettyName()} (${this.modulePath}:${line}:${column})`;
     }
 }

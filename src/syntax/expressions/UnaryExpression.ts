@@ -5,7 +5,6 @@ import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { VALUE_NOT_DEFINED, INVALID_UNARY_OPERATOR } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import { UnaryOperatorRef } from '../../runtime/instructions';
@@ -22,17 +21,11 @@ export class UnaryExpression extends Expression {
         const targetType = this.target.getType(typeChecker, module, context);
         // check if the operator exists
         const oper = createUnary(this.symbol, this.prefix ? 'prefix' : 'postfix', targetType);
-        if (!oper) {
-            // no unary operator of that kind
-            typeChecker.errors.push(new TypeCheckError(VALUE_NOT_DEFINED(this.symbol), module.path, this.locations.oper));
-            return new TUnknown();
-        }
+        // no unary operator of that kind
+        if (!oper) return typeChecker.pushError(VALUE_NOT_DEFINED(this.symbol), module.path, this.locations.oper);
         this.operator = oper;
-        if (this.operator.functionType instanceof TUnknown) {
-            // invalid target type
-            typeChecker.errors.push(new TypeCheckError(INVALID_UNARY_OPERATOR(this.symbol, targetType), module.path, this.locations.self));
-            return new TUnknown();
-        }
+        // invalid target type
+        if (this.operator.functionType instanceof TUnknown) return typeChecker.pushError(INVALID_UNARY_OPERATOR(this.symbol, targetType), module.path, this.locations.self);
         // the return type of the operator type is the type of this expression
         return (this.operator.functionType as TFunction).returnType;
     }

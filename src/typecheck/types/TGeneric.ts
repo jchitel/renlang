@@ -1,6 +1,7 @@
 import TType from './TType';
 import TParam from './TParam';
 import { SymbolTable } from '../TypeCheckContext';
+import OrderedMap from './OrderedMap';
 
 
 /**
@@ -9,19 +10,17 @@ import { SymbolTable } from '../TypeCheckContext';
  * 'type' is the definition of the type, which makes use of the type parameters.
  */
 export default class TGeneric extends TType {
-    typeParams: SymbolTable<TType>;
-    paramNames: string[];
+    typeParams: OrderedMap<TParam>;
     type: TType;
 
-    constructor(typeParams: { [name: string]: TParam }, paramNames: string[], type: TType) {
+    constructor(typeParams: OrderedMap<TParam>, type: TType) {
         super();
         this.typeParams = typeParams;
-        this.paramNames = paramNames;
         this.type = type;
     }
 
-    isAssignableFrom(_t: TType) {
-        // TODO
+    isAssignableFrom() {
+        // you can't ever just get a generic type without specifying type arguments
         return false;
     }
 
@@ -32,17 +31,23 @@ export default class TGeneric extends TType {
     /**
      * Here, we need to clone the type definition and visit it, specifying
      * all instances of TParam. This is where we check the type constraint.
-     * TODO: what about generic types that contain generic types?
      */
     specifyGenericType(args: TType[]) {
         const specific = this.type.clone();
         // create map of param name -> provided arg
         const argMap: SymbolTable<TType> = {};
         for (let i = 0; i < args.length; ++i) {
-            argMap[this.paramNames[i]] = args[i];
+            const name = this.typeParams.getKey(i);
+            argMap[name] = this.typeParams.get(name).createTypeArg(args[i]);
         }
         // visit the type with the map so that params can be replaced with actual types
         return specific.specifyTypeParams(argMap);
+    }
+
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        for (const p of this.typeParams) {
+            p.visitInferTypeArgumentTypes(argMap, argType);
+        }
     }
     
     isInteger() { return this.type.isInteger(); }
@@ -53,6 +58,7 @@ export default class TGeneric extends TType {
     isStruct() { return this.type.isStruct(); }
     isArray() { return this.type.isArray(); }
     isFunction() { return this.type.isFunction(); }
+    isGeneric() { return true; }
     
     hasField(field: string) { return this.type.hasField(field); }
 
@@ -68,8 +74,16 @@ export default class TGeneric extends TType {
         return this.type.getParamCount();
     }
 
+    getTypeParamCount() {
+        return this.getTypeParamTypes.length;
+    }
+
     getParamTypes() {
         return this.type.getParamTypes();
+    }
+
+    getTypeParamTypes() {
+        return this.typeParams;
     }
 
     getReturnType() {

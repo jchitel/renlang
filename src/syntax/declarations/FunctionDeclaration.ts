@@ -4,12 +4,12 @@ import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
 import Module from '../../runtime/Module';
 import { TType, TFunction, TParam, TUnknown } from '../../typecheck/types';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { STTypeParamList, TypeParam } from './TypeDeclaration';
 import { Type, STType } from '../types/Type';
 import { Expression, STExpression } from '../expressions';
 import { Statement, STStatement, STBlock } from '../statements';
 import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
+import OrderedMap from '../../typecheck/types/OrderedMap';
 
 
 export class FunctionDeclaration extends ASTNode {
@@ -23,9 +23,12 @@ export class FunctionDeclaration extends ASTNode {
         let type: TType;
         const context = new TypeCheckContext();
         // resolve type parameter types (this must be done first because param and return types may use them)
+        let typeParams: OrderedMap<TParam> | undefined;
         if (this.typeParams) {
+            typeParams = new OrderedMap();
             for (const p of this.typeParams) {
                 context.typeParams[p.name] = p.getType(typeChecker, module, context) as TParam;
+                typeParams.add(p.name, context.typeParams[p.name]);
             }
         }
         // resolve types of parameters and return type
@@ -33,7 +36,7 @@ export class FunctionDeclaration extends ASTNode {
         const returnType = this.returnType.getType(typeChecker, module, context);
         // the type of the function will be unknown if any component types are unknown, otherwise it has a function type
         if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) type = new TUnknown();
-        else type = new TFunction(paramTypes, returnType, context.typeParams);
+        else type = new TFunction(paramTypes, returnType, typeParams);
         // create a symbol table initialized to contain the parameters
         for (let i = 0; i < this.params.length; ++i) {
             context.symbolTable[this.params[i].name] = paramTypes[i];
@@ -41,9 +44,13 @@ export class FunctionDeclaration extends ASTNode {
         // type check the function body, passing along the starting symbol table and the return type of the function as the expected type of the body
         const actualReturnType = this.body.getType(typeChecker, module, context) as TType;
         if (!(returnType instanceof TUnknown) && !returnType.isAssignableFrom(actualReturnType)) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(actualReturnType, returnType.toString()), module.path, this.returnType.locations.self));
+            typeChecker.pushError(TYPE_MISMATCH(actualReturnType, returnType.toString()), module.path, this.returnType.locations.self);
         }
         return type;
+    }
+
+    prettyName() {
+        return `${this.name}(${this.params.map(p => p.prettyName()).join(', ')})`;
     }
 }
 
@@ -64,6 +71,7 @@ export class STFunctionDeclaration extends CSTNode<FunctionDeclaration> {
         if (this.typeParamList) node.typeParams = this.typeParamList.reduce();
         node.params = this.paramsList.reduce();
         node.body = this.functionBody.reduce();
+        node.createAndRegisterLocation('self', node.locations.name, node.body.locations.self);
         return node;
     }
 }
@@ -89,6 +97,10 @@ export class Param extends ASTNode implements TypedNode {
 
     resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
         return this.typeNode.getType(typeChecker, module, context);
+    }
+
+    prettyName() {
+        return `${this.type} ${this.name}`;
     }
 }
 

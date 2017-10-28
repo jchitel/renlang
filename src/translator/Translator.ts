@@ -36,7 +36,7 @@ export default class Translator {
         if (!mainFunction || !this.isMainSignature(mainFunction.ast.type as TFunction)) {
             throw new Error(`Main module must contain an entry point function with the name "main", return type "void" or integer, and a variable amount of string arguments [${mainModule.path}:1:1]`);
         }
-        const func = new FunctionFunc(0, mainFunction, 0);
+        const func = new FunctionFunc(0, mainFunction, 0, mainModule.path);
         mainFunction.func = func;
         this.functions.push(func);
         func.translate(this);
@@ -76,7 +76,7 @@ export default class Translator {
      * and return an instruction that creates a reference to it with the given id.
      */
     lambda(lambda: LambdaExpression, ref: number, moduleId: number) {
-        const func = new FunctionFunc(this.functions.length, { ast: lambda }, moduleId);
+        const func = new FunctionFunc(this.functions.length, { ast: lambda }, moduleId, this.modules[moduleId].path);
         this.functions.push(func);
         func.translate(this);
         return new SetFunctionRef(ref, func.id);
@@ -98,7 +98,7 @@ export default class Translator {
         } else if (module.functions[name]) {
             if (!module.functions[name].func) {
                 // name references a function that has not yet been translated, translate it
-                const func = new FunctionFunc(this.functions.length, module.functions[name], moduleId);
+                const func = new FunctionFunc(this.functions.length, module.functions[name], moduleId, this.modules[moduleId].path);
                 module.functions[name].func = func;
                 this.functions.push(func);
                 func.translate(this);
@@ -109,7 +109,7 @@ export default class Translator {
             // not imported, not a function, MUST be a constant
             if (!module.constants[name].func) {
                 // name references a constant that has not yet been translated, translate it
-                const func = new ConstFunc(this.functions.length, module.constants[name], moduleId);
+                const func = new ConstFunc(this.functions.length, module.constants[name], moduleId, this.modules[moduleId].path);
                 module.constants[name].func = func;
                 this.functions.push(func);
                 func.translate(this);

@@ -115,11 +115,11 @@ export default class Tokenizer {
     };
 
     private source: string;
-    private list: LazyList<string>;
+    public list: LazyList<string>;
     private gen: Iterator<Token>;
     private lineNumber: number;
     private currentLineOffset: number;
-    private ignoreMode: boolean;
+    public ignoreMode: boolean;
 
     /**
      * - source: a reference to the original source string

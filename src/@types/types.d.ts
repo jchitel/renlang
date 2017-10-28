@@ -22,3 +22,5 @@ interface Class<T> {
 }
 
 type Optional<T> = T | null;
+
+type bool = boolean;

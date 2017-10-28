@@ -9,7 +9,6 @@ export { default as TInteger } from './TInteger';
 export { default as TNever } from './TNever';
 export { default as TParam } from './TParam';
 export { default as TRecursive } from './TRecursive';
-export { default as TSpecific } from './TSpecific';
 export { default as TStruct } from './TStruct';
 export { default as TTuple } from './TTuple';
 export { default as TType } from './TType';

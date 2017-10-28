@@ -17,6 +17,8 @@ export default class TBool extends TType {
     specifyTypeParams() {
         return this.clone();
     }
+
+    visitInferTypeArgumentTypes() {}
     
     isInteger() { return false; }
     isFloat() { return false; }
@@ -26,13 +28,16 @@ export default class TBool extends TType {
     isStruct() { return false; }
     isArray() { return false; }
     isFunction() { return false; }
+    isGeneric() { return false; }
     
     hasField() { return false; }
 
     getBaseType(): never { throw new Error('never'); }
     getFieldType(): never { throw new Error('never'); }
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType(): never { throw new Error('never'); }
 
     toString() {

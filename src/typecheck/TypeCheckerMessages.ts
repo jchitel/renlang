@@ -19,3 +19,7 @@ export const NOT_STRUCT = 'Cannot access field of a value that is not a struct';
 export const NOT_ARRAY = 'Cannot access index of a value that is not an array';
 export const CONFLICTING_ASSOCIATIVITY = (oper1: string, oper2: string) => `Precedence order between operators "${oper1}" and "${oper2}" could not be established because they have conflicting associativity`;
 export const INVALID_ARG_COUNT = (expected: number, actual: number) => `Invalid argument count: expected ${expected}, actual ${actual}`;
+export const NOT_GENERIC = (name: string) => `Type "${name}" is not generic`;
+export const NOT_GENERIC_FUNCTION = 'Function is not generic';
+export const INVALID_TYPE_ARG = (type: TType, name: string, constraint: TType) => `Type "${type}" is not assignable to type parameter "${name}" with constraint "${constraint}"`;
+export const INVALID_TYPE_ARG_COUNT = (expected: number, actual: number) => `Invalid type argument count: expected ${expected}, actual ${actual}`;

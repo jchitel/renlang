@@ -30,6 +30,15 @@ export default class TypeChecker {
     }
 
     /**
+     * Helper function to add a type check error and return a resolved type at the same time.
+     * Because most errors result in an unknown type, the default is TUnknown. 
+     */
+    pushError(message: string, modulePath: string, location: ILocation, resolvedType: TType = new TUnknown()) {
+        this.errors.push(new TypeCheckError(message, modulePath, location));
+        return resolvedType;
+    }
+
+    /**
      * Perform semantic analysis on the program, starting with the AST and file path of the
      * entry point (known as "main") module.
      * The outputted value will be a table of all modules in the program,

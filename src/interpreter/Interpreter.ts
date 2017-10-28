@@ -173,11 +173,14 @@ export default class Interpreter {
     }
 
     printException() {
-        // TODO
+        process.stdout.write(`Runtime error:
+  ${this.error.toString()}
+Stack trace:
+${this.stackTrace.map(f => `  ${this.functions[f.func].getStackEntry()}`)}`);
     }
 
     exceptionRoutine() {
-        this.stackTrace = []; // TODO: get line/column info
+        this.stackTrace = [];
         // hold onto the index of the frame of the current function
         let funcFrame = this.funcFrame;
         // while there are still frames in the stack
@@ -202,7 +205,7 @@ export default class Interpreter {
             } else if (frame instanceof FunctionFrame) {
                 // get the caller function frame and add this function to the stack trace
                 funcFrame = frame.callerFuncFrame;
-                this.stackTrace.push(frame); // TODO: get line/column info
+                this.stackTrace.push(frame);
             }
         }
     }

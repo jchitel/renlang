@@ -2,7 +2,6 @@ import { Statement, STStatement } from './Statement';
 import { Token } from '../../parser/Tokenizer';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { INVALID_CONTINUE_STATEMENT, INVALID_LOOP_NUM } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import { TNever } from '../../typecheck/types';
@@ -16,9 +15,9 @@ export class ContinueStatement extends Statement {
 
     resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
         if (context.loopNumber < 0) {
-            typeChecker.errors.push(new TypeCheckError(INVALID_CONTINUE_STATEMENT, module.path, this.locations.self));
+            typeChecker.pushError(INVALID_CONTINUE_STATEMENT, module.path, this.locations.self);
         } else if (this.loopNumber < 0 || this.loopNumber > context.loopNumber) {
-            typeChecker.errors.push(new TypeCheckError(INVALID_LOOP_NUM(this.loopNumber, context.loopNumber), module.path, this.locations.self));
+            typeChecker.pushError(INVALID_LOOP_NUM(this.loopNumber, context.loopNumber), module.path, this.locations.self);
         }
         return new TNever();
     }

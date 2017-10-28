@@ -22,6 +22,8 @@ export default class TNever extends TType {
     specifyTypeParams() {
         return this;
     }
+    
+    visitInferTypeArgumentTypes() {}
 
     // 'never' is assignable to all types,
     // meaning that it can be technically used anywhere any type can be used.
@@ -33,6 +35,7 @@ export default class TNever extends TType {
     isStruct() { return true; }
     isArray() { return true; }
     isFunction() { return true; }
+    isGeneric() { return true; }
     
     hasField() { return false; }
 
@@ -40,7 +43,9 @@ export default class TNever extends TType {
     getBaseType() { return this.clone(); }
     getFieldType() { return this.clone(); }
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType() { return this.clone(); }
 
     toString() {

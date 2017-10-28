@@ -3,7 +3,6 @@ import { Expression, STExpression } from '../expressions';
 import { Token } from '../../parser/Tokenizer';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
 import Translator from '../../translator/Translator';
@@ -28,7 +27,7 @@ export class DoWhileStatement extends Statement {
         // type check the condition
         const conditionType = this.conditionExp.getType(typeChecker, module, context);
         if (!conditionType.isBool()) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.conditionExp.locations.self));
+            typeChecker.pushError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.conditionExp.locations.self);
         }
         return returnType;
     }

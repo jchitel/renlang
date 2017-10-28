@@ -18,6 +18,10 @@ export class ExportDeclaration extends ASTNode {
         // visit the value of the export
         return (this.value as Expression).getType(typeChecker, module, context);
     }
+
+    prettyName() {
+        return `export ${this.name}`;
+    }
 }
 
 export class STExportDeclaration extends CSTNode<ExportDeclaration> {
@@ -31,6 +35,7 @@ export class STExportDeclaration extends CSTNode<ExportDeclaration> {
         node.name = name;
         node.registerLocation('name', loc);
         node.value = this.exportValue.reduce();
+        node.createAndRegisterLocation('self', node.locations.name, node.value.locations.self);
         return node;
     }
 }

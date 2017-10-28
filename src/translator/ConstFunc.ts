@@ -8,8 +8,8 @@ import Translator from './Translator';
 export default class ConstFunc extends Func {
     ast: ExportDeclaration;
 
-    constructor(id: number, moduleFunction: { ast: ExportDeclaration }, moduleId: number) {
-        super(id, moduleFunction, moduleId);
+    constructor(id: number, moduleFunction: { ast: ExportDeclaration }, moduleId: number, modulePath: string = '') {
+        super(id, moduleFunction, moduleId, modulePath);
     }
 
     translate(translator: Translator) {
@@ -24,5 +24,10 @@ export default class ConstFunc extends Func {
         branch.target = this.nextInstrNum();
         const localRef = this.addRefInstruction(translator, ref => new ConstRef(ref, constRef));
         this.addInstruction(new Return(localRef));
+    }
+    
+    getStackEntry() {
+        const { startLine: line, startColumn: column } = this.ast.locations.self;
+        return `${this.ast.prettyName()} (${this.modulePath}:${line}:${column})`;
     }
 }

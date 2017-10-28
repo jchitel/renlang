@@ -6,7 +6,6 @@ import { SymbolTable } from '../TypeCheckContext';
 /**
  * Union type, inverse of tuple, there is only one value, but it can be of potentially several types.
  * These are structured as a binary tree.
- * TODO: handle type parameters
  */
 export default class TUnion extends TType {
     types: TType[];
@@ -48,6 +47,12 @@ export default class TUnion extends TType {
         return specific;
     }
 
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        for (const type of this.types) {
+            type.visitInferTypeArgumentTypes(argMap, argType);
+        }
+    }
+
     /**
      * The behavioral attributes can only apply if every component type in the union has them.
      * For intersection types, only one needs to have it.
@@ -61,6 +66,7 @@ export default class TUnion extends TType {
     isStruct() { return this.types.every(t => t.isStruct()); }
     isArray() { return this.types.every(t => t.isArray()); }
     isFunction() { return this.types.every(t => t.isFunction() && t.getParamCount() === this.types[0].getParamCount()); }
+    isGeneric() { return false; }
 
     hasField(field: string) { return this.types.every(t => t.hasField(field)); }
 
@@ -87,6 +93,10 @@ export default class TUnion extends TType {
         }
         throw new Error('never');
     }
+    
+    getTypeParamCount(): never {
+        throw new Error('never');
+    }
 
     getParamTypes() {
         if (this.isFunction()) {
@@ -98,6 +108,10 @@ export default class TUnion extends TType {
             }
             return returnParamTypes;
         }
+        throw new Error('never');
+    }
+
+    getTypeParamTypes(): never {
         throw new Error('never');
     }
 

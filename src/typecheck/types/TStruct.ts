@@ -7,7 +7,6 @@ type StructFieldTypes = { [name: string]: TType };
 
 /**
  * Struct type, extension of tuple type where the values have names (fields).
- * TODO: handle type parameters
  */
 export default class TStruct extends TType {
     fields: StructFieldTypes;
@@ -39,6 +38,12 @@ export default class TStruct extends TType {
         }
         return specific;
     }
+
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        for (const key of Object.keys(this.fields)) {
+            this.fields[key].visitInferTypeArgumentTypes(argMap, argType);
+        }
+    }
     
     isInteger() { return false; }
     isFloat() { return false; }
@@ -48,6 +53,7 @@ export default class TStruct extends TType {
     isStruct() { return true; }
     isArray() { return false; }
     isFunction() { return false; }
+    isGeneric() { return false; }
     
     hasField(field: string) {
         return !!this.fields[field];
@@ -60,7 +66,9 @@ export default class TStruct extends TType {
     }
     
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType(): never { throw new Error('never'); }
 
     toString() {

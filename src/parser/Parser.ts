@@ -29,7 +29,7 @@ import { AnyCSTNode, ICSTSubTree, CSTChildNode } from '../syntax/Node';
  * - If accepted, save the separator and parser state
  * - Repeat until a failure or a successful completion
  */
-interface ParserComponentSequentialDef<T> extends ParserComponentBaseDef {
+export interface ParserComponentSequentialDef<T> extends ParserComponentBaseDef {
     name: keyof T;
     definite?: boolean;
     mess?: ParserMessage;
@@ -121,7 +121,7 @@ interface ParserComponentSuffixDef extends ParserComponentBaseDef {
  */
 export default class Parser {
     public soft: boolean;
-    private tokenizer: LazyList<Token>;
+    public tokenizer: LazyList<Token>;
     private debug: boolean;
     private indent: number;
 

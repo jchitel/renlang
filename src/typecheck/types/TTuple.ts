@@ -5,7 +5,6 @@ import { SymbolTable } from '../TypeCheckContext';
 
 /**
  * Tuple type, represents a group of values of several heterogeneous types, including no values at all.
- * TODO: handle type parameters
  */
 export default class TTuple extends TType {
     types: TType[];
@@ -34,6 +33,12 @@ export default class TTuple extends TType {
         specific.types = specific.types.map(t => t.specifyTypeParams(args));
         return specific;
     }
+
+    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
+        for (const type of this.types) {
+            type.visitInferTypeArgumentTypes(argMap, argType);
+        }
+    }
     
     isInteger() { return false; }
     isFloat() { return false; }
@@ -43,13 +48,16 @@ export default class TTuple extends TType {
     isStruct() { return false; }
     isArray() { return false; }
     isFunction() { return false; }
+    isGeneric() { return false; }
     
     hasField() { return false; }
 
     getBaseType(): never { throw new Error('never'); }
     getFieldType(): never { throw new Error('never'); }
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType(): never { throw new Error('never'); }
 
     toString() {

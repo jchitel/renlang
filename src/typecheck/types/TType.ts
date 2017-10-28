@@ -1,4 +1,6 @@
 import { SymbolTable } from '../TypeCheckContext';
+import OrderedMap from './OrderedMap';
+import TParam from './TParam';
 
 
 /**
@@ -28,6 +30,8 @@ export default abstract class TType {
 
     abstract specifyTypeParams(args: SymbolTable<TType>): TType;
 
+    abstract visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType): void;
+
     /**
      * BEHAVIORAL APIS
      * These APIs allow us to have complex types that still boil down to basic types.
@@ -42,13 +46,16 @@ export default abstract class TType {
     abstract isStruct(): boolean;
     abstract isArray(): boolean;
     abstract isFunction(): boolean;
+    abstract isGeneric(): boolean;
 
     abstract hasField(field: string): boolean;
 
     abstract getBaseType(): TType;
     abstract getFieldType(field: string): TType;
     abstract getParamCount(): number;
+    abstract getTypeParamCount(): number;
     abstract getParamTypes(): TType[];
+    abstract getTypeParamTypes(): OrderedMap<TParam>;
     abstract getReturnType(): TType;
 
     /**

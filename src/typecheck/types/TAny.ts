@@ -21,6 +21,8 @@ export default class TAny extends TType {
         return this;
     }
     
+    visitInferTypeArgumentTypes() {}
+    
     /**
      * Because 'any' is the union of all types, not the intersection of all types,
      * it cannot identify as any particular type.
@@ -34,13 +36,16 @@ export default class TAny extends TType {
     isStruct() { return false; }
     isArray() { return false; }
     isFunction() { return false; }
+    isGeneric() { return false; }
 
     hasField() { return false; }
 
     getBaseType(): never { throw new Error('never'); }
     getFieldType(): never { throw new Error('never'); }
     getParamCount(): never { throw new Error('never'); }
+    getTypeParamCount(): never { throw new Error('never'); }
     getParamTypes(): never { throw new Error('never'); }
+    getTypeParamTypes(): never { throw new Error('never'); }
     getReturnType(): never { throw new Error('never'); }
 
     toString() {

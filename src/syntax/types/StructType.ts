@@ -5,7 +5,6 @@ import TypeCheckContext from '../../typecheck/TypeCheckContext';
 import Module from '../../runtime/Module';
 import { Token, ILocation } from '../../parser/Tokenizer';
 import { TType, TUnknown, TStruct } from '../../typecheck/types';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { NAME_CLASH } from '../../typecheck/TypeCheckerMessages';
 
 
@@ -15,14 +14,9 @@ export class StructType extends Type {
     resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
         const fields: { [name: string]: TType } = {};
         for (const field of this.fields) {
-            if (fields[field.name]) {
-                typeChecker.errors.push(new TypeCheckError(NAME_CLASH(field.name), module.path, this.locations[`field_${field.name}`]));
-                return new TUnknown();
-            }
+            if (fields[field.name]) return typeChecker.pushError(NAME_CLASH(field.name), module.path, this.locations[`field_${field.name}`]);
             fields[field.name] = field.type.getType(typeChecker, module, context);
-            if (fields[field.name] instanceof TUnknown) {
-                return new TUnknown();
-            }
+            if (fields[field.name] instanceof TUnknown) return new TUnknown();
         }
         return new TStruct(fields);
     }

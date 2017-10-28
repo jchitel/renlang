@@ -5,6 +5,7 @@ import TypeCheckContext from '../../typecheck/TypeCheckContext';
 import Module from '../../runtime/Module';
 import { TGeneric, TParam, TAny } from '../../typecheck/types';
 import { Type, STType } from '../types/Type';
+import OrderedMap from '../../typecheck/types/OrderedMap';
 
 
 export class TypeDeclaration extends ASTNode {
@@ -16,12 +17,12 @@ export class TypeDeclaration extends ASTNode {
         const context = new TypeCheckContext();
         // if there are type parameters, this is a generic type
         if (this.typeParams) {
-            const typeParamNames = [];
+            const typeParams = new OrderedMap<TParam>();
             for (const p of this.typeParams) {
                 context.typeParams[p.name] = p.getType(typeChecker, module, context) as TParam;
-                typeParamNames.push(p.name);
+                typeParams.add(p.name, context.typeParams[p.name]);
             }
-            return new TGeneric(context.typeParams, typeParamNames, this.typeNode.getType(typeChecker, module, context));
+            return new TGeneric(typeParams, this.typeNode.getType(typeChecker, module, context));
         }
         // otherwise, it just resolves to the type of the type definition
         return this.typeNode.getType(typeChecker, module, context);

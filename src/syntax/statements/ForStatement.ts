@@ -3,10 +3,8 @@ import { Expression, STExpression } from '../expressions';
 import { Token } from '../../parser/Tokenizer';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import TypeCheckError from '../../typecheck/TypeCheckError';
 import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
 import Module from '../../runtime/Module';
-import { TUnknown } from '../../typecheck/types';
 import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import {
@@ -32,8 +30,7 @@ export class ForStatement extends Statement {
         const arrayType = this.iterableExp.resolveType(typeChecker, module, context);
         let iterType;
         if (!arrayType.isArray()) {
-            typeChecker.errors.push(new TypeCheckError(TYPE_MISMATCH(arrayType, 'T[]'), module.path, this.iterableExp.locations.self));
-            iterType = new TUnknown();
+            iterType = typeChecker.pushError(TYPE_MISMATCH(arrayType, 'T[]'), module.path, this.iterableExp.locations.self);
         } else {
             iterType = arrayType.getBaseType();
         }
