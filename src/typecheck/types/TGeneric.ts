@@ -2,6 +2,7 @@ import TType from './TType';
 import TParam from './TParam';
 import { SymbolTable } from '../TypeCheckContext';
 import OrderedMap from './OrderedMap';
+import ITypeVisitor from '../visitors';
 
 
 /**
@@ -19,13 +20,8 @@ export default class TGeneric extends TType {
         this.type = type;
     }
 
-    isAssignableFrom() {
-        // you can't ever just get a generic type without specifying type arguments
-        return false;
-    }
-
-    specifyTypeParams(_args: SymbolTable<TType>): never {
-        throw new Error('never');
+    visit<T>(visitor: ITypeVisitor<T>) {
+        return visitor.visitGeneric(this);
     }
 
     /**
@@ -42,51 +38,5 @@ export default class TGeneric extends TType {
         }
         // visit the type with the map so that params can be replaced with actual types
         return specific.specifyTypeParams(argMap);
-    }
-
-    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
-        for (const p of this.typeParams) {
-            p.visitInferTypeArgumentTypes(argMap, argType);
-        }
-    }
-    
-    isInteger() { return this.type.isInteger(); }
-    isFloat() { return this.type.isFloat(); }
-    isChar() { return this.type.isChar(); }
-    isBool() { return this.type.isBool(); }
-    isTuple() { return this.type.isTuple(); }
-    isStruct() { return this.type.isStruct(); }
-    isArray() { return this.type.isArray(); }
-    isFunction() { return this.type.isFunction(); }
-    isGeneric() { return true; }
-    
-    hasField(field: string) { return this.type.hasField(field); }
-
-    getBaseType() {
-        return this.type.getBaseType();
-    }
-
-    getFieldType(field: string) {
-        return this.type.getFieldType(field);
-    }
-
-    getParamCount() {
-        return this.type.getParamCount();
-    }
-
-    getTypeParamCount() {
-        return this.getTypeParamTypes.length;
-    }
-
-    getParamTypes() {
-        return this.type.getParamTypes();
-    }
-
-    getTypeParamTypes() {
-        return this.typeParams;
-    }
-
-    getReturnType() {
-        return this.type.getReturnType();
     }
 }

@@ -56,9 +56,10 @@ export class FunctionApplication extends Expression {
      */
     private resolveNormalFunction(tc: TypeChecker, mod: Module, ctx: TypeCheckContext, funcType: TType) {
         // verify parameter count
-        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(funcType.getParamCount(), this.args.length), mod.path, this.target.locations.self);
+        const params = funcType.getParams();
+        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(params.length, this.args.length), mod.path, this.target.locations.self);
         // verify arg assignments
-        this.verifyArgAssignments(tc, mod, ctx, funcType.getParamTypes());
+        this.verifyArgAssignments(tc, mod, ctx, params);
         // resolve to return type
         return funcType.getReturnType();
     }
@@ -74,12 +75,12 @@ export class FunctionApplication extends Expression {
      */
     private resolveExplicitGenericFunction(tc: TypeChecker, mod: Module, ctx: TypeCheckContext, funcType: TType) {
         // verify type parameter count
-        if (!this.verifyTypeParamCount(funcType)) return tc.pushError(INVALID_TYPE_ARG_COUNT(funcType.getTypeParamCount(), this.typeArgs.length), mod.path, this.locations.self);
+        if (!this.verifyTypeParamCount(funcType)) return tc.pushError(INVALID_TYPE_ARG_COUNT(funcType.getTypeParams().length, this.typeArgs.length), mod.path, this.locations.self);
         // verify type arg assignments (unlike normal arguments, broken type arg assignments can break everything, so we stop here)
         const typeArgs = this.typeArgs.map(a => a.getType(tc, mod, ctx));
         if (!this.verifyTypeArgAssignments(tc, mod, funcType, typeArgs)) return new TUnknown();
         // verify parameter count
-        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(funcType.getParamCount(), this.args.length), mod.path, this.target.locations.self);
+        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(funcType.getParams().length, this.args.length), mod.path, this.target.locations.self);
         // resolve the specific types of the params
         const paramTypes = (funcType as TFunction).getSpecificParamTypes(typeArgs);
         // verify arg assignments
@@ -99,9 +100,10 @@ export class FunctionApplication extends Expression {
      */
     private resolveImplicitGenericFunction(tc: TypeChecker, mod: Module, ctx: TypeCheckContext, funcType: TType) {
         // verify parameter count
-        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(funcType.getParamCount(), this.args.length), mod.path, this.target.locations.self);
+        const params = funcType.getParams();
+        if (!this.verifyParamCount(funcType)) return tc.pushError(INVALID_ARG_COUNT(params.length, this.args.length), mod.path, this.target.locations.self);
         // verify argument assignments against still-generic parameter types (verify type structure)
-        const valid = this.verifyArgAssignments(tc, mod, ctx, funcType.getParamTypes());
+        const valid = this.verifyArgAssignments(tc, mod, ctx, params);
         // only infer and verify the type arguments if the arg assignments are valid, otherwise just skip that part
         if (valid) {
             // infer type argument types
@@ -118,11 +120,11 @@ export class FunctionApplication extends Expression {
     }
 
     private verifyParamCount(funcType: TType) {
-        return this.args.length === funcType.getParamCount();
+        return this.args.length === funcType.getParams().length;
     }
 
     private verifyTypeParamCount(funcType: TType) {
-        return this.typeArgs.length === funcType.getTypeParamCount();
+        return this.typeArgs.length === funcType.getTypeParams().length;
     }
 
     private verifyArgAssignments(tc: TypeChecker, mod: Module, ctx: TypeCheckContext, paramTypes: TType[]) {
@@ -149,7 +151,7 @@ export class FunctionApplication extends Expression {
 
     private verifyTypeArgAssignments(tc: TypeChecker, mod: Module, funcType: TType, typeArgs: TType[]) {
         // get type param and type arg types
-        const typeParams = funcType.getTypeParamTypes();
+        const typeParams = funcType.getTypeParams();
         // make sure each type argument is assignable to the corresponding type parameter
         let error = false;
         for (let i = 0; i < typeArgs.length; ++i) {

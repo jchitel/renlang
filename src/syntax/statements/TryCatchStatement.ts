@@ -5,7 +5,7 @@ import { Token } from '../../parser/Tokenizer';
 import TypeChecker from '../../typecheck/TypeChecker';
 import TypeCheckContext from '../../typecheck/TypeCheckContext';
 import Module from '../../runtime/Module';
-import { TType, determineGeneralType } from '../../typecheck/types';
+import { determineGeneralType } from '../../typecheck/types';
 import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import {
@@ -32,13 +32,13 @@ export class TryCatchStatement extends Statement {
             // add the param to the symbol table, type check the catch, remove it
             context.symbolTable[cat.param.name] = cat.param.typeNode.getType(typeChecker, module, context);
             const returnType1 = cat.body.getType(typeChecker, module, context);
-            returnType = determineGeneralType(returnType, returnType1) as TType;
+            returnType = determineGeneralType(returnType, returnType1);
             delete context.symbolTable[cat.param.name];
         }
         if (!this.finally) return returnType;
         // type check the finally
         const returnType1 = this.finally.getType(typeChecker, module, context);
-        return determineGeneralType(returnType, returnType1) as TType;
+        return determineGeneralType(returnType, returnType1);
     }
 
     translate(translator: Translator, func: Func) {

@@ -1,5 +1,5 @@
 import TType from './TType';
-import TNever from './TNever';
+import ITypeVisitor from '../visitors';
 
 
 /**
@@ -17,42 +17,9 @@ export default class TFloat extends TType {
         this.size = size;
     }
 
-    isAssignableFrom(t: TType) {
-        // unknown is assignable to all types
-        if (t instanceof TNever) return true;
-        // only floats can be assigned to other floats
-        if (!(t instanceof TFloat)) return false;
-        // floats of size n can't be assigned to floats of size <n
-        if (this.size < t.size) return false;
-        // we have a float type which represents either the same or a subset of this's set
-        return true;
+    visit<T>(visitor: ITypeVisitor<T>) {
+        return visitor.visitFloat(this);
     }
-
-    specifyTypeParams() {
-        return this.clone();
-    }
-    
-    visitInferTypeArgumentTypes() {}
-
-    isInteger() { return false; }
-    isFloat() { return true; }
-    isChar() { return false; }
-    isBool() { return false; }
-    isTuple() { return false; }
-    isStruct() { return false; }
-    isArray() { return false; }
-    isFunction() { return false; }
-    isGeneric() { return false; }
-    
-    hasField() { return false; }
-
-    getBaseType(): never { throw new Error('never'); }
-    getFieldType(): never { throw new Error('never'); }
-    getParamCount(): never { throw new Error('never'); }
-    getTypeParamCount(): never { throw new Error('never'); }
-    getParamTypes(): never { throw new Error('never'); }
-    getTypeParamTypes(): never { throw new Error('never'); }
-    getReturnType(): never { throw new Error('never'); }
 
     toString() {
         return `${this.size}-bit float`;

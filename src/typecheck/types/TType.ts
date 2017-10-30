@@ -1,6 +1,5 @@
 import { SymbolTable } from '../TypeCheckContext';
-import OrderedMap from './OrderedMap';
-import TParam from './TParam';
+import ITypeVisitor, * as visitors from '../visitors';
 
 
 /**
@@ -10,53 +9,46 @@ import TParam from './TParam';
  * between types.
  */
 export default abstract class TType {
+    abstract visit<T>(visitor: ITypeVisitor<T>): T;
+
     /**
-     * Determine if this type is assignable to another type.
-     * i.e. the following is valid:
-     * {variable of type t} = {variable of type this}
-     *
-     * DO NOT OVERRIDE THIS, IT'S JUST HERE FOR THE SAKE OF EASIER CONCEPTUALITY
+     * Determines if a type can be assigned to this type.
+     * @see visitors.AssignmentVisitor
      */
-    isAssignableTo(t: TType) {
-        return t.isAssignableFrom(this);
+    isAssignableFrom(from: TType) {
+        return this.visit(new visitors.AssignmentVisitor(from));
     }
 
-    /**
-     * Determine if another type is assignable to this type.
-     * i.e. the following is valid:
-     * {variable of type this} = {variable of type t}
-     */
-    abstract isAssignableFrom(t: TType): boolean;
-
-    abstract specifyTypeParams(args: SymbolTable<TType>): TType;
-
-    abstract visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType): void;
+    specifyTypeParams(args: SymbolTable<TType>) {
+        return this.visit(new visitors.SpecifyTypeVisitor(args));
+    }
 
     /**
      * BEHAVIORAL APIS
      * These APIs allow us to have complex types that still boil down to basic types.
      * This is so that we don't have to do obnoxious instanceof checks.
      */
+    isInteger() { return this.visit(new visitors.IsIntegerVisitor()); }
+    isFloat() { return this.visit(new visitors.IsFloatVisitor()); }
+    isChar() { return this.visit(new visitors.IsCharVisitor()); }
+    isBool() { return this.visit(new visitors.IsBoolVisitor()); }
+    isArray() { return this.visit(new visitors.IsArrayVisitor()); }
+    isStruct() { return this.visit(new visitors.IsStructVisitor()); }
+    isTuple() { return this.visit(new visitors.IsTupleVisitor()); }
+    isFunction() { return this.visit(new visitors.IsFunctionVisitor()); }
+    isGeneric() { return this.visit(new visitors.IsGenericVisitor()); }
+    isNever() { return this.visit(new visitors.IsNeverVisitor()); }
 
-    abstract isInteger(): boolean;
-    abstract isFloat(): boolean;
-    abstract isChar(): boolean;
-    abstract isBool(): boolean;
-    abstract isTuple(): boolean;
-    abstract isStruct(): boolean;
-    abstract isArray(): boolean;
-    abstract isFunction(): boolean;
-    abstract isGeneric(): boolean;
+    isSigned() { return this.visit(new visitors.IsSignedVisitor()); }
+    hasField(field: string) { return this.visit(new visitors.HasFieldVisitor(field)); }
 
-    abstract hasField(field: string): boolean;
-
-    abstract getBaseType(): TType;
-    abstract getFieldType(field: string): TType;
-    abstract getParamCount(): number;
-    abstract getTypeParamCount(): number;
-    abstract getParamTypes(): TType[];
-    abstract getTypeParamTypes(): OrderedMap<TParam>;
-    abstract getReturnType(): TType;
+    getSize() { return this.visit(new visitors.GetSizeVisitor()); }
+    getBaseType(): TType { return this.visit(new visitors.GetBaseTypeVisitor()); }
+    getField(field: string) { return this.visit(new visitors.GetFieldVisitor(field)); }
+    getTupleTypes() { return this.visit(new visitors.GetTupleTypesVisitor()); }
+    getParams() { return this.visit(new visitors.GetParamsVisitor()); }
+    getTypeParams() { return this.visit(new visitors.GetTypeParamsVisitor()); }
+    getReturnType() { return this.visit(new visitors.GetReturnTypeVisitor()); }
 
     /**
      * Return an exact (shallow) copy of this instance

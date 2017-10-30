@@ -1,4 +1,5 @@
 import TType from './TType';
+import ITypeVisitor from '../visitors';
 
 
 /**
@@ -12,41 +13,9 @@ import TType from './TType';
  * 'any' should be thought of as the supertype of all types.
  */
 export default class TAny extends TType {
-    isAssignableFrom() {
-        // all types are assignable to "any"
-        return true;
+    visit<T>(visitor: ITypeVisitor<T>) {
+        return visitor.visitAny(this);
     }
-
-    specifyTypeParams() {
-        return this;
-    }
-    
-    visitInferTypeArgumentTypes() {}
-    
-    /**
-     * Because 'any' is the union of all types, not the intersection of all types,
-     * it cannot identify as any particular type.
-     */
-
-    isInteger() { return false; }
-    isFloat() { return false; }
-    isChar() { return false; }
-    isBool() { return false; }
-    isTuple() { return false; }
-    isStruct() { return false; }
-    isArray() { return false; }
-    isFunction() { return false; }
-    isGeneric() { return false; }
-
-    hasField() { return false; }
-
-    getBaseType(): never { throw new Error('never'); }
-    getFieldType(): never { throw new Error('never'); }
-    getParamCount(): never { throw new Error('never'); }
-    getTypeParamCount(): never { throw new Error('never'); }
-    getParamTypes(): never { throw new Error('never'); }
-    getTypeParamTypes(): never { throw new Error('never'); }
-    getReturnType(): never { throw new Error('never'); }
 
     toString() {
         return 'any';

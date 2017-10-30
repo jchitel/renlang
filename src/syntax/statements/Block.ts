@@ -23,7 +23,7 @@ export class Block extends Statement {
             } else {
                 // statements may have return types (if they are return statements or contain return statements)
                 const type = statement.getType(typeChecker, module, context);
-                returnType = determineGeneralType(returnType, type) as TType;
+                returnType = determineGeneralType(returnType, type);
             }
         }
         return returnType;

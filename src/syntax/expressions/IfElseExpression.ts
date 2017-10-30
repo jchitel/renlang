@@ -1,6 +1,6 @@
 import { Expression, STExpression } from './Expression';
 import { Token } from '../../parser/Tokenizer';
-import { TType, determineGeneralType } from '../../typecheck/types';
+import { determineGeneralType } from '../../typecheck/types';
 import Translator from '../../translator/Translator';
 import Func from '../../translator/Func';
 import TypeChecker from '../../typecheck/TypeChecker';
@@ -20,7 +20,7 @@ export class IfElseExpression extends Expression {
         if (!conditionType.isBool()) typeChecker.pushError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.condition.locations.self);
         const type = this.consequent.getType(typeChecker, module, context);
         const altType = this.alternate.getType(typeChecker, module, context);
-        return determineGeneralType(type, altType) as TType;
+        return determineGeneralType(type, altType);
     }
 
     translate(translator: Translator, func: Func) {

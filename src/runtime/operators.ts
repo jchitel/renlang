@@ -500,7 +500,7 @@ export class PostfixDecrementOperator extends UnaryOperator {
 export class PlusOperator extends BinaryOperator {
     resolveType(operand1: TType, operand2: TType) {
         if (operand1 instanceof TArray && operand2 instanceof TArray) {
-            const generic = determineGeneralType(operand1.baseType, operand2.baseType) as TType;
+            const generic = determineGeneralType(operand1.baseType, operand2.baseType);
             if (!(generic instanceof TAny)) {
                 // array concatenation, as long as the two types have some relationship
                 return new TFunction([operand1, operand2], new TArray(generic));
@@ -964,7 +964,7 @@ export class ApplyOperator extends BinaryOperator {
     }
 
     execute(interp: Interpreter, targetRef: number, leftRef: number, rightRef: number) {
-        if (this.functionType.getParamCount() === 1) {
+        if (this.functionType.getParams().length === 1) {
             // function only has one parameter left, use the normal function call instruction
             new FunctionCallRef(leftRef, targetRef, [rightRef]).execute(interp);
         } else {

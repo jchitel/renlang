@@ -20,7 +20,7 @@ export class FieldAccess extends Expression {
         // verify that the field exists
         if (!structType.hasField(this.field)) return typeChecker.pushError(VALUE_NOT_DEFINED(this.field), module.path, this.locations.field);
         // return the type of the field
-        return structType.getFieldType(this.field);
+        return structType.getField(this.field);
     }
 
     translate(translator: Translator, func: Func) {

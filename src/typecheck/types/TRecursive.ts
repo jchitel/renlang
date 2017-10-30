@@ -1,7 +1,6 @@
 import TType from './TType';
-import TNever from './TNever';
 import { TypeDeclaration } from '../../syntax/declarations';
-import { SymbolTable } from '../TypeCheckContext';
+import ITypeVisitor from '../visitors';
 
 
 /**
@@ -19,79 +18,8 @@ export default class TRecursive extends TType {
         this.decl = decl;
     }
 
-    isAssignableFrom(t: TType) {
-        // unknown is assignable to all types
-        if (t instanceof TNever) return true;
-        return this.decl.type.isAssignableFrom(t);
-    }
-    
-    specifyTypeParams() {
-        return this;
-    }
-
-    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
-        return this.decl.type.visitInferTypeArgumentTypes(argMap, argType);
-    }
-    
-    isInteger() { return this.decl.type.isInteger(); }
-    isFloat() { return this.decl.type.isFloat(); }
-    isChar() { return this.decl.type.isChar(); }
-    isBool() { return this.decl.type.isBool(); }
-    isTuple() { return this.decl.type.isTuple(); }
-    isStruct() { return this.decl.type.isStruct(); }
-    isArray() { return this.decl.type.isArray(); }
-    isFunction() { return this.decl.type.isFunction(); }
-    isGeneric() { return this.decl.type.isGeneric(); }
-
-    hasField(field: string) { return this.decl.type.hasField(field); }
-
-    getBaseType() {
-        if (this.isArray()) {
-            return this.decl.type.getBaseType();
-        }
-        throw new Error('never');
-    }
-
-    getFieldType(field: string) {
-        if (this.hasField(field)) {
-            return this.decl.type.getFieldType(field);
-        }
-        throw new Error('never');
-    }
-
-    getParamCount() {
-        if (this.isFunction()) {
-            return this.decl.type.getParamCount();
-        }
-        throw new Error('never');
-    }
-    
-    getTypeParamCount() {
-        if (this.isGeneric()) {
-            return this.decl.type.getTypeParamCount();
-        }
-        throw new Error('never');
-    }
-
-    getParamTypes() {
-        if (this.isFunction()) {
-            return this.decl.type.getParamTypes();
-        }
-        throw new Error('never');
-    }
-    
-    getTypeParamTypes() {
-        if (this.isGeneric()) {
-            return this.decl.type.getTypeParamTypes();
-        }
-        throw new Error('never');
-    }
-    
-    getReturnType() {
-        if (this.isFunction()) {
-            return this.decl.type.getReturnType();
-        }
-        throw new Error('never');
+    visit<T>(visitor: ITypeVisitor<T>) {
+        return visitor.visitRecursive(this);
     }
 
     toString() {

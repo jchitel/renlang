@@ -55,10 +55,10 @@ export class SpecificType extends Type {
         // second, resolve all type arguments
         const typeArgs = this.typeArgs.map(a => a.getType(typeChecker, module, context));
         // third, make sure the number of type arguments is correct
-        const numParams = genericType.getTypeParamCount();
+        const paramTypes = genericType.getTypeParams();
+        const numParams = paramTypes.length;
         if (typeArgs.length !== numParams) return typeChecker.pushError(INVALID_TYPE_ARG_COUNT(numParams, typeArgs.length), module.path, this.locations.self);
         // fourth, make sure each type argument is assignable to the corresponding type parameter
-        const paramTypes = genericType.getTypeParamTypes();
         for (let i = 0; i < typeArgs.length; ++i) {
             const [param, arg] = [paramTypes.getValue(i), typeArgs[i]];
             if (param.isAssignableFrom(arg)) return typeChecker.pushError(INVALID_TYPE_ARG(arg, param.name, param.constraint), module.path, this.typeArgs[i].locations.self);

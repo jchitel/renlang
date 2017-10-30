@@ -3,6 +3,7 @@ import TNever from './TNever';
 import { SymbolTable } from '../TypeCheckContext';
 import TParam from './TParam';
 import OrderedMap from './OrderedMap';
+import ITypeVisitor, { InferTypeArgsVisitor } from '../visitors';
 
 
 /**
@@ -20,40 +21,8 @@ export default class TFunction extends TType {
         if (typeParamTypes) this.typeParamTypes = typeParamTypes;
     }
 
-    /**
-     * Function assignability is more complex than other types.
-     * We need this relationship to be valid:
-     *
-     * thisFuncType = (a, b, c) => d
-     * tFuncType = (a, b, c) => d
-     * retVal = thisFuncType(aVal, bVal, cVal)
-     * retVal = tFuncType(aVal, bVal, cVal)
-     *
-     * The param types of t can be more generic
-     * because any values passed to this will be valid as more generic values.
-     * The return type has the same relationship as other types
-     * because whatever is returned from t has to be a valid value of the
-     * return type of this.
-     *
-     * This means that the return type can be tested the same way,
-     * but the param types must be reversed.
-     */
-    isAssignableFrom(t: TType) {
-        // unknown is assignable to all types
-        if (t instanceof TNever) return true;
-        // only functions can be assigned to other functions
-        if (!(t instanceof TFunction)) return false;
-        // they need to have the same number of params
-        if (this.paramTypes.length !== t.paramTypes.length) return false;
-        // the return types need to be assignable (assume it's ok if the return type is omitted, as in a lambda)
-        if (t.returnType !== null && !this.returnType.isAssignableFrom(t.returnType)) return false;
-        // the param types need to be assignable (using the reverse relationship as described above)
-        for (let i = 0; i < this.paramTypes.length; ++i) {
-            // lambda param types can omit the type, we assume assignability here
-            if (t.paramTypes[i] === null) continue;
-            if (!t.paramTypes[i].isAssignableFrom(this.paramTypes[i])) return false;
-        }
-        return true;
+    visit<T>(visitor: ITypeVisitor<T>) {
+        return visitor.visitFunction(this);
     }
 
     /**
@@ -62,25 +31,11 @@ export default class TFunction extends TType {
      * We assume here that type checking has already been done, so all we do here is fill in the types.
      */
     completeResolution(explicitType: TType) {
-        const paramTypes = explicitType.getParamTypes();
+        const paramTypes = explicitType.getParams();
         for (let i = 0; i < this.paramTypes.length; ++i) {
             if (!this.paramTypes[i]) this.paramTypes[i] = paramTypes[i];
         }
         this.returnType = explicitType.getReturnType();
-    }
-
-    specifyTypeParams(args: SymbolTable<TType>) {
-        const specific = this.clone();
-        specific.paramTypes = specific.paramTypes.map(t => t.specifyTypeParams(args));
-        specific.returnType = specific.returnType.specifyTypeParams(args);
-        return specific;
-    }
-
-    visitInferTypeArgumentTypes(argMap: SymbolTable<TType>, argType: TType) {
-        for (const param of this.paramTypes) {
-            param.visitInferTypeArgumentTypes(argMap, argType);
-        }
-        this.returnType.visitInferTypeArgumentTypes(argMap, argType);
     }
 
     /**
@@ -104,7 +59,7 @@ export default class TFunction extends TType {
         }
         // visit each parameter type
         for (let i = 0; i < this.paramTypes.length; ++i) {
-            this.paramTypes[i].visitInferTypeArgumentTypes(argMap, argTypes[i]);
+            this.paramTypes[i].visit(new InferTypeArgsVisitor(argMap, argTypes[i]));
         }
         return this.typeParamTypes.keys().map(k => argMap[k]);
     }
@@ -137,43 +92,6 @@ export default class TFunction extends TType {
         }
         // visit the return type with the map so that type params can be replaced with actual types
         return this.returnType.clone().specifyTypeParams(argMap);
-    }
-    
-    isInteger() { return false; }
-    isFloat() { return false; }
-    isChar() { return false; }
-    isBool() { return false; }
-    isTuple() { return false; }
-    isStruct() { return false; }
-    isArray() { return false; }
-    isFunction() { return true; }
-    isGeneric() { return !!this.typeParamTypes && !!this.typeParamTypes.length; }
-    
-    hasField() { return false; }
-
-    getBaseType(): never { throw new Error('never'); }
-    getFieldType(): never { throw new Error('never'); }
-
-    getParamCount() {
-        return this.paramTypes.length;
-    }
-
-    getTypeParamCount() {
-        if (this.isGeneric()) return this.typeParamTypes.length;
-        throw new Error('never');
-    }
-
-    getParamTypes() {
-        return this.paramTypes;
-    }
-
-    getTypeParamTypes() {
-        if (this.isGeneric()) return this.typeParamTypes;
-        throw new Error('never');
-    }
-
-    getReturnType() {
-        return this.returnType;
     }
 
     toString() {

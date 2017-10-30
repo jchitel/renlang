@@ -7,7 +7,7 @@ export { default as TFunction } from './TFunction';
 export { default as TGeneric } from './TGeneric';
 export { default as TInteger } from './TInteger';
 export { default as TNever } from './TNever';
-export { default as TParam } from './TParam';
+export { default as TParam, TArg } from './TParam';
 export { default as TRecursive } from './TRecursive';
 export { default as TStruct } from './TStruct';
 export { default as TTuple } from './TTuple';
@@ -21,7 +21,7 @@ import TAny from './TAny';
 /**
  * Given two optional types, return the more general one of the two
  */
-export function determineGeneralType(type1: Optional<TType>, type2: Optional<TType>) {
+export function determineGeneralType(type1: TType, type2: TType) {
     // one or both is falsy
     if (!type2) return type1;
     if (!type1) return type2;

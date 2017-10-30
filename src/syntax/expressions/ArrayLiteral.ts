@@ -17,7 +17,7 @@ export class ArrayLiteral extends Expression {
         let baseType: TType = new TNever();
         for (const item of this.items) {
             const type = item.getType(typeChecker, module, context);
-            baseType = determineGeneralType(baseType, type) as TType;
+            baseType = determineGeneralType(baseType, type);
         }
         return new TArray(baseType);
     }
