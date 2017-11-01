@@ -1,15 +1,13 @@
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
 import { Type, STType } from './Type';
 import { Token } from '../../parser/Tokenizer';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class ParenthesizedType extends Type {
     inner: Type;
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        return this.inner.getType(typeChecker, module, context);
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitParenthesizedType(this);
     }
 }
 

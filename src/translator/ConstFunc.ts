@@ -3,6 +3,7 @@ import { ExportDeclaration } from '../syntax/declarations';
 import { Expression } from '../syntax/expressions';
 import { ConstBranch, ConstSet, ConstRef, Return } from '../runtime/instructions';
 import Translator from './Translator';
+import TranslationVisitor from './TranslationVisitor';
 
 
 export default class ConstFunc extends Func {
@@ -18,7 +19,7 @@ export default class ConstFunc extends Func {
         // a const branch is a special constant memoization branch that will branch only if the constant has been initialized
         const branch = this.addInstruction(new ConstBranch({ constRef }));
         // if it hasn't it is evaluated and stored in the constant
-        const valueRef = (this.ast.value as Expression).translate(translator, this);
+        const valueRef = (this.ast.value as Expression).visit(new TranslationVisitor(translator, this)) as number;
         this.addInstruction(new ConstSet(constRef, valueRef));
         // branch target picks up and reads the constant, then returns it
         branch.target = this.nextInstrNum();

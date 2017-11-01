@@ -1,22 +1,17 @@
 import { CSTNode, ASTNode } from '../Node';
 import { Token, ILocation } from '../../parser/Tokenizer';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
 import { FunctionDeclaration, STFunctionDeclaration } from './FunctionDeclaration';
 import { TypeDeclaration, STTypeDeclaration } from './TypeDeclaration';
 import { Expression, STExpression } from '../expressions';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class ExportDeclaration extends ASTNode {
     name: string;
     value: FunctionDeclaration | TypeDeclaration | Expression;
-
-    resolveType(typeChecker: TypeChecker, module: Module) {
-        // new context
-        const context = new TypeCheckContext();
-        // visit the value of the export
-        return (this.value as Expression).getType(typeChecker, module, context);
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitExportDeclaration(this);
     }
 
     prettyName() {

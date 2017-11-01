@@ -4,6 +4,7 @@ import * as mess from './TypeCheckerMessages';
 import { STProgram, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations';
 import { TType, TUnknown, TRecursive } from './types';
 import { ILocation } from '../parser/Tokenizer';
+import { TypeCheckVisitor } from './visitors';
 
 
 export type SymbolTable<T> = { [symbol: string]: T };
@@ -257,11 +258,11 @@ export default class TypeChecker {
         }
         if (decl.ast instanceof FunctionDeclaration) {
             // function declarations can be recursive, and they always contain their type right in their declaration
-            decl.ast.resolveType(this, module);
+            decl.ast.visit(new TypeCheckVisitor(this, module));
         } else {
             // Set a flag on each declaration as we resolve it so that we can track circular dependencies
             decl.resolving = true;
-            decl.ast.resolveType(this, module);
+            decl.ast.visit(new TypeCheckVisitor(this, module));
             decl.resolving = false;
         }
         return decl.ast.type;

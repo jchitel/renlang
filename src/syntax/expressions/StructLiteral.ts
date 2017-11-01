@@ -1,32 +1,14 @@
 import { CSTNode } from '../Node';
 import { Expression, STExpression } from './Expression';
 import { Token, ILocation } from '../../parser/Tokenizer';
-import { TType, TStruct } from '../../typecheck/types';
-import Translator from '../../translator/Translator';
-import Func from '../../translator/Func';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext, { SymbolTable } from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
-import { SetStructRef } from '../../runtime/instructions';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class StructLiteral extends Expression {
     entries: { key: string, value: Expression }[];
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        const fields: SymbolTable<TType> = {};
-        for (const { key, value } of this.entries) {
-            fields[key] = value.getType(typeChecker, module, context);
-        }
-        return new TStruct(fields);
-    }
-
-    translate(translator: Translator, func: Func) {
-        const refs: { [key: string]: number } = {};
-        for (const { key, value } of this.entries) {
-            refs[key] = value.translate(translator, func);
-        }
-        return func.addRefInstruction(translator, ref => new SetStructRef(ref, refs));
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitStructLiteral(this);
     }
 }
 

@@ -114,7 +114,6 @@ export default class Tokenizer {
         '.': 'DOT',        // used in field access expressions
     };
 
-    private source: string;
     public list: LazyList<string>;
     private gen: Iterator<Token>;
     private lineNumber: number;
@@ -130,7 +129,6 @@ export default class Tokenizer {
      * - ignoreMode: if true, all comments, whitespace, and semicolons are ignored from the yielded token output; if false, all tokens are yielded
      */
     constructor(source: string) {
-        this.source = source;
         this.list = new LazyList(source);
         this.gen = this.generator();
         this.lineNumber = 1;

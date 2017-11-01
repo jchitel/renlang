@@ -1,14 +1,7 @@
 import { Expression, STExpression } from './Expression';
 import { Token } from '../../parser/Tokenizer';
-import { TFunction, TUnknown } from '../../typecheck/types';
-import Translator from '../../translator/Translator';
-import Func from '../../translator/Func';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import { VALUE_NOT_DEFINED, INVALID_BINARY_OPERATOR } from '../../typecheck/TypeCheckerMessages';
-import Module from '../../runtime/Module';
-import { BinaryOperatorRef } from '../../runtime/instructions';
-import { getOperatorMetadata, createBinary, verifyMultiOperator, BinaryOperator } from '../../runtime/operators';
+import { getOperatorMetadata, verifyMultiOperator, BinaryOperator } from '../../runtime/operators';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class BinaryExpression extends Expression {
@@ -16,26 +9,9 @@ export class BinaryExpression extends Expression {
     right: Expression;
     symbol: string;
     operator: BinaryOperator;
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        // resolve the left and right expression types
-        const leftType = this.left.getType(typeChecker, module, context);
-        const rightType = this.right.getType(typeChecker, module, context);
-        // create the operator of the specific type
-        const oper = createBinary(this.symbol, 'infix', leftType, rightType);
-        // no infix operator of that kind
-        if (!oper) return typeChecker.pushError(VALUE_NOT_DEFINED(this.symbol), module.path, this.locations.oper);
-        this.operator = oper;
-        // invalid left/right types
-        if (this.operator.functionType instanceof TUnknown) return typeChecker.pushError(INVALID_BINARY_OPERATOR(this.symbol, leftType, rightType), module.path, this.locations.self);
-        // the return type of the operator type is the type of this expression
-        return (this.operator.functionType as TFunction).returnType;
-    }
-
-    translate(translator: Translator, func: Func) {
-        const leftRef = this.left.translate(translator, func);
-        const rightRef = this.right.translate(translator, func);
-        return func.addRefInstruction(translator, ref => new BinaryOperatorRef(ref, leftRef, this.operator, rightRef));
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitBinaryExpression(this);
     }
 }
 

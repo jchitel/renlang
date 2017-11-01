@@ -1,15 +1,15 @@
 export default class OrderedMap<V> {
     fieldOrder: string[];
-    values: { [key: string]: V };
+    private _values: { [key: string]: V };
 
     constructor() {
         this.fieldOrder = [];
-        this.values = {};
+        this._values = {};
     }
 
     add(key: string, value: V) {
         this.fieldOrder.push(key);
-        this.values[key] = value;
+        this._values[key] = value;
     }
 
     getKey(i: number) {
@@ -17,7 +17,7 @@ export default class OrderedMap<V> {
     }
 
     get(key: string) {
-        return this.values[key];
+        return this._values[key];
     }
 
     getValue(i: number) {
@@ -32,9 +32,13 @@ export default class OrderedMap<V> {
         return this.fieldOrder;
     }
 
+    values() {
+        return [...this];
+    }
+
     *[Symbol.iterator]() {
         for (const key of this.fieldOrder) {
-            yield this.values[key];
+            yield this._values[key];
         }
     }
 }

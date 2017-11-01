@@ -4,6 +4,7 @@ import { STImportDeclaration, ImportDeclaration } from './ImportDeclaration';
 import { FunctionDeclaration, STFunctionDeclaration } from './FunctionDeclaration';
 import { TypeDeclaration, STTypeDeclaration } from './TypeDeclaration';
 import { ExportDeclaration, STExportDeclaration } from './ExportDeclaration';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class Program extends ASTNode {
@@ -11,6 +12,10 @@ export class Program extends ASTNode {
     functions: FunctionDeclaration[] = [];
     types: TypeDeclaration[] = [];
     exports: ExportDeclaration[] = [];
+
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitProgram(this);
+    }
 }
 
 export class STProgram extends CSTNode<Program> {

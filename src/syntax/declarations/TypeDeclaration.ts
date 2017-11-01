@@ -1,11 +1,7 @@
 import { CSTNode, ASTNode } from '../Node';
 import { Token, ILocation } from '../../parser/Tokenizer';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
-import { TGeneric, TParam, TAny } from '../../typecheck/types';
 import { Type, STType } from '../types/Type';
-import OrderedMap from '../../typecheck/types/OrderedMap';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class TypeDeclaration extends ASTNode {
@@ -13,19 +9,8 @@ export class TypeDeclaration extends ASTNode {
     typeParams: TypeParam[];
     typeNode: Type;
     
-    resolveType(typeChecker: TypeChecker, module: Module) {
-        const context = new TypeCheckContext();
-        // if there are type parameters, this is a generic type
-        if (this.typeParams) {
-            const typeParams = new OrderedMap<TParam>();
-            for (const p of this.typeParams) {
-                context.typeParams[p.name] = p.getType(typeChecker, module, context) as TParam;
-                typeParams.add(p.name, context.typeParams[p.name]);
-            }
-            return new TGeneric(typeParams, this.typeNode.getType(typeChecker, module, context));
-        }
-        // otherwise, it just resolves to the type of the type definition
-        return this.typeNode.getType(typeChecker, module, context);
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitTypeDeclaration(this);
     }
 }
 
@@ -61,17 +46,9 @@ export class TypeParam extends ASTNode {
     name: string;
     varianceOp: string;
     typeConstraint: Type;
-
-    getType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        return this.type || (this.type = this.resolveType(typeChecker, module, context));
-    }
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        // no defined variance means it needs to be inferred from how it is used
-        const variance = this.varianceOp === '+' ? 'covariant' : this.varianceOp === '-' ? 'contravariant' : 'invariant';
-        // no defined constraint means it defaults to (: any)
-        const constraint = this.typeConstraint ? this.typeConstraint.getType(typeChecker, module, context) : new TAny();
-        return this.type = new TParam(this.name, variance, constraint);
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitTypeParam(this);
     }
 }
 

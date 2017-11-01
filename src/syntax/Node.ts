@@ -1,10 +1,6 @@
 import { Token, ILocation } from '../parser/Tokenizer';
-import TypeChecker from '../typecheck/TypeChecker';
-import TypeCheckContext from '../typecheck/TypeCheckContext';
-import Module from '../runtime/Module';
 import { TType } from '../typecheck/types';
-import Translator from '../translator/Translator';
-import Func from '../translator/Func';
+import INodeVisitor from './INodeVisitor';
 
 
 export interface ICSTSubTree {
@@ -112,32 +108,6 @@ export abstract class ASTNode {
         };
         this.registerLocation(key, location);
     }
-}
 
-/**
- * If your AST node is involved with type checking, it should implement this interface
- */
-export interface TypedNode extends ASTNode {
-    getType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext): TType;
-
-    /**
-     * This method is the meat of the type checking logic.
-     * It is passed the type checker instance and containing module instance always,
-     * if it is a statement it also receives a symbol table and the expected return type of the containing function.
-     * If it is an expression it also receives a symbol table and the expected type of the expression (if any).
-     * This method must return that type.
-     */
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext): TType;
-}
-
-/**
- * If your AST node needs to be translated to IR instructions, it should implement this interface
- */
-export interface TranslatableNode extends ASTNode {
-    /**
-     * This method is responsible for emitting instructions that amount to
-     * a runtime equivalent of the logic of the node.
-     * This only applies to statements and expressions.
-     */
-    translate(translator: Translator, func: Func): void | number;
+    abstract visit<T>(visitor: INodeVisitor<T>): T;
 }

@@ -1,5 +1,6 @@
 import { ASTNode, CSTNode } from '../Node';
 import { Token } from '../../parser/Tokenizer';
+import INodeVisitor from '../INodeVisitor';
 
 
 type ImportTokens = {
@@ -11,6 +12,10 @@ type ImportTokens = {
 export class ImportDeclaration extends ASTNode {
     moduleName: string;
     importNames: { [name: string]: string };
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitImportDeclaration(this);
+    }
 }
 
 export class STImportDeclaration extends CSTNode<ImportDeclaration> {

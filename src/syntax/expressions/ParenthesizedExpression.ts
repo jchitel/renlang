@@ -1,22 +1,13 @@
 import { Expression, STExpression } from './Expression';
-import { TypedNode, TranslatableNode } from '../Node';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
 import { Token } from '../../parser/Tokenizer';
-import Translator from '../../translator/Translator';
-import Func from '../../translator/Func';
+import INodeVisitor from '../INodeVisitor';
 
 
-export class ParenthesizedExpression extends Expression implements TypedNode, TranslatableNode {
+export class ParenthesizedExpression extends Expression {
     inner: Expression;
     
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        return this.inner.getType(typeChecker, module, context);
-    }
-
-    translate(translator: Translator, func: Func) {
-        return this.inner.translate(translator, func);
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitParenthesizedExpression(this);
     }
 }
 

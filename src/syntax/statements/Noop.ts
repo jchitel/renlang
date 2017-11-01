@@ -1,9 +1,6 @@
 import { Statement } from './Statement';
 import { ILocation } from '../../parser/Tokenizer';
-import Translator from '../../translator/Translator';
-import Func from '../../translator/Func';
-import { Noop as INoop } from '../../runtime/instructions';
-import { TNever } from '../../typecheck/types';
+import INodeVisitor from '../INodeVisitor';
 
 
 /**
@@ -15,13 +12,8 @@ export class Noop extends Statement {
         super();
         this.createAndRegisterLocation('self', startLoc, endLoc);
     }
-
-    // noop, nothing to check
-    resolveType() {
-        return new TNever();
-    }
-
-    translate(_translator: Translator, func: Func) {
-        func.addInstruction(new INoop());
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitNoop(this);
     }
 }

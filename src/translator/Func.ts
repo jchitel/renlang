@@ -3,6 +3,7 @@ import { FunctionDeclaration } from '../syntax/declarations';
 import { Expression, LambdaExpression } from '../syntax/expressions';
 import Instruction, { Return, ParamRef, AddToScope } from '../runtime/instructions';
 import Translator from './Translator';
+import TranslationVisitor from './TranslationVisitor';
 
 
 type ASTFunction = FunctionDeclaration | LambdaExpression;
@@ -147,10 +148,10 @@ export class FunctionFunc extends Func {
         // translate body
         const body = this.ast.body;
         if (body instanceof Expression) {
-            const ref = body.translate(translator, this);
+            const ref = body.visit(new TranslationVisitor(translator, this)) as number;
             this.instructions.push(new Return(ref));
         } else {
-            body.translate(translator, this);
+            body.visit(new TranslationVisitor(translator, this));
         }
     }
 

@@ -1,19 +1,14 @@
 import { STType, Type } from './Type';
 import { Token } from '../../parser/Tokenizer';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import Module from '../../runtime/Module';
-import { TArray, TUnknown } from '../../typecheck/types';
+import INodeVisitor from '../INodeVisitor';
 
 
 
 export class ArrayType extends Type {
     baseType: Type;
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        const baseType = this.baseType.getType(typeChecker, module, context);
-        if (baseType instanceof TUnknown) return new TUnknown();
-        else return new TArray(baseType);
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitArrayType(this);
     }
 }
 

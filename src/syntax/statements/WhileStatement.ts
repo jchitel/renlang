@@ -1,53 +1,15 @@
 import { Statement, STStatement } from './Statement';
 import { Expression, STExpression } from '../expressions';
 import { Token } from '../../parser/Tokenizer';
-import TypeChecker from '../../typecheck/TypeChecker';
-import TypeCheckContext from '../../typecheck/TypeCheckContext';
-import { TYPE_MISMATCH } from '../../typecheck/TypeCheckerMessages';
-import Module from '../../runtime/Module';
-import Translator from '../../translator/Translator';
-import Func from '../../translator/Func';
-import {
-    PushLoopFrame,
-    FalseBranch,
-    Jump,
-    PopFrame
-} from '../../runtime/instructions';
+import INodeVisitor from '../INodeVisitor';
 
 
 export class WhileStatement extends Statement {
     conditionExp: Expression;
     body: Statement;
-
-    resolveType(typeChecker: TypeChecker, module: Module, context: TypeCheckContext) {
-        // type check the condition
-        const conditionType = this.conditionExp.getType(typeChecker, module, context);
-        if (!conditionType.isBool()) {
-            typeChecker.pushError(TYPE_MISMATCH(conditionType, 'bool'), module.path, this.conditionExp.locations.self);
-        }
-        // increment the loop number
-        context.loopNumber++;
-        // type check the body
-        const returnType = this.body.getType(typeChecker, module, context);
-        context.loopNumber--;
-        return returnType;
-    }
-
-    translate(translator: Translator, func: Func) {
-        const loopFrame = func.pushScope(new PushLoopFrame({ start: func.nextInstrNum() + 1 }));
-        // store the condition value into a reference
-        const conditionInstructionNumber = func.nextInstrNum();
-        const conditionRef = this.conditionExp.translate(translator, func);
-        // branch if the condition is false
-        const branch = func.addInstruction(new FalseBranch({ ref: conditionRef }));
-        // insert the body instructions
-        this.body.translate(translator, func);
-        // jump to the check instruction
-        func.addInstruction(new Jump({ target: conditionInstructionNumber }));
-        // add a false branch target noop
-        branch.target = func.nextInstrNum();
-        loopFrame.end = branch.target;
-        func.popScope(new PopFrame());
+    
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitWhileStatement(this);
     }
 }
 

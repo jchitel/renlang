@@ -256,6 +256,6 @@ function baseCheck(_target: AssignmentVisitor, _name: string, desc: TypedPropert
         // if a value was returned, use that
         if (typeof val === 'boolean') return val;
         // otherwise call the original function
-        return orig.call(this, orig);
+        return orig.call(this, type);
     };
 }
