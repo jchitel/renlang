@@ -1,7 +1,7 @@
-import * as decls from '../syntax/declarations';
-import * as types from '../syntax/types';
-import * as exprs from '../syntax/expressions';
-import * as stmts from '../syntax/statements';
+import * as decls from '../syntax/declarations/cst';
+import * as types from '../syntax/types/cst';
+import * as exprs from '../syntax/expressions/cst';
+import * as stmts from '../syntax/statements/cst';
 import * as mess from './ParserMessages';
 import Parser from './Parser';
 

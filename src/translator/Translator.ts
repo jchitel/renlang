@@ -3,7 +3,7 @@ import ConstFunc from './ConstFunc';
 import Instruction, { SetFunctionRef } from '../runtime/instructions';
 import { TInteger, TChar, TTuple, TArray, TFunction } from '../typecheck/types';
 import Module from '../runtime/Module';
-import { LambdaExpression } from '../syntax/expressions';
+import { LambdaExpression } from '../syntax/expressions/ast';
 
 
 /**

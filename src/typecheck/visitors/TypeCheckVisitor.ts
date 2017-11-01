@@ -1,13 +1,13 @@
-import { ASTNode } from '../../syntax/Node';
+import ASTNode from '../../syntax/ASTNode';
 import { ILocation } from '../../parser/Tokenizer';
 import INodeVisitor from '../../syntax/INodeVisitor';
 import { TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple,
     TFunction, TUnion, TGeneric, TParam, TAny, TNever, TUnknown, determineGeneralType } from '../types';
 import Module from '../../runtime/Module';
-import * as decls from '../../syntax/declarations';
-import * as types from '../../syntax/types';
-import * as stmts from '../../syntax/statements';
-import * as exprs from '../../syntax/expressions';
+import * as decls from '../../syntax/declarations/ast';
+import * as types from '../../syntax/types/ast';
+import * as stmts from '../../syntax/statements/ast';
+import * as exprs from '../../syntax/expressions/ast';
 import TypeChecker from '../TypeChecker';
 import TypeCheckContext, { SymbolTable } from '../TypeCheckContext';
 import * as mess from '../TypeCheckerMessages';

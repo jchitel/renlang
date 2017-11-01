@@ -1,7 +1,7 @@
-import * as decls from './declarations';
-import * as types from './types';
-import * as stmts from './statements';
-import * as exprs from './expressions';
+import * as decls from './declarations/ast';
+import * as types from './types/ast';
+import * as stmts from './statements/ast';
+import * as exprs from './expressions/ast';
 
 
 export default interface INodeVisitor<T> {

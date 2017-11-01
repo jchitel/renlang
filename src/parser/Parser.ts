@@ -1,7 +1,7 @@
 import Tokenizer, { Token } from './Tokenizer';
 import LazyList from './LazyList';
 import ParserError from './ParserError';
-import { AnyCSTNode, ICSTSubTree, CSTChildNode } from '../syntax/Node';
+import { AnyCSTNode, ICSTSubTree, CSTChildNode } from '../syntax/CSTNode';
 
 
 /**

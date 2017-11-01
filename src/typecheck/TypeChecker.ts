@@ -1,7 +1,8 @@
 import Module, { ModuleElement } from '../runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
-import { STProgram, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations';
+import { STProgram } from '../syntax/declarations/cst';
+import { ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations/ast';
 import { TType, TUnknown, TRecursive } from './types';
 import { ILocation } from '../parser/Tokenizer';
 import { TypeCheckVisitor } from './visitors';

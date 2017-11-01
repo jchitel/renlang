@@ -1,8 +1,8 @@
 import { resolve, dirname, join } from 'path';
 import { existsSync as exists, lstatSync as lstat, readFileSync as readFile } from 'fs';
 
-import { ASTNode } from '../syntax/Node';
-import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations';
+import ASTNode from '../syntax/ASTNode';
+import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations/ast';
 import parse from '../parser';
 import Func from '../translator/Func';
 

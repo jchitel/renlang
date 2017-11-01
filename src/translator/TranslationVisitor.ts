@@ -1,8 +1,8 @@
 import INodeVisitor from '../syntax/INodeVisitor';
-import * as decls from '../syntax/declarations';
-import * as types from '../syntax/types';
-import * as stmts from '../syntax/statements';
-import * as exprs from '../syntax/expressions';
+import * as decls from '../syntax/declarations/ast';
+import * as types from '../syntax/types/ast';
+import * as stmts from '../syntax/statements/ast';
+import * as exprs from '../syntax/expressions/ast';
 import Translator from './Translator';
 import Func from './Func';
 import Instruction, {
