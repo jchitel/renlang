@@ -1,7 +1,7 @@
 import Tokenizer, { Token } from './Tokenizer';
 import LazyList from './LazyList';
 import ParserError from './ParserError';
-import { AnyCSTNode, ICSTSubTree, CSTChildNode } from '../syntax/CSTNode';
+import CSTNode, { ICSTSubTree, CSTChildNode } from '../syntax/CSTNode';
 
 
 /**
@@ -29,7 +29,7 @@ import { AnyCSTNode, ICSTSubTree, CSTChildNode } from '../syntax/CSTNode';
  * - If accepted, save the separator and parser state
  * - Repeat until a failure or a successful completion
  */
-export interface ParserComponentSequentialDef<T> extends ParserComponentBaseDef {
+export interface ParserComponentSequentialDef<T extends CSTNode> extends ParserComponentBaseDef {
     name: keyof T;
     definite?: boolean;
     mess?: ParserMessage;
@@ -59,7 +59,7 @@ export interface ParserComponentSequentialDef<T> extends ParserComponentBaseDef 
 interface ParserComponentBaseDef {
     type?: string;
     image?: string;
-    parse?(parser: Parser): AnyCSTNode;
+    parse?(parser: Parser): CSTNode;
     optional?: boolean;
 }
 
@@ -196,7 +196,7 @@ export default class Parser {
         this.printDebug('definite flag present, soft mode turned off');
     }
 
-    public accept<T extends AnyCSTNode>(defs: ParserComponentSequentialDef<T>[], clss: Class<T>): T {
+    public accept<T extends CSTNode>(defs: ParserComponentSequentialDef<T>[], clss: Class<T>): T {
         const node = this._accept(defs, clss);
         if (!node) throw new Error('false bubbled to top');
         return node;
@@ -205,7 +205,7 @@ export default class Parser {
     /**
      * Accept basic sequential def
      */
-    private _accept<T extends AnyCSTNode>(defs: ParserComponentSequentialDef<T>[], clss: Class<T>) {
+    private _accept<T extends CSTNode>(defs: ParserComponentSequentialDef<T>[], clss: Class<T>) {
         this.printDebug('accept()', defs, clss);
         this.printDebug('entering sequential mode');
         // make sure that there is a definite flag on at least one component
@@ -251,7 +251,7 @@ export default class Parser {
     /**
      * Repetition mode
      */
-    private acceptRepetition<T extends AnyCSTNode>(def: ParserComponentSequentialDef<T>): [boolean, CSTChildNode[], CSTChildNode[]] {
+    private acceptRepetition<T extends CSTNode>(def: ParserComponentSequentialDef<T>): [boolean, CSTChildNode[], CSTChildNode[]] {
         const items = [], seps = [];
         let wasSeparator = false;
         let handleOneOrMore = !!def.oneOrMore;
@@ -302,7 +302,7 @@ export default class Parser {
         }
     }
 
-    public acceptOneOf<T extends AnyCSTNode>(choices: ParserComponentBaseDef[], clss: Class<T>): T {
+    public acceptOneOf<T extends CSTNode>(choices: ParserComponentBaseDef[], clss: Class<T>): T {
         const node = this._acceptOneOf<T>(choices, clss);
         if (!node) throw new Error('false bubbled to top');
         return node;
@@ -311,7 +311,7 @@ export default class Parser {
     /**
      * Choice mode
      */
-    private _acceptOneOf<T extends AnyCSTNode>(choices: ParserComponentBaseDef[], clss: Class<T>) {
+    private _acceptOneOf<T extends CSTNode>(choices: ParserComponentBaseDef[], clss: Class<T>) {
         let base;
         this.printDebug('normal choice mode');
         for (const choice of choices) {
@@ -337,7 +337,7 @@ export default class Parser {
         return base;
     }
 
-    public acceptLeftRecursive<T extends AnyCSTNode>(def: ParserComponentLeftRecursiveDef, clss: Class<T>): T {
+    public acceptLeftRecursive<T extends CSTNode>(def: ParserComponentLeftRecursiveDef, clss: Class<T>): T {
         const node = this._acceptLeftRecursive(def, clss);
         if (!node) throw new Error('false bubbled to top');
         return node;
@@ -346,7 +346,7 @@ export default class Parser {
     /**
      * Left recursive mode
      */
-    private _acceptLeftRecursive<T extends AnyCSTNode>(def: ParserComponentLeftRecursiveDef, clss: Class<T>) {
+    private _acceptLeftRecursive<T extends CSTNode>(def: ParserComponentLeftRecursiveDef, clss: Class<T>) {
         let base = this._acceptOneOf(def.bases, clss);
         if (!base) return false;
         this.printDebug('ENTERING LEFT-RECURSIVE MODE');
@@ -359,8 +359,7 @@ export default class Parser {
                 const suffNode = suff.parse && suff.parse(subParser);
                 if (suffNode) {
                     this.printDebug('SUFFIX ACCEPTED', suffNode);
-                    suffNode.subtree[suff.baseName] = base;
-                    suffNode.children.unshift(base);
+                    suffNode[suff.baseName] = base;
                     this.tokenizer = subParser.tokenizer;
                     base = new clss({ choice: suffNode }, [suffNode]);
                     this.printDebug('new base', base);

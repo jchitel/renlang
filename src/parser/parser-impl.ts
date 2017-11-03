@@ -296,7 +296,7 @@ export function acceptType(parser: Parser): types.STType {
             { baseName: 'baseType', parse: acceptArrayTypeSuffix },
             { baseName: 'left', parse: acceptUnionTypeSuffix },
         ],
-    }, types.STType);
+    }, types.STTypeNode);
 }
 
 /**
@@ -451,7 +451,7 @@ export function acceptExpression(parser: Parser): exprs.STExpression {
             { baseName: 'target', parse: acceptFieldAccessSuffix },
             { baseName: 'target', parse: acceptArrayAccessSuffix },
         ],
-    }, exprs.STExpression);
+    }, exprs.STExpressionNode);
 }
 
 /**
@@ -662,7 +662,7 @@ export function acceptStatement(parser: Parser): stmts.STStatement {
         { parse: acceptReturnStatement },
         { parse: acceptBreakStatement },
         { parse: acceptContinueStatement },
-    ], stmts.STStatement);
+    ], stmts.STStatementNode);
 }
 
 /**

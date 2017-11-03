@@ -6,6 +6,7 @@ import { ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclarat
 import { TType, TUnknown, TRecursive } from './types';
 import { ILocation } from '../parser/Tokenizer';
 import { TypeCheckVisitor } from './visitors';
+import reduceProgram from '../syntax/declarations/reduce';
 
 
 export type SymbolTable<T> = { [symbol: string]: T };
@@ -48,7 +49,7 @@ export default class TypeChecker {
      */
     check(mainAst: STProgram, mainModulePath: string) {
         // create a module for the main AST
-        this.mainModule = new Module(0, mainModulePath, mainAst.reduce());
+        this.mainModule = new Module(0, mainModulePath, reduceProgram(mainAst));
         this.modules.push(this.mainModule);
         this.moduleCache = { [mainModulePath]: 0 };
         // process all declarations, recursively traversing all modules

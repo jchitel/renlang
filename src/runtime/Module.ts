@@ -5,6 +5,7 @@ import ASTNode from '../syntax/ASTNode';
 import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations/ast';
 import parse from '../parser';
 import Func from '../translator/Func';
+import reduceProgram from '../syntax/declarations/reduce';
 
 
 export interface Import {
@@ -113,6 +114,6 @@ export default class Module {
         // parse it
         const parsed = parse(contents);
         // reduce it
-        return parsed.reduce();
+        return reduceProgram(parsed);
     }
 }
