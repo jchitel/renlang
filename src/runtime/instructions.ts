@@ -1,7 +1,7 @@
 import RValue, { RArray, RBool, RChar, RFloat, RInteger, RString, RStruct, RTuple, RFunction } from './types';
 import { UnaryOperator, BinaryOperator } from './operators';
-import { FunctionFrame, ScopeFrame, LoopFrame, TryFrame, Catch, Finally } from '../interpreter/frames';
-import Interpreter from '../interpreter/Interpreter';
+import { FunctionFrame, ScopeFrame, LoopFrame, TryFrame, Catch, Finally } from '~/interpreter/frames';
+import Interpreter from '~/interpreter/Interpreter';
 
 
 /**

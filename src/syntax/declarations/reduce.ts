@@ -1,10 +1,12 @@
 import * as cst from './cst';
 import * as ast from './ast';
-import { Token } from '../../parser/Tokenizer';
-import { STBlock, STStatementNode } from '../statements/cst';
-import reduceTypeNode from '../types/reduce';
-import reduceExpression from '../expressions/reduce';
-import reduceStatement, { reduceBlock } from '../statements/reduce';
+import { Token } from '~/parser/Tokenizer';
+import { STBlock, STStatementNode } from '~/syntax/statements/cst';
+import { Statement } from '~/syntax/statements/ast';
+import { Expression } from '~/syntax/expressions/ast';
+import reduceTypeNode from '~/syntax/types/reduce';
+import reduceExpression from '~/syntax/expressions/reduce';
+import reduceStatement, { reduceBlock } from '~/syntax/statements/reduce';
 
 
 /**
@@ -61,7 +63,7 @@ export function reduceTypeDeclaration(decl: cst.STTypeDeclaration) {
     const node = new ast.TypeDeclaration();
     node.name = decl.typeNameToken.image;
     node.registerLocation('name', decl.typeNameToken.getLocation());
-    if (decl.typeParamList) node.typeParams = reduceTypeParamList(decl.typeParamList);
+    node.typeParams = decl.typeParamList ? reduceTypeParamList(decl.typeParamList) : [];
     node.typeNode = reduceTypeNode(decl.typeNode);
     return node;
 }
@@ -83,12 +85,7 @@ export function reduceTypeParamList(list: cst.STTypeParamList) {
         if (param.typeConstraint) {
             const opLoc = param.typeConstraint.colonToken.getLocation();
             paramNode.typeConstraint = reduceTypeNode(param.typeConstraint.constraintType);
-            const loc = {
-                startLine: opLoc.startLine,
-                endLine: paramNode.typeConstraint.locations.self.endLine,
-                startColumn: opLoc.startColumn,
-                endColumn: paramNode.typeConstraint.locations.self.endColumn,
-            };
+            const loc = opLoc.merge(paramNode.typeConstraint.locations.self);
             paramNode.registerLocation('constraint', loc);
             end = loc;
         }
@@ -103,7 +100,7 @@ export function reduceFunctionDeclaration(decl: cst.STFunctionDeclaration) {
     node.name = decl.functionNameToken.image;
     node.registerLocation('name', decl.functionNameToken.getLocation());
     node.returnType = reduceTypeNode(decl.returnType);
-    if (decl.typeParamList) node.typeParams = reduceTypeParamList(decl.typeParamList);
+    node.typeParams = decl.typeParamList ? reduceTypeParamList(decl.typeParamList) : [];
     node.params = decl.paramsList.params.map(p => reduceParam(p));
     node.body = reduceFunctionBody(decl.functionBody);
     node.createAndRegisterLocation('self', node.locations.name, node.body.locations.self);
@@ -118,7 +115,7 @@ export function reduceParam(param: cst.STParam) {
     return node;
 }
 
-export function reduceFunctionBody(body: cst.STFunctionBody) {
+export function reduceFunctionBody(body: cst.STFunctionBody): Statement | Expression {
     if (body.choice instanceof STBlock) {
         return reduceBlock(body.choice);
     } else if (body.choice instanceof STStatementNode) {

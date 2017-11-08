@@ -1,13 +1,16 @@
-import { expect } from 'chai';
+import { expect, assert } from 'chai';
 import { resolve, dirname } from 'path';
 import { readFileSync as readFile } from 'fs';
 
 import Translator from '../../src/translator/Translator';
-import Func from '../../src/translator/Func';
+import { FunctionFunc } from '../../src/translator/Func';
 import { ParamRef, AddToScope, SetIntegerRef, BinaryOperatorRef, Return, ConstBranch, ConstSet, ConstRef } from '../../src/runtime/instructions';
 import { TFunction, TArray, TChar, TInteger, TTuple } from '../../src/typecheck/types';
 import parse from '../../src/parser';
 import typecheck from '../../src/typecheck';
+import { reduceFunctionDeclaration } from '~/syntax/declarations/reduce';
+import { STFunctionDeclaration } from '~/syntax/cst';
+import { BinaryOperator } from '~/runtime/operators';
 
 
 describe('Translator', () => {
@@ -34,9 +37,10 @@ describe('Translator', () => {
 
     it('should translate a function', () => {
         const src = 'func int add(int a, int b) => a + b';
-        const func = new Func(0, { ast: parse(src).declarations[0].reduce() }, 0);
+        const ast = reduceFunctionDeclaration(parse(src).declarations[0].choice as STFunctionDeclaration);
+        const func = new FunctionFunc(0, { ast }, 0);
         const tr = new Translator();
-        tr.translateFunction(func);
+        func.translate(tr);
         expect(func.instructions.slice(0, 4)).to.eql([
             new ParamRef(0, 0),
             new AddToScope('a', 0),
@@ -51,11 +55,11 @@ describe('Translator', () => {
         const mods = typecheck(parse(src), '/index.ren');
         const funcs = new Translator().translate(mods);
         expect(funcs.length).to.eql(3);
-        expect(funcs[2].instructions).to.eql([
+        assert.containSubset(funcs[2].instructions, [
             new ParamRef(0, 6),                  // copy param 0 to ref 6
             new AddToScope('a', 6),              // set scope variable 'a' to point to ref 6
             new SetIntegerRef(7, 1),             // copy the integer 1 to ref 7
-            new BinaryOperatorRef(8, 6, '+', 7), // copy add refs 6 and 7 and store the result in ref 8
+            new BinaryOperatorRef(8, 6, {} as BinaryOperator, 7), // copy add refs 6 and 7 and store the result in ref 8
             new Return(8),                       // return ref 8
         ]);
     });
@@ -67,7 +71,7 @@ describe('Translator', () => {
         const funcs = new Translator().translate(mods);
         expect(funcs.length).to.eql(2);
         expect(funcs[1].instructions).to.eql([
-            new ConstBranch(0, 3),    // if const 0 is set, jump to ic 3
+            new ConstBranch({ constRef: 0, target: 3 }),    // if const 0 is set, jump to ic 3
             new SetIntegerRef(2, -1), // store the integer -1 into ref 2
             new ConstSet(0, 2),       // set const 0 to the value in ref 2
             new ConstRef(3, 0),       // ic 3: set ref 3 to const 0
@@ -76,7 +80,7 @@ describe('Translator', () => {
     });
 
     it('should translate a reference to an imported function', () => {
-        const path = resolve(dirname(__filename), '../testfiles/test.ren');
+        const path = resolve(dirname(__filename), '../../../testfiles/test.ren');
         const mods = typecheck(parse(readFile(path).toString()), path);
         const funcs = new Translator().translate(mods);
         expect(funcs.length).to.eql(5);
@@ -86,7 +90,7 @@ describe('Translator', () => {
             new Return(3),          // return ref 3
         ]);
         expect(funcs[4].instructions).to.eql([
-            new ConstBranch(0, 3),    // if const 0 is set, jump to ic 3
+            new ConstBranch({ constRef: 0, target: 3 }),    // if const 0 is set, jump to ic 3
             new SetIntegerRef(6, 1), // store the integer -1 into ref 2
             new ConstSet(0, 6),       // set const 0 to the value in ref 2
             new ConstRef(7, 0),       // ic 3: set ref 3 to const 0

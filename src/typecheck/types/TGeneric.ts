@@ -1,8 +1,8 @@
 import TType from './TType';
 import TParam from './TParam';
-import { SymbolTable } from '../TypeCheckContext';
+import { SymbolTable } from '~/typecheck/TypeCheckContext';
 import OrderedMap from './OrderedMap';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 /**

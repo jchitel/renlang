@@ -1,7 +1,7 @@
 import * as cst from './cst';
 import * as ast from './ast';
-import { Token } from '../../parser/Tokenizer';
-import ReducerMap from '../ReducerMap';
+import { Token } from '~/parser/Tokenizer';
+import ReducerMap from '~/syntax/ReducerMap';
 
 
 export default function reduceType(type: cst.STTypeNode) {

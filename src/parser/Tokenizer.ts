@@ -2,11 +2,32 @@ import ParserError from './ParserError';
 import LazyList from './LazyList';
 
 
-export interface ILocation {
-    startLine: number,
-    startColumn: number,
-    endLine: number,
-    endColumn: number,
+export class Location {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+
+    constructor(startLine: number, startColumn: number, endLine: number, endColumn: number) {
+        this.startLine = startLine;
+        this.startColumn = startColumn;
+        this.endLine = endLine;
+        this.endColumn = endColumn;
+    }
+
+    /**
+     * Create a new location that contains both this location and the specified location
+     */
+    merge(location: Location) {
+        let startLine = this.startLine, startColumn = this.startColumn;
+        let endLine = this.endLine, endColumn = this.endColumn;
+        if (location.startLine < this.startLine || location.startLine === this.startLine && location.startColumn < this.startColumn) {
+            [startLine, startColumn] = [location.startLine, location.startColumn];
+        } else if (location.endLine > this.endLine || location.endLine === this.endLine && location.endColumn > this.endColumn) {
+            [endLine, endColumn] = [location.endLine, location.endLine];
+        }
+        return new Location(startLine, startColumn, endLine, endColumn);
+    }
 }
 
 /**
@@ -31,13 +52,8 @@ export class Token {
         this.value = value;
     }
 
-    getLocation(): ILocation {
-        return {
-            startLine: this.line,
-            startColumn: this.column,
-            endLine: this.line,
-            endColumn: this.column + (this.image || '').length - 1,
-        };
+    getLocation(): Location {
+        return new Location(this.line, this.column, this.line, this.column + this.image.length - 1);
     }
 }
 

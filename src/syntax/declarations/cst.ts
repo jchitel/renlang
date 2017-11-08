@@ -1,8 +1,8 @@
-import CSTNode from '../CSTNode';
-import { Token } from '../../parser/Tokenizer';
-import { STTypeNode } from '../types/cst';
-import { STStatementNode, STBlock } from '../statements/cst';
-import { STExpressionNode } from '../expressions/cst';
+import CSTNode from '~/syntax/CSTNode';
+import { Token } from '~/parser/Tokenizer';
+import { STTypeNode } from '~/syntax/types/cst';
+import { STStatementNode, STBlock } from '~/syntax/statements/cst';
+import { STExpressionNode } from '~/syntax/expressions/cst';
 
 
 export class STProgram extends CSTNode {

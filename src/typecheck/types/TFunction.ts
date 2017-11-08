@@ -1,9 +1,9 @@
 import TType from './TType';
 import TNever from './TNever';
-import { SymbolTable } from '../TypeCheckContext';
+import { SymbolTable } from '~/typecheck/TypeCheckContext';
 import TParam from './TParam';
 import OrderedMap from './OrderedMap';
-import ITypeVisitor, { InferTypeArgsVisitor } from '../visitors';
+import ITypeVisitor, { InferTypeArgsVisitor } from '~/typecheck/visitors';
 
 
 /**

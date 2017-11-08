@@ -1,7 +1,7 @@
-import CSTNode from '../CSTNode';
-import { Token } from '../../parser/Tokenizer';
-import { STTypeArgList } from '../types/cst';
-import { STParam, STFunctionBody } from '../declarations/cst';
+import CSTNode from '~/syntax/CSTNode';
+import { Token } from '~/parser/Tokenizer';
+import { STTypeArgList } from '~/syntax/types/cst';
+import { STParam, STFunctionBody } from '~/syntax/declarations/cst';
 
 
 export class STExpressionNode extends CSTNode {

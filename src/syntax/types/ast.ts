@@ -1,6 +1,6 @@
-import ASTNode from '../ASTNode';
-import { ILocation } from '../../parser/Tokenizer';
-import INodeVisitor from '../INodeVisitor';
+import ASTNode from '~/syntax/ASTNode';
+import { Location } from '~/parser/Tokenizer';
+import INodeVisitor from '~/syntax/INodeVisitor';
 
 
 export abstract class Type extends ASTNode {}
@@ -8,7 +8,7 @@ export abstract class Type extends ASTNode {}
 export class PrimitiveType extends Type {
     typeNode: string;
 
-    constructor(typeNode: string, location: ILocation) {
+    constructor(typeNode: string, location: Location) {
         super();
         this.typeNode = typeNode;
         this.registerLocation('self', location);
@@ -22,7 +22,7 @@ export class PrimitiveType extends Type {
 export class IdentifierType extends Type {
     name: string;
 
-    constructor(name: string, location: ILocation) {
+    constructor(name: string, location: Location) {
         super();
         this.name = name;
         this.registerLocation('self', location);

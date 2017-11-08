@@ -1,6 +1,7 @@
 import { readFileSync as readFile } from 'fs';
 import { resolve } from 'path';
 
+import './require-hook';
 import parse from './parser';
 import typecheck from './typecheck';
 import translate from './translator';

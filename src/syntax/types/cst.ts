@@ -1,5 +1,5 @@
-import CSTNode from '../CSTNode';
-import { Token } from '../../parser/Tokenizer';
+import CSTNode from '~/syntax/CSTNode';
+import { Token } from '~/parser/Tokenizer';
 
 
 /**

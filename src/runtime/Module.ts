@@ -1,11 +1,11 @@
 import { resolve, dirname, join } from 'path';
 import { existsSync as exists, lstatSync as lstat, readFileSync as readFile } from 'fs';
 
-import ASTNode from '../syntax/ASTNode';
-import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations/ast';
-import parse from '../parser';
-import Func from '../translator/Func';
-import reduceProgram from '../syntax/declarations/reduce';
+import ASTNode from '~/syntax/ASTNode';
+import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '~/syntax/declarations/ast';
+import parse from '~/parser';
+import Func from '~/translator/Func';
+import reduceProgram from '~/syntax/declarations/reduce';
 
 
 export interface Import {

@@ -1,8 +1,8 @@
 import { expect } from 'chai';
 
-import * as exps from '../../src/ast/expressions';
-import { Param } from '../../src/ast/declarations';
-import { TypeArgList } from '../../src/ast/types';
+import * as exps from '../../src/syntax/expressions';
+import { Param } from '../../src/syntax/declarations';
+import { TypeArgList } from '../../src/syntax/types';
 import { Token } from '../../src/parser/Tokenizer';
 import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnknown, TAny } from '../../src/typecheck/types';
 import { operator, Operator } from '../../src/runtime/operators';

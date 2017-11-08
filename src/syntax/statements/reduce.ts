@@ -1,8 +1,8 @@
 import * as cst from './cst';
 import * as ast from './ast';
-import ReducerMap from '../ReducerMap';
-import reduceExpression from '../expressions/reduce';
-import { reduceParam } from '../declarations/reduce';
+import ReducerMap from '~/syntax/ReducerMap';
+import reduceExpression from '~/syntax/expressions/reduce';
+import { reduceParam } from '~/syntax/declarations/reduce';
 
 
 export default function reduceStatement(stmt: cst.STStatementNode) {

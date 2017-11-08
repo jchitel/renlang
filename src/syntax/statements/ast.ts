@@ -1,8 +1,8 @@
-import ASTNode from '../ASTNode';
-import { ILocation } from '../../parser/Tokenizer'
-import INodeVisitor from '../INodeVisitor';
-import { Param } from '../declarations/ast';
-import { Expression } from '../expressions/ast';
+import ASTNode from '~/syntax/ASTNode';
+import { Location } from '~/parser/Tokenizer'
+import INodeVisitor from '~/syntax/INodeVisitor';
+import { Param } from '~/syntax/declarations/ast';
+import { Expression } from '~/syntax/expressions/ast';
 
 
 export abstract class Statement extends ASTNode {}
@@ -20,7 +20,7 @@ export class Block extends Statement {
  * Inside another block, this is effectively nothing, but this has semantic meaning as a function body or statement body.
  */
 export class Noop extends Statement {
-    constructor(startLoc: ILocation, endLoc: ILocation) {
+    constructor(startLoc: Location, endLoc: Location) {
         super();
         this.createAndRegisterLocation('self', startLoc, endLoc);
     }

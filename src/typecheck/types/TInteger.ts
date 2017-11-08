@@ -1,5 +1,5 @@
 import TType from './TType';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 /**
@@ -11,7 +11,7 @@ export default class TInteger extends TType {
     size: number;
     signed: boolean;
 
-    constructor(size: number, signed: boolean) {
+    constructor(size: number = Infinity, signed: boolean = true) {
         super();
         this.size = size;
         this.signed = signed;

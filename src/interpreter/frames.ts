@@ -1,6 +1,6 @@
 import Interpreter from './Interpreter';
-import RValue from '../runtime/types';
-import { TType } from '../typecheck/types';
+import RValue from '~/runtime/types';
+import { TType } from '~/typecheck/types';
 
 
 /**

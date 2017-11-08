@@ -1,8 +1,8 @@
-import ASTNode from '../ASTNode';
-import INodeVisitor from '../INodeVisitor';
-import { Type } from '../types/ast';
-import { Expression } from '../expressions/ast';
-import { Statement } from '../statements/ast';
+import ASTNode from '~/syntax/ASTNode';
+import INodeVisitor from '~/syntax/INodeVisitor';
+import { Type } from '~/syntax/types/ast';
+import { Expression } from '~/syntax/expressions/ast';
+import { Statement } from '~/syntax/statements/ast';
 
 
 export class Program extends ASTNode {

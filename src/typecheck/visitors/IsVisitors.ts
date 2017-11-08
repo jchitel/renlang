@@ -2,8 +2,8 @@ import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
     TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
-} from '../types';
-import OrderedMap from '../types/OrderedMap';
+} from '~/typecheck/types';
+import OrderedMap from '~/typecheck/types/OrderedMap';
 
 
 /**

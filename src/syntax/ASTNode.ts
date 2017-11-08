@@ -1,5 +1,5 @@
-import { ILocation } from '../parser/Tokenizer';
-import { TType } from '../typecheck/types';
+import { Location } from '~/parser/Tokenizer';
+import { TType } from '~/typecheck/types';
 import INodeVisitor from './INodeVisitor';
 
 
@@ -18,22 +18,16 @@ import INodeVisitor from './INodeVisitor';
  * to indicate the location of an error in the source code.
  */
 export default abstract class ASTNode {
-    locations: { [key: string]: ILocation };
+    locations: { [key: string]: Location };
     type: TType;
 
-    registerLocation(key: string, value: ILocation) {
+    registerLocation(key: string, value: Location) {
         if (!this.locations) this.locations = {};
         this.locations[key] = value;
     }
 
-    createAndRegisterLocation(key: string, start: ILocation, end: ILocation) {
-        const location = {
-            startLine: start.startLine,
-            startColumn: start.startColumn,
-            endLine: end.endLine,
-            endColumn: end.endColumn,
-        };
-        this.registerLocation(key, location);
+    createAndRegisterLocation(key: string, start: Location, end: Location) {
+        this.registerLocation(key, start.merge(end));
     }
 
     abstract visit<T>(visitor: INodeVisitor<T>): T;

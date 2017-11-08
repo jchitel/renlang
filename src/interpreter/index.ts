@@ -1,5 +1,5 @@
 import Interpreter from './Interpreter';
-import Func from '../translator/Func';
+import Func from '~/translator/Func';
 
 
 export default function interpret(functions: Func[], args: string[]) {

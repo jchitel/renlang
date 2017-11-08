@@ -1,12 +1,12 @@
-import Module, { ModuleElement } from '../runtime/Module';
+import Module, { ModuleElement } from '~/runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
-import { STProgram } from '../syntax/declarations/cst';
-import { ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../syntax/declarations/ast';
+import { STProgram } from '~/syntax/declarations/cst';
+import { ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '~/syntax/declarations/ast';
 import { TType, TUnknown, TRecursive } from './types';
-import { ILocation } from '../parser/Tokenizer';
+import { Location } from '~/parser/Tokenizer';
 import { TypeCheckVisitor } from './visitors';
-import reduceProgram from '../syntax/declarations/reduce';
+import reduceProgram from '~/syntax/declarations/reduce';
 
 
 export type SymbolTable<T> = { [symbol: string]: T };
@@ -36,7 +36,7 @@ export default class TypeChecker {
      * Helper function to add a type check error and return a resolved type at the same time.
      * Because most errors result in an unknown type, the default is TUnknown. 
      */
-    pushError(message: string, modulePath: string, location: ILocation, resolvedType: TType = new TUnknown()) {
+    pushError(message: string, modulePath: string, location: Location, resolvedType: TType = new TUnknown()) {
         this.errors.push(new TypeCheckError(message, modulePath, location));
         return resolvedType;
     }
@@ -228,7 +228,7 @@ export default class TypeChecker {
         }
     }
 
-    addNameClash(name: string, path: string, loc1: ILocation, loc2: ILocation) {
+    addNameClash(name: string, path: string, loc1: Location, loc2: Location) {
         // set the error on whichever comes last
         if (loc1.startLine < loc2.startLine || (loc1.startLine === loc2.startLine && loc1.startColumn < loc2.startColumn)) {
             this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), path, loc2));

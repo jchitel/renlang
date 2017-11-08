@@ -22,9 +22,6 @@ import TAny from './TAny';
  * Given two optional types, return the more general one of the two
  */
 export function determineGeneralType(type1: TType, type2: TType) {
-    // one or both is falsy
-    if (!type2) return type1;
-    if (!type1) return type2;
     // there is a relationship, select the more general one
     if (type2.isAssignableFrom(type1) && !type1.isAssignableFrom(type2)) return type2;
     if (!type2.isAssignableFrom(type1) && type1.isAssignableFrom(type2)) return type1;

@@ -1,11 +1,11 @@
-import ASTNode from '../ASTNode';
-import { ILocation } from '../../parser/Tokenizer';
-import INodeVisitor from '../INodeVisitor';
-import { UnaryOperator, BinaryOperator } from '../../runtime/operators';
-import { Type } from '../types/ast';
-import { Param } from '../declarations/ast';
-import { Statement } from '../statements/ast';
-import { TFunction } from '../../typecheck/types';
+import ASTNode from '~/syntax/ASTNode';
+import { Location } from '~/parser/Tokenizer';
+import INodeVisitor from '~/syntax/INodeVisitor';
+import { UnaryOperator, BinaryOperator } from '~/runtime/operators';
+import { Type } from '~/syntax/types/ast';
+import { Param } from '~/syntax/declarations/ast';
+import { Statement } from '~/syntax/statements/ast';
+import { TFunction } from '~/typecheck/types';
 
 
 export abstract class Expression extends ASTNode {}
@@ -13,7 +13,7 @@ export abstract class Expression extends ASTNode {}
 export class BoolLiteral extends Expression {
     value: boolean;
 
-    constructor(image: string, location: ILocation) {
+    constructor(image: string, location: Location) {
         super();
         this.value = image === 'true';
         this.registerLocation('self', location);
@@ -27,7 +27,7 @@ export class BoolLiteral extends Expression {
 export class CharLiteral extends Expression {
     value: string;
 
-    constructor(value: string, location: ILocation) {
+    constructor(value: string, location: Location) {
         super();
         this.value = value;
         this.registerLocation('self', location);
@@ -41,7 +41,7 @@ export class CharLiteral extends Expression {
 export class FloatLiteral extends Expression {
     value: number;
 
-    constructor(value: number, location: ILocation) {
+    constructor(value: number, location: Location) {
         super();
         this.value = value;
         this.registerLocation('self', location);
@@ -55,7 +55,7 @@ export class FloatLiteral extends Expression {
 export class IdentifierExpression extends Expression {
     name: string;
 
-    constructor(name: string, location: ILocation) {
+    constructor(name: string, location: Location) {
         super();
         this.name = name;
         this.registerLocation('self', location);
@@ -69,7 +69,7 @@ export class IdentifierExpression extends Expression {
 export class IntegerLiteral extends Expression {
     value: number;
 
-    constructor(value: number, location: ILocation) {
+    constructor(value: number, location: Location) {
         super();
         this.value = value;
         this.registerLocation('self', location);
@@ -83,7 +83,7 @@ export class IntegerLiteral extends Expression {
 export class StringLiteral extends Expression {
     value: string;
 
-    constructor(value: string, location: ILocation) {
+    constructor(value: string, location: Location) {
         super();
         this.value = value;
         this.registerLocation('self', location);

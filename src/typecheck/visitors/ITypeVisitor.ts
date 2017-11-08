@@ -1,7 +1,7 @@
 import {
     TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
     TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
-} from '../types';
+} from '~/typecheck/types';
 
 
 export default interface ITypeVisitor<T> {

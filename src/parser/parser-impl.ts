@@ -1,7 +1,7 @@
-import * as decls from '../syntax/declarations/cst';
-import * as types from '../syntax/types/cst';
-import * as exprs from '../syntax/expressions/cst';
-import * as stmts from '../syntax/statements/cst';
+import * as decls from '~/syntax/declarations/cst';
+import * as types from '~/syntax/types/cst';
+import * as exprs from '~/syntax/expressions/cst';
+import * as stmts from '~/syntax/statements/cst';
 import * as mess from './ParserMessages';
 import Parser from './Parser';
 
@@ -270,7 +270,7 @@ export function acceptTypeConstraint(parser: Parser) {
  * TypeSuffix ::= ArrayTypeSuffix
  *              | UnionTypeSuffix
  */
-export function acceptType(parser: Parser): types.STType {
+export function acceptType(parser: Parser): types.STTypeNode {
     return parser.acceptLeftRecursive({
         bases: [
             { type: 'U8' }, { type: 'I8' }, { type: 'BYTE' },
@@ -424,7 +424,7 @@ export function acceptUnionTypeSuffix(parser: Parser) {
  *                    | FieldAccessSuffix
  *                    | ArrayAccessSuffix
  */
-export function acceptExpression(parser: Parser): exprs.STExpression {
+export function acceptExpression(parser: Parser): exprs.STExpressionNode {
     return parser.acceptLeftRecursive({
         bases: [
             { type: 'INTEGER_LITERAL' },
@@ -650,7 +650,7 @@ export function acceptArrayAccessSuffix(parser: Parser) {
  *               BreakStatement |
  *               ContinueStatement
  */
-export function acceptStatement(parser: Parser): stmts.STStatement {
+export function acceptStatement(parser: Parser): stmts.STStatementNode {
     return parser.acceptOneOf([
         { parse: acceptBlock },
         { parse: acceptExpression },

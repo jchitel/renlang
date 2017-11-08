@@ -1,7 +1,7 @@
-import ASTNode from '../syntax/ASTNode';
-import { FunctionDeclaration } from '../syntax/declarations/ast';
-import { Expression, LambdaExpression } from '../syntax/expressions/ast';
-import Instruction, { Return, ParamRef, AddToScope } from '../runtime/instructions';
+import ASTNode from '~/syntax/ASTNode';
+import { FunctionDeclaration } from '~/syntax/declarations/ast';
+import { Expression, LambdaExpression } from '~/syntax/expressions/ast';
+import Instruction, { Return, ParamRef, AddToScope } from '~/runtime/instructions';
 import Translator from './Translator';
 import TranslationVisitor from './TranslationVisitor';
 

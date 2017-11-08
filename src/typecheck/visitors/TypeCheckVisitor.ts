@@ -1,18 +1,18 @@
-import ASTNode from '../../syntax/ASTNode';
-import { ILocation } from '../../parser/Tokenizer';
-import INodeVisitor from '../../syntax/INodeVisitor';
+import ASTNode from '~/syntax/ASTNode';
+import { Location } from '~/parser/Tokenizer';
+import INodeVisitor from '~/syntax/INodeVisitor';
 import { TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple,
-    TFunction, TUnion, TGeneric, TParam, TAny, TNever, TUnknown, determineGeneralType } from '../types';
-import Module from '../../runtime/Module';
-import * as decls from '../../syntax/declarations/ast';
-import * as types from '../../syntax/types/ast';
-import * as stmts from '../../syntax/statements/ast';
-import * as exprs from '../../syntax/expressions/ast';
-import TypeChecker from '../TypeChecker';
-import TypeCheckContext, { SymbolTable } from '../TypeCheckContext';
-import * as mess from '../TypeCheckerMessages';
-import OrderedMap from '../types/OrderedMap';
-import { createUnary, createBinary } from '../../runtime/operators';
+    TFunction, TUnion, TGeneric, TParam, TAny, TNever, TUnknown, determineGeneralType } from '~/typecheck/types';
+import Module from '~/runtime/Module';
+import * as decls from '~/syntax/declarations/ast';
+import * as types from '~/syntax/types/ast';
+import * as stmts from '~/syntax/statements/ast';
+import * as exprs from '~/syntax/expressions/ast';
+import TypeChecker from '~/typecheck/TypeChecker';
+import TypeCheckContext, { SymbolTable } from '~/typecheck/TypeCheckContext';
+import * as mess from '~/typecheck/TypeCheckerMessages';
+import OrderedMap from '~/typecheck/types/OrderedMap';
+import { createUnary, createBinary } from '~/runtime/operators';
 
 
 /**
@@ -60,7 +60,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * Adds a type checking error with the specified message and location.
      * Returns a resolved type, this type defaults to Unknown
      */
-    pushError(message: string, location: ILocation, resolvedType: TType = new TUnknown()) {
+    pushError(message: string, location: Location, resolvedType: TType = new TUnknown()) {
         return this.typeChecker.pushError(message, this.module.path, location, resolvedType);
     }
 
@@ -68,7 +68,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         return this.pushError(mess.TYPE_MISMATCH(actual, expected), node.locations.self);
     }
 
-    nameClash(name: string, location: ILocation) {
+    nameClash(name: string, location: Location) {
         return this.pushError(mess.NAME_CLASH(name), location);
     }
 
@@ -76,7 +76,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         return this.pushError(mess.TYPE_NOT_DEFINED(name), node.locations.self);
     }
 
-    valueNotDefined(name: string, location: ILocation) {
+    valueNotDefined(name: string, location: Location) {
         return this.pushError(mess.VALUE_NOT_DEFINED(name), location);
     }
 

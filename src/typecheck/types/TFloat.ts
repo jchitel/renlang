@@ -1,5 +1,5 @@
 import TType from './TType';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 /**
@@ -12,7 +12,7 @@ import ITypeVisitor from '../visitors';
 export default class TFloat extends TType {
     size: number;
 
-    constructor(size: number) {
+    constructor(size: number = 64) {
         super();
         this.size = size;
     }

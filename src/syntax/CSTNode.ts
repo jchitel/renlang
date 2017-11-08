@@ -1,4 +1,4 @@
-import { Token } from '../parser/Tokenizer';
+import { Token } from '~/parser/Tokenizer';
 
 
 export interface ICSTSubTree {

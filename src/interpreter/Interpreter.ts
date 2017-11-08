@@ -1,6 +1,6 @@
 import { ScopeFrame, FunctionFrame, TryFrame } from './frames';
-import RValue, { RArray, RString, RTuple } from '../runtime/types';
-import Func from '../translator/Func';
+import RValue, { RArray, RString, RTuple } from '~/runtime/types';
+import Func from '~/translator/Func';
 
 
 export default class Interpreter {

@@ -1,11 +1,11 @@
 import * as cst from './cst';
 import * as ast from './ast';
-import { STParam } from '../declarations/cst';
-import { reduceParam, reduceFunctionBody } from '../declarations/reduce';
-import { reduceTypeArgList } from '../types/reduce';
-import ReducerMap from '../ReducerMap';
-import { Token } from '../../parser/Tokenizer';
-import { getOperatorMetadata, verifyMultiOperator } from '../../runtime/operators';
+import { STParam } from '~/syntax/declarations/cst';
+import { reduceParam, reduceFunctionBody } from '~/syntax/declarations/reduce';
+import { reduceTypeArgList } from '~/syntax/types/reduce';
+import ReducerMap from '~/syntax/ReducerMap';
+import { Token } from '~/parser/Tokenizer';
+import { getOperatorMetadata, verifyMultiOperator } from '~/runtime/operators';
 
 
 export default function reduceExpression(exp: cst.STExpressionNode) {
@@ -46,7 +46,7 @@ export const reduceArrayAccess = reducerMap.add(cst.STArrayAccess, (exp) => {
 export const reduceArrayLiteral = reducerMap.add(cst.STArrayLiteral, (exp) => {
     const node = new ast.ArrayLiteral();
     node.items = exp.items.map(reduceExpression);
-    node.createAndRegisterLocation('self', this.openBracketToken.getLocation(), this.closeBracketToken.getLocation());
+    node.createAndRegisterLocation('self', exp.openBracketToken.getLocation(), exp.closeBracketToken.getLocation());
     return node;
 });
 
@@ -163,7 +163,7 @@ export const reduceLambdaExpression = reducerMap.add(cst.STLambdaExpression, (ex
     node.body = reduceFunctionBody(exp.functionBody);
     // lambda expression start location is complicated because it can either be a '(' or a param name
     node.createAndRegisterLocation('self',
-        this.openParenToken ? this.openParenToken.getLocation() : node.params[0].locations.name,
+        exp.openParenToken ? exp.openParenToken.getLocation() : node.params[0].locations.name,
         node.body.locations.self);
     return node;
 });

@@ -1,5 +1,5 @@
-import { SymbolTable } from '../TypeCheckContext';
-import ITypeVisitor, * as visitors from '../visitors';
+import { SymbolTable } from '~/typecheck/TypeCheckContext';
+import ITypeVisitor, * as visitors from '~/typecheck/visitors';
 
 
 /**

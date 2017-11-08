@@ -1,7 +1,7 @@
 import Tokenizer, { Token } from './Tokenizer';
 import LazyList from './LazyList';
 import ParserError from './ParserError';
-import CSTNode, { ICSTSubTree, CSTChildNode } from '../syntax/CSTNode';
+import CSTNode, { ICSTSubTree, CSTChildNode } from '~/syntax/CSTNode';
 
 
 /**
@@ -124,8 +124,10 @@ export default class Parser {
     public tokenizer: LazyList<Token>;
     private debug: boolean;
     private indent: number;
+    public topLevel: boolean;
 
     constructor(source: string, debug: boolean = false) {
+        this.topLevel = true;
         // start with 'soft' as false because Program is implicitly definite
         this.soft = false;
         // This is a double-wrapped iterator:
@@ -143,7 +145,8 @@ export default class Parser {
     private withSoft(soft: boolean) {
         return Object.assign<Parser>(Object.create(Object.getPrototypeOf<Parser>(this)), {
             ...(this as Parser),
-            soft
+            soft,
+            topLevel: false,
         });
     }
 
@@ -198,8 +201,8 @@ export default class Parser {
 
     public accept<T extends CSTNode>(defs: ParserComponentSequentialDef<T>[], clss: Class<T>): T {
         const node = this._accept(defs, clss);
-        if (!node) throw new Error('false bubbled to top');
-        return node;
+        if (!node && this.topLevel) throw new Error('false bubbled to top');
+        return node as T;
     }
 
     /**
@@ -304,8 +307,8 @@ export default class Parser {
 
     public acceptOneOf<T extends CSTNode>(choices: ParserComponentBaseDef[], clss: Class<T>): T {
         const node = this._acceptOneOf<T>(choices, clss);
-        if (!node) throw new Error('false bubbled to top');
-        return node;
+        if (!node && this.topLevel) throw new Error('false bubbled to top');
+        return node as T;
     }
 
     /**
@@ -339,8 +342,8 @@ export default class Parser {
 
     public acceptLeftRecursive<T extends CSTNode>(def: ParserComponentLeftRecursiveDef, clss: Class<T>): T {
         const node = this._acceptLeftRecursive(def, clss);
-        if (!node) throw new Error('false bubbled to top');
-        return node;
+        if (!node && this.topLevel) throw new Error('false bubbled to top');
+        return node as T;
     }
 
     /**

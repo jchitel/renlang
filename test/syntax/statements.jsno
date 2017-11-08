@@ -1,0 +1,653 @@
+import { expect } from 'chai';
+
+import * as stmts from '../../src/syntax/statements';
+import { Token } from '../../src/parser/Tokenizer';
+import TypeCheckContext from '../../src/typecheck/TypeCheckContext';
+import { TChar, TBool, TTuple, TStruct, TArray, TNever, TUnknown } from '../../src/typecheck/types';
+import { IntegerLiteral } from '../../src/syntax/expressions';
+import * as inst from '../../src/runtime/instructions';
+import { STDummyNode, DummyNode, getDummyFunc, createInstance, o, int, loc } from './test_utils';
+
+
+function getUntranslatedNode(_inst, fields = {}) {
+    return {
+        ...fields,
+        translate: (_tr, fn) => { fn.addInstruction(_inst); },
+    };
+}
+
+function getUntranslatedExp(ref, fields = {}) {
+    return {
+        ...fields,
+        translate: () => ref,
+    };
+}
+
+describe('Statement Nodes', () => {
+    describe('Statement', () => {
+        it('should reduce to some other statement', () => {
+            const stmt = new stmts.STStatement({ choice: new STDummyNode() }, []);
+            expect(stmt.reduce()).to.eql({});
+        });
+    });
+
+    describe('Block', () => {
+        it('should reduce a block', () => {
+            const block = new stmts.STBlock({
+                openBraceToken: new Token('LBRACE', 1, 1, '{'),
+                statements: [new STDummyNode(), new STDummyNode()],
+                closeBraceToken: new Token('RBRACE', 1, 2, '}'),
+            }, []);
+            expect(block.reduce()).to.eql(createInstance(stmts.Block, {
+                statements: [{}, {}],
+                locations: { self: { ...loc, endColumn: 2 } },
+            }));
+        });
+
+        it('should filter no-ops', () => {
+            const noop = new stmts.Noop({ ...loc, startColumn: 2, endColumn: 2 }, { ...loc, startColumn: 3, endColumn: 3 });
+            const block = new stmts.STBlock({
+                openBraceToken: new Token('LBRACE', 1, 1, '{'),
+                statements: [new STDummyNode(), new STDummyNode(noop)],
+                closeBraceToken: new Token('RBRACE', 1, 4, '}'),
+            }, []);
+            expect(block.reduce()).to.eql(createInstance(stmts.Block, {
+                statements: [{}],
+                locations: { self: { ...loc, endColumn: 4 } },
+            }));
+        });
+
+        it('should reduce to a no-op', () => {
+            const noop = new stmts.Noop({ ...loc, startColumn: 2, endColumn: 2 }, { ...loc, startColumn: 3, endColumn: 3 });
+            const block = new stmts.STBlock({
+                openBraceToken: new Token('LBRACE', 1, 1, '{'),
+                statements: [new STDummyNode(noop)],
+                closeBraceToken: new Token('RBRACE', 1, 4, '}'),
+            }, []);
+            expect(block.reduce()).to.eql(new stmts.Noop(loc, { ...loc, startColumn: 4, endColumn: 4 }));
+        });
+
+        it('should resolve type of non-return block', () => {
+            const block = createInstance(stmts.Block, { statements: [new DummyNode(new TNever())] });
+            expect(block.resolveType(o(), o(), o())).to.eql(null);
+        });
+
+        it('should resolve type of return block', () => {
+            const block = createInstance(stmts.Block, { statements: [new DummyNode(int)] });
+            expect(block.resolveType(o(), o(), o())).to.eql(int);
+        });
+
+        it('should ignore types of expression statements', () => {
+            const exp = createInstance(IntegerLiteral, { value: 1 });
+            const block = createInstance(stmts.Block, { statements: [exp, new DummyNode(new TNever())] });
+            expect(block.resolveType(o(), o(), o())).to.eql(null);
+        });
+
+        it('should translate a block', () => {
+            const stm = createInstance(stmts.Block, {
+                statements: [getUntranslatedNode({ i: 1 }), getUntranslatedNode({ i: 2 })],
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.PushScopeFrame(),
+                { i: 1 },
+                { i: 2 },
+                new inst.PopFrame(),
+            ]);
+        });
+    });
+
+    describe('Noop', () => {
+        it('should resolve to falsy type', () => {
+            const noop = new stmts.Noop(loc, loc);
+            expect(noop.resolveType()).to.eql(undefined);
+        });
+
+        it('should translate noop', () => {
+            const stm = new stmts.Noop(loc, loc);
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([new inst.Noop()]);
+        });
+    });
+
+    describe('ForStatement', () => {
+        it('should reduce a for statement', () => {
+            const f = new stmts.STForStatement({
+                forToken: new Token('FOR', 1, 1, 'for'),
+                iterVar: new Token('IDENT', 1, 4, 'myIter'),
+                iterableExp: new STDummyNode(),
+                body: new STDummyNode({ locations: { self: { ...loc, startColumn: 10, endColumn: 10 } } }),
+            }, []);
+            expect(f.reduce()).to.eql(createInstance(stmts.ForStatement, {
+                iterVar: 'myIter',
+                iterableExp: {},
+                body: { locations: { self: { ...loc, startColumn: 10, endColumn: 10 } } },
+                locations: {
+                    self: { ...loc, endColumn: 10 },
+                    iterVar: { ...loc, startColumn: 4, endColumn: 9 },
+                },
+            }));
+        });
+
+        it('should resolve type of for statement', () => {
+            // this context will be filled with whatever is passed as the context to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const f = createInstance(stmts.ForStatement, {
+                iterVar: 'myIter',
+                iterableExp: new DummyNode(new TArray(int)),
+                body: new DummyNode(int, o(), bodyContext),
+            });
+            // this symbol table will contain the resulting symbols after the resolution
+            const context = new TypeCheckContext();
+            // verify the body return type
+            expect(f.resolveType(o(), o(), bodyContext)).to.eql(int);
+            // verify the symbol table passed to the body
+            expect(bodyContext).to.eql({ symbolTable: { myIter: int }, loopNumber: 0 });
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(-1);
+        });
+
+        it('should error and resolve iterator type as unknown for non-iterable expression', () => {
+            const bodyContext = new TypeCheckContext();
+            const f = createInstance(stmts.ForStatement, {
+                iterVar: 'myIter',
+                iterableExp: new DummyNode(int, { self: loc }), // non-iterable
+                body: new DummyNode(int, o(), bodyContext),
+            });
+            const typeChecker = { errors: o([]) };
+            const module = { path: '/index.ren' };
+            expect(f.resolveType(typeChecker, o(module), o({}))).to.eql(int);
+            expect(bodyContext.symbolTable.myIter).to.eql(new TUnknown());
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Type "signed 32-bit integer" is not assignable to type "?[]" [/index.ren:1:1]']);
+        });
+
+        it('should increment the loop number if already set', () => {
+            // this context will be filled with whatever is passed as the context to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const f = createInstance(stmts.ForStatement, {
+                iterVar: 'myIter',
+                iterableExp: new DummyNode(new TArray(int)),
+                body: new DummyNode(new TNever(), o(), bodyContext),
+            });
+            // this symbol table will contain the resulting symbols after the resolution
+            const context = createInstance(TypeCheckContext, { loopNumber: 1 });
+            expect(f.resolveType(o(), o(), context)).to.eql(null);
+            // verify the symbol table passed to the body
+            expect(bodyContext).to.eql({ symbolTable: { myIter: int }, loopNumber: 2 });
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(1);
+        });
+
+        it('should translate for loop', () => {
+            const stm = createInstance(stmts.ForStatement, {
+                iterVar: 'myIter',
+                iterableExp: getUntranslatedExp(0),
+                body: getUntranslatedNode({ i: 'body' }),
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions.slice(0, 2)).to.eql([
+                new inst.SetIntegerRef(1, 0),
+                new inst.PushLoopFrame({ start: 2, end: 9 }),
+            ]);
+            expect(fn.instructions[2] instanceof inst.InteropReference).to.eql(true);
+            expect((fn.instructions[2]).ref).to.eql(2);
+            expect((fn.instructions[2]).inRefs).to.eql([0, 1]);
+            expect(fn.instructions[3]).to.eql(new inst.FalseBranch({ ref: 2, target: 9 }));
+            expect(fn.instructions[4] instanceof inst.InteropReference).to.eql(true);
+            expect((fn.instructions[4]).ref).to.eql(3);
+            expect((fn.instructions[4]).inRefs).to.eql([0, 1]);
+            expect(fn.instructions.slice(5, 7)).to.eql([
+                new inst.AddToScope('myIter', 3),
+                { i: 'body' },
+            ]);
+            expect(fn.instructions[7] instanceof inst.ReferenceMutate).to.eql(true);
+            expect((fn.instructions[7]).ref).to.eql(1);
+            expect(fn.instructions.slice(8)).to.eql([
+                new inst.Jump({ target: 2 }),
+                new inst.PopFrame(),
+            ]);
+        });
+    });
+
+    describe('WhileStatement', () => {
+        it('should reduce a while statement', () => {
+            const w = new stmts.STWhileStatement({
+                whileToken: new Token('WHILE', 1, 1, 'while'),
+                conditionExp: new STDummyNode(),
+                body: new STDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
+            }, []);
+            expect(w.reduce()).to.eql(createInstance(stmts.WhileStatement, {
+                conditionExp: {},
+                body: { locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } },
+                locations: { self: { ...loc, endColumn: 6 } },
+            }));
+        });
+
+        it('should resolve type of while statement', () => {
+            // this context will be filles with whatever is passed as the context to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const w = createInstance(stmts.WhileStatement, {
+                conditionExp: new DummyNode(new TBool()),
+                body: new DummyNode(int, o(), bodyContext),
+            });
+            // this context will contain the resulting symbols after the resolution
+            const context = new TypeCheckContext();
+            // verify the body return type
+            expect(w.resolveType(o(), o(), context)).to.eql(int);
+            // verify the symbol table passed to the body
+            expect(bodyContext.loopNumber).to.eql(0);
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(-1);
+        });
+
+        it('should error for non-bool condition', () => {
+            const w = createInstance(stmts.WhileStatement, {
+                conditionExp: new DummyNode(int, { self: loc }),
+                body: new DummyNode(int),
+            });
+            const typeChecker = { errors: o([]) };
+            expect(w.resolveType(typeChecker, o({ path: '/index.ren' }), o())).to.eql(int);
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Type "signed 32-bit integer" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
+
+        it('should increment loop number if already set', () => {
+            // this context will be filled with whatever is passed as the context to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const w = createInstance(stmts.WhileStatement, {
+                conditionExp: new DummyNode(new TBool()),
+                body: new DummyNode(new TNever(), o(), bodyContext),
+            });
+            // this context will contain the resulting symbols after the resolution
+            const context = createInstance(TypeCheckContext, { loopNumber: 1 });
+            expect(w.resolveType(o(), o(), context)).to.eql(null);
+            // verify the symbol table passed to the body
+            expect(bodyContext.loopNumber).to.eql(2);
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(1);
+        });
+
+        it('should translate a while statement', () => {
+            const stm = createInstance(stmts.WhileStatement, {
+                conditionExp: getUntranslatedExp(0),
+                body: getUntranslatedNode({ i: 'body' }),
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.PushLoopFrame({ start: 1, end: 4 }),
+                new inst.FalseBranch({ ref: 0, target: 4 }),
+                { i: 'body' },
+                new inst.Jump({ target: 1 }),
+                new inst.PopFrame(),
+            ]);
+        });
+    });
+
+    describe('DoWhileStatement', () => {
+        it('should reduce a do-while statement', () => {
+            const d = new stmts.STDoWhileStatement({
+                doToken: new Token('DO', 1, 1, 'do'),
+                body: new STDummyNode({ locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } }),
+                conditionExp: new STDummyNode(),
+                closeParenToken: new Token('RPAREN', 1, 4, ')'),
+            }, []);
+            expect(d.reduce()).to.eql(createInstance(stmts.DoWhileStatement, {
+                body: { locations: { self: { ...loc, startColumn: 3, endColumn: 3 } } },
+                conditionExp: {},
+                locations: { self: { ...loc, endColumn: 4 } },
+            }));
+        });
+
+        it('should resolve type of do-while statement', () => {
+            // this context will be filles with whatever is passed as the symbol table to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const d = createInstance(stmts.DoWhileStatement, {
+                body: new DummyNode(int, o(), bodyContext),
+                conditionExp: new DummyNode(new TBool()),
+            });
+            // this symbol table will contain the resulting symbols after the resolution
+            const context = new TypeCheckContext();
+            // verify the body return type
+            expect(d.resolveType(o(), o(), context)).to.eql(int);
+            // verify the symbol table passed to the body
+            expect(bodyContext.loopNumber).to.eql(0);
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(-1);
+        });
+
+        it('should error for non-bool condition', () => {
+            const d = createInstance(stmts.DoWhileStatement, {
+                body: new DummyNode(int),
+                conditionExp: new DummyNode(int, { self: loc }),
+            });
+            const typeChecker = { errors: o([]) };
+            expect(d.resolveType(typeChecker, o({ path: '/index.ren' }), o())).to.eql(int);
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Type "signed 32-bit integer" is not assignable to type "bool" [/index.ren:1:1]']);
+        });
+
+        it('should increment loop number if already set', () => {
+            // this symbol table will be filled with whatever is passed as the symbol table to body.resolveType()
+            const bodyContext = new TypeCheckContext();
+            const d = createInstance(stmts.DoWhileStatement, {
+                body: new DummyNode(new TNever(), {}, bodyContext),
+                conditionExp: new DummyNode(new TBool()),
+            });
+            // this symbol table will contain the resulting symbols after the resolution
+            const context = createInstance(TypeCheckContext, { loopNumber: 1 });
+            expect(d.resolveType(o(), o(), context)).to.eql(null);
+            // verify the symbol table passed to the body
+            expect(bodyContext.loopNumber).to.eql(2);
+            // verify the resulting symbol table
+            expect(context.loopNumber).to.eql(1);
+        });
+
+        it('should translate a do-while statement', () => {
+            const stm = createInstance(stmts.DoWhileStatement, {
+                body: getUntranslatedNode({ i: 'body' }),
+                conditionExp: getUntranslatedExp(0),
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.PushLoopFrame({ start: 1, end: 3 }),
+                { i: 'body' },
+                new inst.TrueBranch(0, 1),
+                new inst.PopFrame(),
+            ]);
+        });
+    });
+
+    describe('TryCatchStatement', () => {
+        it('should reduce a try-catch statement', () => {
+            const t = new stmts.STTryCatchStatement({
+                tryToken: new Token('TRY', 1, 1, 'try'),
+                tryBody: new STDummyNode(),
+                catches: [new stmts.STCatchClause({
+                    param: new STDummyNode(),
+                    body: new STDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } }),
+                }, [])],
+            }, []);
+            expect(t.reduce()).to.eql(createInstance(stmts.TryCatchStatement, {
+                try: {},
+                catches: [{ param: {}, body: { locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } } }],
+                locations: { self: { ...loc, endColumn: 4 } },
+            }));
+        });
+
+        it('should set location correctly when a finally is used', () => {
+            const t = new stmts.STTryCatchStatement({
+                tryToken: new Token('TRY', 1, 1, 'try'),
+                tryBody: new STDummyNode(),
+                catches: [new stmts.STCatchClause({ param: new STDummyNode(), body: new STDummyNode() }, [])],
+                finally: new STDummyNode({ locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } }),
+            }, []);
+            expect(t.reduce()).to.eql(createInstance(stmts.TryCatchStatement, {
+                try: {},
+                catches: [{ param: {}, body: {} }],
+                finally: { locations: { self: { ...loc, startColumn: 4, endColumn: 4 } } },
+                locations: { self: { ...loc, endColumn: 4 } },
+            }));
+        });
+
+        it('should resolve type of try-catch statement', () => {
+            const catchContext = new TypeCheckContext();
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const t = createInstance(stmts.TryCatchStatement, {
+                try: new DummyNode(int),
+                catches: [{ param: { name: 'err', type: new DummyNode(errType) }, body: new DummyNode(int, o(), catchContext) }],
+            });
+            const context = new TypeCheckContext();
+            expect(t.resolveType(o(), o(), context)).to.eql(int);
+            expect(catchContext.symbolTable).to.eql({ err: errType });
+            expect(context.symbolTable).to.eql({});
+        });
+
+        it('should resolve type of try-catch-finally statement', () => {
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const t = createInstance(stmts.TryCatchStatement, {
+                try: new DummyNode(int),
+                catches: [{ param: { name: 'err', type: new DummyNode(errType) }, body: new DummyNode(int) }],
+                finally: new DummyNode(int),
+            });
+            expect(t.resolveType(o(), o(), o())).to.eql(int);
+        });
+
+        it('should translate try-catch statement', () => {
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const stm = createInstance(stmts.TryCatchStatement, {
+                try: getUntranslatedNode({ i: 'try' }),
+                catches: [
+                    { param: { name: 'err', type: Object.assign(new DummyNode(errType), { type: errType }) }, body: getUntranslatedNode({ i: 'catch' }) },
+                    { param: { name: 'err2', type: Object.assign(new DummyNode(errType), { type: errType }) }, body: getUntranslatedNode({ i: 'catch2' }) },
+                ],
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.PushTryFrame({ catches: [{ start: 4, type: errType }, { start: 10, type: errType }] }),
+                { i: 'try' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(0),
+                new inst.AddToScope('err', 0),
+                { i: 'catch' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(1),
+                new inst.AddToScope('err2', 1),
+                { i: 'catch2' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                new inst.Noop(),
+            ]);
+        });
+
+        it('should translate try-catch-finally statement', () => {
+            const errType = new TStruct({ message: new TArray(new TChar()) });
+            const stm = createInstance(stmts.TryCatchStatement, {
+                try: getUntranslatedNode({ i: 'try' }),
+                catches: [
+                    { param: { name: 'err', type: Object.assign(new DummyNode(errType), { type: errType }) }, body: getUntranslatedNode({ i: 'catch' }) },
+                    { param: { name: 'err2', type: Object.assign(new DummyNode(errType), { type: errType }) }, body: getUntranslatedNode({ i: 'catch2' }) },
+                ],
+                finally: getUntranslatedNode({ i: 'finally' }),
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.PushTryFrame({ catches: [{ start: 4, type: errType }, { start: 10, type: errType }], finally: { start: 16, end: 17 } }),
+                { i: 'try' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(0),
+                new inst.AddToScope('err', 0),
+                { i: 'catch' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                new inst.PushScopeFrame(),
+                new inst.ErrorRef(1),
+                new inst.AddToScope('err2', 1),
+                { i: 'catch2' },
+                new inst.PopFrame(),
+                new inst.Jump({ target: 16 }),
+                { i: 'finally' },
+                new inst.Noop(),
+            ]);
+        });
+    });
+
+    describe('ThrowStatement', () => {
+        it('should reduce a throw statement', () => {
+            const t = new stmts.STThrowStatement({
+                throwToken: new Token('THROW', 1, 1, 'throw'),
+                exp: new STDummyNode({ locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } }),
+            }, []);
+            expect(t.reduce()).to.eql(createInstance(stmts.ThrowStatement, {
+                exp: { locations: { self: { ...loc, startColumn: 6, endColumn: 6 } } },
+                locations: { self: { ...loc, endColumn: 6 } },
+            }));
+        });
+
+        it('should resolve type of throw statement', () => {
+            expect(createInstance(stmts.ThrowStatement, { exp: new DummyNode(int) }).resolveType(o(), o(), o())).to.eql(undefined);
+        });
+
+        it('should translate throw statement', () => {
+            const stm = createInstance(stmts.ThrowStatement, {
+                exp: getUntranslatedExp(0),
+            });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([new inst.Throw(0)]);
+        });
+    });
+
+    describe('ReturnStatement', () => {
+        it('should reduce a void return statement', () => {
+            const r = new stmts.STReturnStatement({
+                returnToken: new Token('RETURN', 1, 1, 'return'),
+            }, []);
+            expect(r.reduce()).to.eql(createInstance(stmts.ReturnStatement, {
+                locations: { self: { ...loc, endColumn: 6 } },
+            }));
+        });
+
+        it('should reduce a non-void return statement', () => {
+            const r = new stmts.STReturnStatement({
+                returnToken: new Token('RETURN', 1, 1, 'return'),
+                exp: new STDummyNode({ locations: { self: { ...loc, startColumn: 7, endColumn: 7 } } }),
+            }, []);
+            expect(r.reduce()).to.eql(createInstance(stmts.ReturnStatement, {
+                exp: { locations: { self: { ...loc, startColumn: 7, endColumn: 7 } } },
+                locations: { self: { ...loc, endColumn: 7 } },
+            }));
+        });
+
+        it('should resolve type of void return statement', () => {
+            const r = new stmts.ReturnStatement();
+            expect(r.resolveType(o(), o(), o())).to.eql(new TTuple([]));
+        });
+
+        it('should resolve type of non-void return statement', () => {
+            const r = createInstance(stmts.ReturnStatement, { exp: new DummyNode(int) });
+            expect(r.resolveType(o(), o(), o())).to.eql(int);
+        });
+
+        it('should translate non-void return statement', () => {
+            const stm = createInstance(stmts.ReturnStatement, { exp: getUntranslatedExp(0) });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([new inst.Return(0)]);
+        });
+
+        it('should translate void return statement', () => {
+            const stm = createInstance(stmts.ReturnStatement, {});
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([
+                new inst.SetTupleRef(0, []),
+                new inst.Return(0),
+            ]);
+        });
+    });
+
+    describe('BreakStatement', () => {
+        it('should reduce default break statement', () => {
+            const b = new stmts.STBreakStatement({ breakToken: new Token('BREAK', 1, 1, 'break') }, []);
+            expect(b.reduce()).to.eql(createInstance(stmts.BreakStatement, { loopNumber: 0, locations: { self: { ...loc, endColumn: 5 } } }));
+        });
+
+        it('should reduce break statement with loop number', () => {
+            const b = new stmts.STBreakStatement({
+                breakToken: new Token('BREAK', 1, 1, 'break'),
+                loopNumber: new Token('INTEGER_LITERAL', 1, 6, '2', 2),
+            }, []);
+            expect(b.reduce()).to.eql(createInstance(stmts.BreakStatement, { loopNumber: 2, locations: { self: { ...loc, endColumn: 6 } } }));
+        });
+
+        it('should resolve to nothing', () => {
+            expect(createInstance(stmts.BreakStatement, { loopNumber: 0 }).resolveType(o(), o(), o({ loopNumber: 0 }))).to.eql(undefined);
+        });
+
+        it('should error for being outside loop', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.BreakStatement, { loopNumber: 0, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o());
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['"break" statement cannot be present outside loop [/index.ren:1:1]']);
+            typeChecker.errors = [];
+            (createInstance(stmts.BreakStatement, { loopNumber: 0, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: -1 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['"break" statement cannot be present outside loop [/index.ren:1:1]']);
+        });
+
+        it('should error for negative loop number', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.BreakStatement, { loopNumber: -2, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: 3 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number -2 in loop with depth 3 [/index.ren:1:1]']);
+        });
+
+        it('should error for too large loop number', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.BreakStatement, { loopNumber: 5, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: 3 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number 5 in loop with depth 3 [/index.ren:1:1]']);
+        });
+
+        it('should translate break statement', () => {
+            const stm = createInstance(stmts.BreakStatement, { loopNumber: 2 });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([new inst.Break(2)]);
+        });
+    });
+
+    describe('ContinueStatement', () => {
+        it('should reduce default continue statement', () => {
+            const c = new stmts.STContinueStatement({ continueToken: new Token('CONTINUE', 1, 1, 'continue') }, []);
+            expect(c.reduce()).to.eql(createInstance(stmts.ContinueStatement, { loopNumber: 0, locations: { self: { ...loc, endColumn: 8 } } }));
+        });
+
+        it('should reduce continue statement with loop number', () => {
+            const c = new stmts.STContinueStatement({
+                continueToken: new Token('CONTINUE', 1, 1, 'continue'),
+                loopNumber: new Token('INTEGER_LITERAL', 1, 9, '2', 2),
+            }, []);
+            expect(c.reduce()).to.eql(createInstance(stmts.ContinueStatement, { loopNumber: 2, locations: { self: { ...loc, endColumn: 9 } } }));
+        });
+
+        it('should resolve to nothing', () => {
+            expect(createInstance(stmts.ContinueStatement, { loopNumber: 0 }).resolveType(o(), o(), o({ loopNumber: 0 }))).to.eql(undefined);
+        });
+
+        it('should error for being outside loop', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.ContinueStatement, { loopNumber: 0, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o());
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['"continue" statement cannot be present outside loop [/index.ren:1:1]']);
+            typeChecker.errors = [];
+            (createInstance(stmts.ContinueStatement, { loopNumber: 0, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: -1 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['"continue" statement cannot be present outside loop [/index.ren:1:1]']);
+        });
+
+        it('should error for negative loop number', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.ContinueStatement, { loopNumber: -2, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: 3 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number -2 in loop with depth 3 [/index.ren:1:1]']);
+        });
+
+        it('should error for too large loop number', () => {
+            const typeChecker = { errors: o([]) };
+            (createInstance(stmts.ContinueStatement, { loopNumber: 5, locations: { self: loc } })).resolveType(typeChecker, o({ path: '/index.ren' }), o({ loopNumber: 3 }));
+            expect(typeChecker.errors.map(e => e.message)).to.eql(['Invalid loop number 5 in loop with depth 3 [/index.ren:1:1]']);
+        });
+
+        it('should translate continue statement', () => {
+            const stm = createInstance(stmts.ContinueStatement, { loopNumber: 2 });
+            const fn = getDummyFunc();
+            stm.translate(o(), fn);
+            expect(fn.instructions).to.eql([new inst.Continue(2)]);
+        });
+    });
+});

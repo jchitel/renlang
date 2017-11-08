@@ -1,4 +1,4 @@
-import { TType } from '../../typecheck/types';
+import { TType } from '~/typecheck/types';
 
 
 /**

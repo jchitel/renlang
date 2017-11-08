@@ -1,0 +1,156 @@
+import { assert } from 'chai';
+
+import * as types from '../../src/syntax/types';
+import { TInteger, TFloat, TChar, TBool, TTuple, TStruct, TArray, TFunction, TUnion, TAny, TUnknown } from '../../src/typecheck/types';
+import { DummyNode, DummyTC, DummyModule, createInstance, o, int, loc } from './test_utils';
+
+
+describe('Type Nodes', () => {
+    describe('PrimitiveType', () => {
+        it('should resolve primitive types', () => {
+            assert.deepEqual(new types.PrimitiveType('u8', loc).resolveType(), new TInteger(8, false));
+            assert.deepEqual(new types.PrimitiveType('byte', loc).resolveType(), new TInteger(8, false));
+            assert.deepEqual(new types.PrimitiveType('i8', loc).resolveType(), new TInteger(8, true));
+            assert.deepEqual(new types.PrimitiveType('u16', loc).resolveType(), new TInteger(16, false));
+            assert.deepEqual(new types.PrimitiveType('short', loc).resolveType(), new TInteger(16, false));
+            assert.deepEqual(new types.PrimitiveType('i16', loc).resolveType(), new TInteger(16, true));
+            assert.deepEqual(new types.PrimitiveType('u32', loc).resolveType(), new TInteger(32, false));
+            assert.deepEqual(new types.PrimitiveType('i32', loc).resolveType(), new TInteger(32, true));
+            assert.deepEqual(new types.PrimitiveType('integer', loc).resolveType(), new TInteger(32, true));
+            assert.deepEqual(new types.PrimitiveType('u64', loc).resolveType(), new TInteger(64, false));
+            assert.deepEqual(new types.PrimitiveType('i64', loc).resolveType(), new TInteger(64, true));
+            assert.deepEqual(new types.PrimitiveType('long', loc).resolveType(), new TInteger(64, true));
+            assert.deepEqual(new types.PrimitiveType('int', loc).resolveType(), new TInteger(Infinity, true));
+            assert.deepEqual(new types.PrimitiveType('f32', loc).resolveType(), new TFloat(32));
+            assert.deepEqual(new types.PrimitiveType('float', loc).resolveType(), new TFloat(32));
+            assert.deepEqual(new types.PrimitiveType('f64', loc).resolveType(), new TFloat(64));
+            assert.deepEqual(new types.PrimitiveType('double', loc).resolveType(), new TFloat(64));
+            assert.deepEqual(new types.PrimitiveType('char', loc).resolveType(), new TChar());
+            assert.deepEqual(new types.PrimitiveType('string', loc).resolveType(), new TArray(new TChar()));
+            assert.deepEqual(new types.PrimitiveType('bool', loc).resolveType(), new TBool());
+            assert.deepEqual(new types.PrimitiveType('void', loc).resolveType(), new TTuple([]));
+            assert.deepEqual(new types.PrimitiveType('any', loc).resolveType(), new TAny());
+        });
+
+        it('should throw an error for invalid built-in type', () => {
+            assert.throws(() => new types.PrimitiveType('awef', loc).resolveType(), 'Invalid built-in type awef');
+        });
+    });
+
+    describe('IdentifierType', () => {
+        it('should add an error for an undefined type', () => {
+            const type = new types.IdentifierType('myType', loc);
+            const module = { types: {}, path: '/index.ren' };
+            const typeChecker = { errors: [] };
+            const resolved = type.resolveType(typeChecker, module, o());
+            assert.deepEqual(resolved, new TUnknown());
+            assert.strictEqual(typeChecker.errors.length, 1);
+            assert.strictEqual(typeChecker.errors[0].message, 'Type "myType" is not defined [/index.ren:1:1]');
+        });
+
+        it('should resolve a defined type', () => {
+            const type = new types.IdentifierType('myType', loc);
+            const module = new DummyModule({ types: { myType: o() } });
+            const typeChecker = new DummyTC(int);
+            assert.deepEqual(type.resolveType(typeChecker, module, o()), int);
+        });
+    });
+
+    describe('FunctionType', () => {
+        it('should resolve a function type', () => {
+            const type = createInstance(types.FunctionType, {
+                paramTypes: [new DummyNode(int)],
+                returnType: new DummyNode(int),
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TFunction([int], int));
+        });
+
+        it('should resolve to unknown for unknown params', () => {
+            const type = createInstance(types.FunctionType, {
+                paramTypes: [new DummyNode(new TUnknown())],
+                returnType: new DummyNode(int),
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+
+        it('should resolve to unknown for unknown return type', () => {
+            const type = createInstance(types.FunctionType, {
+                paramTypes: [new DummyNode(int)],
+                returnType: new DummyNode(new TUnknown()),
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+    });
+
+    describe('TupleType', () => {
+        it('should resolve a tuple type', () => {
+            const type = createInstance(types.TupleType, {
+                types: [new DummyNode(int), new DummyNode(int)],
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TTuple([int, int]));
+        });
+
+        it('should resolve to unknown for unknown component type', () => {
+            const type = createInstance(types.TupleType, {
+                types: [new DummyNode(new TUnknown()), new DummyNode(int)],
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+    });
+
+    describe('StructType', () => {
+        it('should resolve a struct type', () => {
+            const type = createInstance(types.StructType, {
+                fields: [{ type: new DummyNode(int), name: 'myField' }],
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TStruct({ myField: int }));
+        });
+
+        it('should add an error for duplicate field names', () => {
+            const type = createInstance(types.StructType, {
+                fields: [
+                    { type: new DummyNode(int), name: 'myField' },
+                    { type: new DummyNode(int), name: 'myField' },
+                ],
+                locations: {
+                    field_myField: loc,
+                },
+            });
+            const typeChecker = { errors: [] };
+            assert.deepEqual(type.resolveType(typeChecker, new DummyModule({ path: '/index.ren' }), o()), new TUnknown());
+            assert.strictEqual(typeChecker.errors.length, 1);
+            assert.strictEqual(typeChecker.errors[0].message, 'A value with name "myField" is already declared [/index.ren:1:1]');
+        });
+
+        it('should resolve to unknown for an unknown field type', () => {
+            const type = createInstance(types.StructType, {
+                fields: [{ type: new DummyNode(new TUnknown()), name: 'myField' }],
+            });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+    });
+
+    describe('ArrayType', () => {
+        it('should resolve an array type', () => {
+            const type = createInstance(types.ArrayType, { baseType: new DummyNode(int) });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TArray(int));
+        });
+
+        it('should resolve to unknown for an unknown base type', () => {
+            const type = createInstance(types.ArrayType, { baseType: new DummyNode(new TUnknown()) });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+    });
+
+    describe('UnionType', () => {
+        it('should resolve a union type', () => {
+            const type = createInstance(types.UnionType, { types: [new DummyNode(int), new DummyNode(int)] });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnion([int, int]));
+        });
+
+        it('should resolve to unknown for an unknown component type', () => {
+            const type = createInstance(types.UnionType, { types: [new DummyNode(int), new DummyNode(new TUnknown())] });
+            assert.deepEqual(type.resolveType(o(), o(), o()), new TUnknown());
+        });
+    });
+});

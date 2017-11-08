@@ -1,5 +1,5 @@
 import TType from './TType';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 /**

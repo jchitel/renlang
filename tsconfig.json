@@ -1,5 +1,6 @@
 {
     "compilerOptions": {
+        "baseUrl": ".",
         "outDir": "./dist/",
         "sourceMap": true,
         "strictNullChecks": true,
@@ -15,7 +16,12 @@
             "./src/@types/"
         ],
         "importHelpers": true,
-        "experimentalDecorators": true
+        "experimentalDecorators": true,
+        "noImplicitThis": true,
+        "paths": {
+            "~/*": ["src/*"],
+            "~test/*": ["test/*"]
+        }
     },
     "include": [
         "./src/**/*",

@@ -1,5 +1,5 @@
 import TType from './TType';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 type StructFieldTypes = { [name: string]: TType };
@@ -10,7 +10,7 @@ type StructFieldTypes = { [name: string]: TType };
 export default class TStruct extends TType {
     fields: StructFieldTypes;
 
-    constructor(fields: StructFieldTypes) {
+    constructor(fields: StructFieldTypes = {}) {
         super();
         this.fields = fields;
     }

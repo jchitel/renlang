@@ -1,19 +1,29 @@
 import { expect } from 'chai';
 import { resolve, dirname } from 'path';
 import { readFileSync as readFile } from 'fs';
+import * as sinon from 'sinon';
 
+import { Location } from '~/parser/Tokenizer';
 import TypeChecker from '../../src/typecheck/TypeChecker';
 import Module from '../../src/runtime/Module';
 import parse from '../../src/parser';
-import { TypeDeclaration, FunctionDeclaration } from '../../src/ast/declarations';
-import { TUnknown, TRecursive } from '../../src/typecheck/types';
+import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '../../src/syntax/ast';
+import { TUnknown, TRecursive, TAny } from '../../src/typecheck/types';
+import reduceProgram from '~/syntax/declarations/reduce';
+import { FunctionFunc } from '~/translator/Func';
+import { mock } from '~test/test-utils';
 
 
-function loc(startLine, startColumn, endLine, endColumn) {
-    return { startLine, startColumn, endLine, endColumn };
+function loc(startLine: number, startColumn: number, endLine: number, endColumn: number) {
+    return new Location(startLine, startColumn, endLine, endColumn);
 }
 
+let sandbox: sinon.SinonSandbox;
+
 describe('TypeChecker', () => {
+    beforeEach(() => sandbox = sinon.createSandbox());
+    afterEach(() => sandbox.restore());
+
     it('should construct a TypeChecker', () => {
         const tc = new TypeChecker();
         expect({ ...tc }).to.eql({ modules: [], moduleCache: {}, errors: [] });
@@ -23,7 +33,7 @@ describe('TypeChecker', () => {
         it('should error for non-existent import path', () => {
             const ast = parse('import from "./idontexist": Something');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, ast.reduce());
+            const module = new Module(0, path, reduceProgram(ast));
             const tc = new TypeChecker();
             tc.processImport(module, module.ast.imports[0]);
             expect(tc.errors.map(e => e.message)).to.eql([`Module "./idontexist" does not exist [${path}:1:13]`]);
@@ -33,7 +43,7 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": Something');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, ast.reduce());
+            const module = new Module(0, path, reduceProgram(ast));
             // create type checker, add main module to it
             const tc = new TypeChecker();
             tc.modules.push(module);
@@ -42,7 +52,7 @@ describe('TypeChecker', () => {
             let called = false;
             tc.processDeclarations = (imported) => {
                 called = true;
-                imported.exports.default = { kind: 'expr' };
+                imported.exports.default = { kind: 'expr', valueName: '' };
             };
             // process the import
             tc.processImport(module, module.ast.imports[0]);
@@ -65,14 +75,14 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { myFunc, myType }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, ast.reduce());
+            const module = new Module(0, path, reduceProgram(ast));
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
             importedModule.exports = {
-                default: { kind: 'expr' },
-                myFunc: { kind: 'func' },
-                myType: { kind: 'type' },
+                default: { kind: 'expr', valueName: '' },
+                myFunc: { kind: 'func', valueName: '' },
+                myType: { kind: 'type', valueName: '' },
             };
             // create type checker, add modules to it
             const tc = new TypeChecker();
@@ -97,14 +107,14 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { idontexist }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, ast.reduce());
+            const module = new Module(0, path, reduceProgram(ast));
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
             importedModule.exports = {
-                default: { kind: 'expr' },
-                myFunc: { kind: 'func' },
-                myType: { kind: 'type' },
+                default: { kind: 'expr', valueName: '' },
+                myFunc: { kind: 'func', valueName: '' },
+                myType: { kind: 'type', valueName: '' },
             };
             // create type checker, add modules to it
             const tc = new TypeChecker();
@@ -120,14 +130,14 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { myFunc };import from ".": { myFunc }');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, ast.reduce());
+            const module = new Module(0, path, reduceProgram(ast));
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
             importedModule.exports = {
-                default: { kind: 'expr' },
-                myFunc: { kind: 'func' },
-                myType: { kind: 'type' },
+                default: { kind: 'expr', valueName: '' },
+                myFunc: { kind: 'func', valueName: '' },
+                myType: { kind: 'type', valueName: '' },
             };
             // create type checker, add modules to it
             const tc = new TypeChecker();
@@ -143,72 +153,96 @@ describe('TypeChecker', () => {
 
     describe('Type Declaration Processing', () => {
         it('should handle name clash between two types', () => {
-            const module = { types: { myType: {} }, path: '/index.ren' };
-            const type = { name: 'myType', locations: { name: loc(1, 1, 1, 1) } };
+            const module = new Module(0, '/index.ren', {} as Program);
+            const type = Object.assign(new TypeDeclaration(), {
+                name: 'myType',
+                locations: { name: loc(1, 1, 1, 1) }
+            });
             const tc = new TypeChecker();
             tc.processType(module, type);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myType" is already declared [/index.ren:1:1]']);
         });
 
         it('should handle name clash between a type and function', () => {
-            const module = { types: {}, functions: { funcType: { ast: { locations: { name: loc(1, 1, 1, 1) } } } }, path: '/index.ren' };
-            const type = { name: 'funcType', locations: { name: loc(1, 2, 1, 2) } };
+            const module = Object.assign(new Module(0, '/index.ren', {} as Program), {
+                functions: {
+                    funcType: Object.assign(new FunctionDeclaration(), {
+                        locations: { name: loc(1, 1, 1, 1) },
+                    }),
+                },
+            });
+            const type = Object.assign(new TypeDeclaration(), {
+                name: 'funcType',
+                locations: { name: loc(1, 2, 1, 2) },
+            });
             const tc = new TypeChecker();
             tc.processType(module, type);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "funcType" is already declared [/index.ren:1:2]']);
-            expect(module.types.funcType.ast).to.eql(type);
+            expect((module.types as any).funcType.ast).to.eql(type);
         });
 
         it('should add a type to a module', () => {
-            const module = { types: {}, functions: {} };
-            const type = { name: 'myType' };
+            const module = new Module(0, '', {} as Program);
+            const type = Object.assign(new TypeDeclaration(), { name: 'myType' });
             const tc = new TypeChecker();
             tc.processType(module, type);
             expect(tc.errors).to.eql([]);
-            expect(module.types.myType.ast).to.eql(type);
+            expect((module.types as any).myType.ast).to.eql(type);
         });
     });
 
     describe('Function Declaration Processing', () => {
         it('should handle name clash between two functions', () => {
-            const module = { functions: { myFunc: {} }, path: '/index.ren' };
-            const func = { name: 'myFunc', locations: { name: loc(1, 1, 1, 1) } };
+            const module = Object.assign(new Module(0, '/index.ren', {} as Program), {
+                functions: { myFunc: {} },
+            });
+            const func = Object.assign(new FunctionDeclaration(), { name: 'myFunc', locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processFunction(module, func);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myFunc" is already declared [/index.ren:1:1]']);
         });
 
         it('should handle name clash between a function and type', () => {
-            const module = { functions: {}, types: { funcType: { ast: { locations: { name: loc(1, 2, 1, 2) } } } }, path: '/index.ren' };
-            const func = { name: 'funcType', locations: { name: loc(1, 1, 1, 1) } };
+            const module = Object.assign(new Module(0, '/index.ren', {} as Program), {
+                types: {
+                    funcType: {
+                        ast: Object.assign(new TypeDeclaration(), {
+                            locations: { name: loc(1, 2, 1, 2) }
+                        }),
+                    },
+                },
+            });
+            const func = Object.assign(new FunctionDeclaration(), { name: 'funcType', locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processFunction(module, func);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "funcType" is already declared [/index.ren:1:2]']);
-            expect(module.functions.funcType.ast).to.eql(func);
+            expect((module.functions as any).funcType.ast).to.eql(func);
         });
 
         it('should add a function to a module', () => {
-            const module = { types: {}, functions: {} };
-            const func = { name: 'myFunc' };
+            const module = new Module(0, '', {} as Program);
+            const func = Object.assign(new FunctionDeclaration(), { name: 'myFunc' });
             const tc = new TypeChecker();
             tc.processFunction(module, func);
             expect(tc.errors).to.eql([]);
-            expect(module.functions.myFunc.ast).to.eql(func);
+            expect((module.functions as any).myFunc.ast).to.eql(func);
         });
     });
 
     describe('Export Processing', () => {
         it('should handle name clash between two exports', () => {
-            const module = { exports: { myExport: {} }, path: '/index.ren' };
-            const exp = { name: 'myExport', locations: { name: loc(1, 1, 1, 1) } };
+            const module = Object.assign(new Module(0, '/index.ren', {} as Program), {
+                exports: { myExport: {} }
+            });
+            const exp = Object.assign(new ExportDeclaration(), { name: 'myExport', locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['An export with name "myExport" is already declared [/index.ren:1:1]']);
         });
 
         it('should handle exported type', () => {
-            const module = { exports: {}, types: {}, functions: {} };
-            const exp = { name: 'myType', value: new TypeDeclaration({ name: 'myType' }) };
+            const module = mock(Module);
+            const exp = mock(ExportDeclaration, { name: 'myType', value: Object.assign(new TypeDeclaration(), { name: 'myType' }) });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -217,8 +251,8 @@ describe('TypeChecker', () => {
         });
 
         it('should handle exported function', () => {
-            const module = { exports: {}, types: {}, functions: {} };
-            const exp = { name: 'myFunc', value: new FunctionDeclaration({ name: 'myFunc' }) };
+            const module = mock(Module);
+            const exp = mock(ExportDeclaration, { name: 'myFunc', value: Object.assign(new FunctionDeclaration(), { name: 'myFunc' }) });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -227,32 +261,43 @@ describe('TypeChecker', () => {
         });
 
         it('should handle name clash between two constants', () => {
-            const module = { exports: {}, constants: { myConst: {} }, path: '/index.ren' };
-            const exp = { name: 'myConst', value: {}, locations: { name: loc(1, 1, 1, 1) } };
+            const module = mock(Module, { exports: {}, constants: { myConst: mock(ExportDeclaration) }, path: '/index.ren' });
+            const exp = mock(ExportDeclaration, { name: 'myConst', value: mock(FunctionDeclaration), locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myConst" is already declared [/index.ren:1:1]']);
         });
 
         it('should handle name clash between a constant and type', () => {
-            const module = { exports: {}, constants: {}, types: { myConst: { ast: { locations: { name: loc(1, 2, 1, 2) } } } }, path: '/index.ren' };
-            const exp = { name: 'myConst', value: {}, locations: { name: loc(1, 1, 1, 1) } };
+            const module = mock(Module, {
+                exports: {},
+                constants: {},
+                types: { myConst: { ast: mock(TypeDeclaration, { locations: { name: loc(1, 2, 1, 2) } }), func: mock(FunctionFunc) } },
+                path: '/index.ren'
+            });
+            const exp = mock(ExportDeclaration, { name: 'myConst', value: mock(FunctionDeclaration), locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myConst" is already declared [/index.ren:1:2]']);
         });
 
         it('should handle name clash between a constant and function', () => {
-            const module = { exports: {}, constants: {}, types: {}, functions: { myConst: { ast: { locations: { name: loc(1, 2, 1, 2) } } } }, path: '/index.ren' };
-            const exp = { name: 'myConst', value: {}, locations: { name: loc(1, 1, 1, 1) } };
+            const module = mock(Module, {
+                exports: {},
+                constants: {},
+                types: {},
+                functions: { myConst: { ast: mock(FunctionDeclaration, { locations: { name: loc(1, 2, 1, 2) } }), func: mock(FunctionFunc) } },
+                path: '/index.ren'
+            });
+            const exp = mock(ExportDeclaration, { name: 'myConst', value: mock(FunctionDeclaration), locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['A value with name "myConst" is already declared [/index.ren:1:2]']);
         });
 
         it('should handle exported constant', () => {
-            const module = { exports: {}, constants: {}, types: {}, functions: {} };
-            const exp = { name: 'myConst', value: {} };
+            const module = mock(Module, { exports: {}, constants: {}, types: {}, functions: {} });
+            const exp = mock(ExportDeclaration, { name: 'myConst', value: mock(FunctionDeclaration) });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -261,8 +306,8 @@ describe('TypeChecker', () => {
         });
 
         it('should handle exported import', () => {
-            const module = { exports: {}, imports: { myImport: { kind: 'expr' } } };
-            const exp = { name: 'myImport' };
+            const module = mock(Module, { exports: {}, imports: { myImport: { kind: 'expr', moduleId: 0, exportName: '', ast: mock(FunctionDeclaration) } } });
+            const exp = mock(ExportDeclaration, { name: 'myImport' });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -270,8 +315,8 @@ describe('TypeChecker', () => {
         });
 
         it('should handle exported declared types', () => {
-            const module = { exports: {}, imports: {}, types: { myType: {} } };
-            const exp = { name: 'myType' };
+            const module = mock(Module, { exports: {}, imports: {}, types: { myType: { ast: mock(TypeDeclaration), func: mock(FunctionFunc) } } });
+            const exp = mock(ExportDeclaration, { name: 'myType' });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -279,8 +324,8 @@ describe('TypeChecker', () => {
         });
 
         it('should handle exported declared function', () => {
-            const module = { exports: {}, imports: {}, types: {}, functions: { myFunc: {} } };
-            const exp = { name: 'myFunc' };
+            const module = mock(Module, { exports: {}, imports: {}, types: {}, functions: { myFunc: { ast: mock(FunctionDeclaration), func: mock(FunctionFunc) } } });
+            const exp = mock(ExportDeclaration, { name: 'myFunc' });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
@@ -288,8 +333,8 @@ describe('TypeChecker', () => {
         });
 
         it('should error for exporting an undefined value', () => {
-            const module = { exports: {}, imports: {}, types: {}, functions: {}, path: '/index.ren' };
-            const exp = { name: 'myValue', locations: { name: loc(1, 1, 1, 1) } };
+            const module = mock(Module, { exports: {}, imports: {}, types: {}, functions: {}, path: '/index.ren' });
+            const exp = mock(ExportDeclaration, { name: 'myValue', locations: { name: loc(1, 1, 1, 1) } });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['Value "myValue" is not defined [/index.ren:1:1]']);
@@ -298,55 +343,62 @@ describe('TypeChecker', () => {
 
     describe('Type Resolution', () => {
         it('should skip already resolved type', () => {
-            const type = { ast: { type: 'type' } };
-            expect(new TypeChecker().resolveType({}, type)).to.eql('type');
+            const type = { ast: mock(TypeDeclaration, { type: new TAny() }), func: mock(FunctionFunc) };
+            expect(new TypeChecker().resolveType(mock(Module), type)).to.eql('type');
         });
 
         it('should error for circular dependency', () => {
-            const module = { path: '/index.ren' };
-            const decl = { resolving: true, ast: { locations: { self: loc(1, 1, 1, 1) } } };
+            const module = mock(Module, { path: '/index.ren' });
+            const decl = { resolving: true, ast: mock(TypeDeclaration, { locations: { self: loc(1, 1, 1, 1) } }), func: mock(FunctionFunc) };
             const tc = new TypeChecker();
             expect(tc.resolveType(module, decl)).to.eql(new TUnknown());
             expect(tc.errors.map(e => e.message)).to.eql(['Cannot resolve type, circular dependency found [/index.ren:1:1]']);
         });
 
         it('should resolve type of function declaration', () => {
-            const module = {};
-            const decl = { ast: new FunctionDeclaration({}) };
-            decl.ast.resolveType = () => { decl.ast.type = 'type' };
+            const decl = { ast: new FunctionDeclaration(), func: mock(FunctionFunc) };
+            const stub = sandbox.stub(decl.ast, 'visit').returns('type');
             const tc = new TypeChecker();
-            expect(tc.resolveType(module, decl)).to.eql('type');
+            expect(tc.resolveType(mock(Module), decl)).to.eql('type');
+            sinon.assert.calledOnce(stub);
         });
 
         it('should resolve type of non-function declaration', () => {
-            const module = {};
-            const decl = { ast: {} };
-            decl.ast.resolveType = () => {
-                decl.ast.type = 'type';
+            const decl = { ast: new TypeDeclaration(), resolving: false, func: mock(FunctionFunc) };
+            const stub = sandbox.stub(decl.ast, 'visit', () => {
                 expect(decl.resolving).to.eql(true);
-            };
+                return 'type';
+            });
             const tc = new TypeChecker();
-            expect(tc.resolveType(module, decl)).to.eql('type');
+            expect(tc.resolveType(mock(Module), decl)).to.eql('type');
             expect(decl.resolving).to.eql(false);
+            sinon.assert.calledOnce(stub);
         });
 
         it('should retrieve a local, already resolved type', () => {
-            const module = { types: { myType: { ast: { type: 'int' } } } };
-            expect(new TypeChecker().getType(module, 'myType')).to.eql('int');
+            const module = mock(Module, { types: { myType: { ast: mock(FunctionDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } } });
+            expect(new TypeChecker().getType(module, 'myType')).to.eql(new TAny());
         });
 
         it('should retrieve a recursive type', () => {
-            const module = { types: { myType: { resolving: true, ast: {} } } };
-            expect(new TypeChecker().getType(module, 'myType')).to.eql(new TRecursive({ resolving: true, ast: {} }));
+            const module = mock(Module, { types: { myType: { resolving: true, ast: mock(FunctionDeclaration), func: mock(FunctionFunc) } } });
+            expect(new TypeChecker().getType(module, 'myType')).to.eql(new TRecursive(mock(TypeDeclaration)));
         });
 
         it('should resolve and retrieve a type', () => {
-            const module = { types: { myType: { ast: { resolveType: () => { module.types.myType.ast.type = 'int' } } } } };
-            expect(new TypeChecker().getType(module, 'myType')).to.eql('int');
+            const module = mock(Module, { types: { myType: { ast: new TypeDeclaration(), func: mock(FunctionFunc) } } });
+            const stub = sandbox.stub(module.types.myType.ast, 'visit', () => {
+                module.types.myType.ast.type = new TAny();
+            });
+            expect(new TypeChecker().getType(module, 'myType')).to.eql(new TAny());
+            sinon.assert.calledOnce(stub);
         });
 
         it('should retrieve an imported type', () => {
-            const module = { types: { myType: { imported: true } }, imports: { myType: { moduleId: 1, exportName: 'default' } } };
+            const module = mock(Module, {
+                types: { myType: { imported: true, ast: mock(ImportDeclaration), func: mock(FunctionFunc) } },
+                imports: { myType: { moduleId: 1, exportName: 'default', kind: 'func', ast: mock(ImportDeclaration) } }
+            });
             const importedModule = { exports: { default: { valueName: 'theType' } }, types: { theType: { ast: { type: 'int' } } } };
             const tc = new TypeChecker();
             tc.modules = [module, importedModule];
@@ -354,22 +406,30 @@ describe('TypeChecker', () => {
         });
 
         it('should return null for non-existent value', () => {
-            const module = { functions: {}, constants: {} };
+            const module = mock(Module, { functions: {}, constants: {} });
             expect(new TypeChecker().getValueType(module, 'someName')).to.eql(null);
         });
 
         it('should retrieve the type of a local, already resolved value', () => {
-            const module = { functions: {}, constants: { myValue: { ast: { type: 'int' } } } };
-            expect(new TypeChecker().getValueType(module, 'myValue')).to.eql('int');
+            const module = mock(Module, { functions: {}, constants: { myValue: { ast: mock(ExportDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } } });
+            expect(new TypeChecker().getValueType(module, 'myValue')).to.eql(new TAny());
         });
 
         it('should resolve and retrieve a value\'s type', () => {
-            const module = { functions: {}, constants: { myValue: { ast: { resolveType: () => { module.constants.myValue.ast.type = 'int' } } } } };
+            const module = mock(Module, { functions: {}, constants: { myValue: { ast: new ExportDeclaration(), func: mock(FunctionFunc) } } });
+            const stub = sandbox.stub(module.constants.myValue.ast, 'visit', () => {
+                module.constants.myValue.ast.type = 'int';
+            });
             expect(new TypeChecker().getValueType(module, 'myValue')).to.eql('int');
+            sinon.assert.calledOnce(stub);
         });
 
         it('should retrive the type of an imported value', () => {
-            const module = { functions: {}, constants: { myValue: { imported: true } }, imports: { myValue: { moduleId: 1, exportName: 'default' } } };
+            const module = mock(Module, {
+                functions: {},
+                constants: { myValue: { imported: true, ast: mock(ImportDeclaration), func: mock(FunctionFunc) } },
+                imports: { myValue: { moduleId: 1, exportName: 'default', kind: 'expr', ast: mock(ImportDeclaration) } }
+            });
             const importedModule = { exports: { default: { valueName: 'theValue' } }, functions: {}, constants: { theValue: { ast: { type: 'int' } } } };
             const tc = new TypeChecker();
             tc.modules = [module, importedModule];

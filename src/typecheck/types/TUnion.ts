@@ -1,5 +1,5 @@
 import TType from './TType';
-import ITypeVisitor from '../visitors';
+import ITypeVisitor from '~/typecheck/visitors';
 
 
 /**
@@ -9,7 +9,7 @@ import ITypeVisitor from '../visitors';
 export default class TUnion extends TType {
     types: TType[];
 
-    constructor(types: TType[]) {
+    constructor(types: TType[] = []) {
         super();
         this.types = types;
     }

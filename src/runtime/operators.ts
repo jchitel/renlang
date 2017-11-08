@@ -1,8 +1,8 @@
-import ParserError from '../parser/ParserError';
-import { INVALID_EXPRESSION } from '../parser/ParserMessages';
-import { Token } from '../parser/Tokenizer';
-import { TType, TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGeneralType } from '../typecheck/types';
-import Interpreter from '../interpreter/Interpreter';
+import ParserError from '~/parser/ParserError';
+import { INVALID_EXPRESSION } from '~/parser/ParserMessages';
+import { Token } from '~/parser/Tokenizer';
+import { TType, TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGeneralType } from '~/typecheck/types';
+import Interpreter from '~/interpreter/Interpreter';
 import RValue, { RInteger, RFloat, RBool, RArray, RString, RFunction } from './types';
 import { FunctionCallRef } from './instructions';
 

@@ -1,7 +1,7 @@
 import Func from './Func';
-import { ExportDeclaration } from '../syntax/declarations/ast';
-import { Expression } from '../syntax/expressions/ast';
-import { ConstBranch, ConstSet, ConstRef, Return } from '../runtime/instructions';
+import { ExportDeclaration } from '~/syntax/declarations/ast';
+import { Expression } from '~/syntax/expressions/ast';
+import { ConstBranch, ConstSet, ConstRef, Return } from '~/runtime/instructions';
 import Translator from './Translator';
 import TranslationVisitor from './TranslationVisitor';
 

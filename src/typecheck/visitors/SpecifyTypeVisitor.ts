@@ -2,8 +2,8 @@ import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
     TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
-} from '../types';
-import { SymbolTable } from '../TypeCheckContext';
+} from '~/typecheck/types';
+import { SymbolTable } from '~/typecheck/TypeCheckContext';
 
 
 /**
