@@ -1,7 +1,7 @@
 import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
-    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
+    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred
 } from '~/typecheck/types';
 
 
@@ -236,6 +236,11 @@ export default class AssignmentVisitor implements ITypeVisitor<bool> {
     visitRecursive(to: TRecursive): boolean {
         return to.decl.type.visit(this);
     }
+
+    @baseCheck
+    visitInferred(_to: TInferred): boolean {
+        return true; // TODO: not sure if we want to do this
+    }
 }
 
 /**
@@ -244,7 +249,8 @@ export default class AssignmentVisitor implements ITypeVisitor<bool> {
  */
 function doBaseCheck(this: AssignmentVisitor, _type: TType): Optional<bool> {
     // never is assignable to all types
-    if (this.from.isNever()) return true;
+    // inferred can be used anywhere
+    if (this.from.isNever() || this.from instanceof TInferred) return true;
     return null;
 }
 

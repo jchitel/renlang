@@ -1,7 +1,7 @@
 import ASTNode from '~/syntax/ASTNode';
 import { Location } from '~/parser/Tokenizer';
 import INodeVisitor from '~/syntax/INodeVisitor';
-import { TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple,
+import { TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TInferred,
     TFunction, TUnion, TGeneric, TParam, TAny, TNever, TUnknown, determineGeneralType } from '~/typecheck/types';
 import Module from '~/runtime/Module';
 import * as decls from '~/syntax/declarations/ast';
@@ -203,7 +203,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     @baseCheck
     visitLambdaParam(_param: exprs.LambdaParam): TType {
         // if the type isn't explicit, we can't infer it, that will happen during type checking
-        return new TUnknown(); // TODO: we need something else here
+        return new TInferred();
     }
 
     @baseCheck
@@ -571,6 +571,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     visitFunctionApplication(app: exprs.FunctionApplication): TType {
         // get the type of the function
         const funcType = app.target.visit(this);
+        if (funcType instanceof TUnknown) return funcType;
         if (!funcType.isFunction()) return this.notInvokable(app.target);
         let params = funcType.getParams();
         // verify parameter count
@@ -617,7 +618,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         let error = false;
         for (let i = 0; i < fromTypes.length; ++i) {
             if (fromTypes[i] instanceof TUnknown) continue; // skip errors
-            if (toTypes[i].isAssignableFrom(fromTypes[i])) {
+            if (!toTypes[i].isAssignableFrom(fromTypes[i])) {
                 this.typeMismatch(fromTypes[i], toTypes[i].toString(), nodes[i]);
                 error = true;
             }
@@ -629,7 +630,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         for (let i = 0; i < args.length; ++i) {
             // function application is the only place that lambdas can be passed (for now),
             // so we need to complete the resolution of the type and the lambda body
-            if (args[i] instanceof exprs.LambdaExpression && !(args[i].type instanceof TFunction)) {
+            if (args[i] instanceof exprs.LambdaExpression && (args[i].type instanceof TFunction)) {
                 (args[i].type as TFunction).completeResolution(paramTypes[i]);
                 this.completeLambdaResolution(args[i] as exprs.LambdaExpression);
             }
@@ -649,7 +650,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     visitLambdaExpression(exp: exprs.LambdaExpression): TType {
         const paramTypes = exp.params.map(p => p.visit(this));
         // can't infer return type, that will happen when we are checking types
-        return new TFunction(paramTypes, new TUnknown()); // TODO we can't do this
+        return new TFunction(paramTypes, new TInferred());
     }
 
     /**

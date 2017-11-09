@@ -59,6 +59,6 @@ export function parse<T extends CSTNode = STProgram>(source: string, acceptFunct
     return acceptFunction(new Parser(source));
 }
 
-export function mock<T>(cls: Class<T>, props: Partial<T> = {}) {
+export function mock<T>(cls: Class<T>, props: Partial<T> = {}): T {
     return Object.assign(Object.create(cls.prototype), props);
 }

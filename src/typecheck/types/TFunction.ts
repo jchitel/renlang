@@ -3,6 +3,7 @@ import TNever from './TNever';
 import { SymbolTable } from '~/typecheck/TypeCheckContext';
 import TParam from './TParam';
 import OrderedMap from './OrderedMap';
+import TInferred from './TInferred';
 import ITypeVisitor, { InferTypeArgsVisitor } from '~/typecheck/visitors';
 
 
@@ -33,7 +34,7 @@ export default class TFunction extends TType {
     completeResolution(explicitType: TType) {
         const paramTypes = explicitType.getParams();
         for (let i = 0; i < this.paramTypes.length; ++i) {
-            if (!this.paramTypes[i]) this.paramTypes[i] = paramTypes[i];
+            if (this.paramTypes[i] instanceof TInferred) this.paramTypes[i] = paramTypes[i];
         }
         this.returnType = explicitType.getReturnType();
     }

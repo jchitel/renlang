@@ -1,7 +1,7 @@
 import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
-    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
+    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred
 } from '~/typecheck/types';
 import OrderedMap from '~/typecheck/types/OrderedMap';
 
@@ -67,7 +67,8 @@ abstract class GenericVisitor<T> implements ITypeVisitor<T> {
     visitUnion(_type: TUnion): T { throw new Error("Method not implemented."); }
     visitAny(_type: TAny): T { throw new Error("Method not implemented."); }
     visitNever(_type: TNever): T { throw new Error("Method not implemented."); }
-    visitRecursive(type: TRecursive): T { return type.decl.type.visit(this); }  
+    visitRecursive(type: TRecursive): T { return type.decl.type.visit(this); }
+    visitInferred(_type: TInferred): T { throw new Error("Methid not implemented."); }
 }
 
 
@@ -91,6 +92,7 @@ abstract class IsXVisitor implements ITypeVisitor<bool> {
     visitAny(_type: TAny): boolean { return false; }
     visitNever(_type: TNever): boolean { return true; }
     visitRecursive(type: TRecursive): boolean { return type.decl.type.visit(this); }
+    visitInferred(_type: TInferred): boolean { return false; /* TODO: ??? */}
 }
 
 /**

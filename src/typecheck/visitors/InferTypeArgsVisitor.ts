@@ -1,7 +1,7 @@
 import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
-    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
+    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred
 } from '~/typecheck/types';
 import { SymbolTable } from '~/typecheck/TypeCheckContext';
 
@@ -89,4 +89,5 @@ export default class InferTypeArgsVisitor implements ITypeVisitor<void> {
         type.decl.type.visit(this);
     }
 
+    visitInferred(_type: TInferred): void {}
 }

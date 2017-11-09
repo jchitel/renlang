@@ -65,6 +65,7 @@ export function reduceTypeDeclaration(decl: cst.STTypeDeclaration) {
     node.registerLocation('name', decl.typeNameToken.getLocation());
     node.typeParams = decl.typeParamList ? reduceTypeParamList(decl.typeParamList) : [];
     node.typeNode = reduceTypeNode(decl.typeNode);
+    node.createAndRegisterLocation('self', decl.typeToken.getLocation(), node.typeNode.locations.self);
     return node;
 }
 

@@ -1,7 +1,7 @@
 import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
-    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive,
+    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred
 } from '~/typecheck/types';
 import { SymbolTable } from '~/typecheck/TypeCheckContext';
 
@@ -85,4 +85,5 @@ export default class SpecifyTypeVisitor implements ITypeVisitor<TType> {
     visitAny(type: TAny): TType { return type.clone(); }
     visitNever(type: TNever): TType { return type.clone(); }
     visitRecursive(type: TRecursive): TType { return type.clone(); }
+    visitInferred(type: TInferred): TType { return type.clone(); }
 }

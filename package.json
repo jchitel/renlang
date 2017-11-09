@@ -8,7 +8,7 @@
     "circular-deps": "yarn run build && madge --circular dist/src",
     "deps-graph": "yarn run build && madge --image graph.svg dist/src",
     "test": "node scripts/test.js",
-    "coverage": "istanbul cover node scripts/test.js ##### THIS DOESN'T WORK"
+    "coverage": "istanbul --config=istanbul.json cover scripts/test.js"
   },
   "repository": "https://github.com/jchitel/renlang.git",
   "author": "Jake Chitel <jchitel@gmail.com>",

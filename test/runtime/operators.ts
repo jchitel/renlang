@@ -303,15 +303,15 @@ describe('Operator Classes', () => {
     describe('ApplyOperator', () => {
         it('should infer type of ApplyOperator', () => {
             // not function
-            expect(new oper.ApplyOperator(new TChar(), new TAny())).to.eql(new TUnknown());
+            expect(new oper.ApplyOperator(new TChar(), new TAny()).functionType).to.eql(new TUnknown());
             // no first param
-            expect(new oper.ApplyOperator(new TFunction([], new TAny()), new TAny())).to.eql(new TUnknown());
+            expect(new oper.ApplyOperator(new TFunction([], new TAny()), new TAny()).functionType).to.eql(new TUnknown());
             // non-assignable first param
-            expect(new oper.ApplyOperator(new TFunction([new TChar()], new TAny()), new TBool())).to.eql(new TUnknown());
+            expect(new oper.ApplyOperator(new TFunction([new TChar()], new TAny()), new TBool()).functionType).to.eql(new TUnknown());
             // single param
-            expect(new oper.ApplyOperator(new TFunction([new TChar()], new TBool()), new TChar())).to.eql(new TFunction([new TFunction([new TChar()], new TBool()), new TChar()], new TBool()));
+            expect(new oper.ApplyOperator(new TFunction([new TChar()], new TBool()), new TChar()).functionType).to.eql(new TFunction([new TFunction([new TChar()], new TBool()), new TChar()], new TBool()));
             // multiple params
-            expect(new oper.ApplyOperator(new TFunction([new TChar(), new TChar()], new TBool()), new TChar())).to.eql(new TFunction([new TFunction([new TChar(), new TChar()], new TBool()), new TChar()], new TFunction([new TChar()], new TBool())));
+            expect(new oper.ApplyOperator(new TFunction([new TChar(), new TChar()], new TBool()), new TChar()).functionType).to.eql(new TFunction([new TFunction([new TChar(), new TChar()], new TBool()), new TChar()], new TFunction([new TChar()], new TBool())));
         });
     });
 });

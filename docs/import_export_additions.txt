@@ -8,12 +8,12 @@ We have an entire framework to support them, so we may as well just do it.
 
 So these are the import forms we need to support:
 - `import from "module": ImportName`:                                           import default
-- `import from "module": { {name}, {name} as {alias}, ... }`:                   import named (ADDING COLON FOR UNITY WITH OTHER FORMS)
-- `import from "module": { {name}, {name} as {alias}, ...{rest} }`:             import named and rest (NOT CURRENTLY SUPPORTED)
+- `import from "module": { {name}, {name} as {alias}, ... }`:                   import named
 - `import from "module": ImportName, { {name}, {name} as {alias}, ... }`:       import named and default (NOT CURRENTLY SUPPORTED)
 - `import from "module": * as {namespace}`:                                     wildcard import (NOT CURRENTLY SUPPORTED)
+- `import from "module": { {name}, {name} as {alias}, * as {namespace} }`:      import named and wildcard (NOT CURRENTLY SUPPORTED)
 - `import from "module": ImportName, * as {namespace}`:                         default and wildcard import (NOT CURRENTLY SUPPORTED)
-- `import from "module": ImportName, { {name}, {name} as {alias}, ...{rest} }`: default and rest import (NOT CURRENTLY SUPPORTED)
+- `import from "module": ImportName, { {name}, {name} as {alias}, * as {namespace} }`: default, named and wildcard import (NOT CURRENTLY SUPPORTED)
 And these are the export forms we need to support:
 - `export default {named declaration}`:        export default in place declaration
 - `export default {anon declaration}`:         export default anonymous declaration (NOT CURRENTLY SUPPORTED)

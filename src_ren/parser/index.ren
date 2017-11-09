@@ -3,4 +3,4 @@ import from "./Parser": Parser
 import from "../ast/ASTNode": ASTNode
 
 
-export default func ASTNode (string source) => acceptProgram(new Parser(source))
+export default func ASTNode parse(string source) => acceptProgram(new Parser(source))
