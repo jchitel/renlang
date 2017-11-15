@@ -13,7 +13,9 @@ export default interface INodeVisitor<T> {
     visitFunctionDeclaration(decl: decls.FunctionDeclaration): T;
     visitParam(param: decls.Param): T;
     visitLambdaParam(param: exprs.LambdaParam): T;
+    visitConstantDeclaration(decl: decls.ConstantDeclaration): T;
     visitExportDeclaration(decl: decls.ExportDeclaration): T;
+    visitExportForwardDeclaration(decl: decls.ExportForwardDeclaration): T;
 
     // types
     visitPrimitiveType(type: types.PrimitiveType): T;
@@ -25,6 +27,7 @@ export default interface INodeVisitor<T> {
     visitStructType(type: types.StructType): T;
     visitTupleType(type: types.TupleType): T;
     visitUnionType(type: types.UnionType): T;
+    visitNamespaceAccessType(type: types.NamespaceAccessType): T;
 
     // statements
     visitBlock(block: stmts.Block): T;

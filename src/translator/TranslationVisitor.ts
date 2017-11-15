@@ -82,7 +82,9 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
     visitFunctionDeclaration(_decl: decls.FunctionDeclaration): never { throw new Error("Method not implemented."); }
     visitParam(_param: decls.Param): never { throw new Error("Method not implemented."); }
     visitLambdaParam(_param: exprs.LambdaParam): never { throw new Error("Method not implemented."); }
+    visitConstantDeclaration(_delc: decls.ConstantDeclaration): never { throw new Error("Method not implemented."); }
     visitExportDeclaration(_decl: decls.ExportDeclaration): never { throw new Error("Method not implemented."); }
+    visitExportForwardDeclaration(_decl: decls.ExportForwardDeclaration): never { throw new Error("Method not implemented."); }
 
     /**
      * TYPES
@@ -101,6 +103,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
     visitStructType(_type: types.StructType): never { throw new Error("Method not implemented."); }
     visitTupleType(_type: types.TupleType): never { throw new Error("Method not implemented."); }
     visitUnionType(_type: types.UnionType): never { throw new Error("Method not implemented."); }
+    visitNamespaceAccessType(_type: types.NamespaceAccessType): never { throw new Error("Method not implemented."); }
 
     /**************
      * STATEMENTS *

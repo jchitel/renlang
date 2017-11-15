@@ -1,3 +1,4 @@
+import { Location } from '~/parser/Tokenizer';
 import ASTNode from '~/syntax/ASTNode';
 import INodeVisitor from '~/syntax/INodeVisitor';
 import { Type } from '~/syntax/types/ast';
@@ -9,7 +10,9 @@ export class Program extends ASTNode {
     imports: ImportDeclaration[];
     functions: FunctionDeclaration[] = [];
     types: TypeDeclaration[] = [];
+    constants: ConstantDeclaration[] = [];
     exports: ExportDeclaration[] = [];
+    forwards: ExportForwardDeclaration[] = [];
 
     visit<T>(visitor: INodeVisitor<T>): T {
         return visitor.visitProgram(this);
@@ -18,7 +21,12 @@ export class Program extends ASTNode {
 
 export class ImportDeclaration extends ASTNode {
     moduleName: string;
-    importNames: { [name: string]: string };
+    imports: {
+        importName: string,
+        importLocation: Location,
+        aliasName: string,
+        aliasLocation: Location,
+    }[];
     
     visit<T>(visitor: INodeVisitor<T>): T {
         return visitor.visitImportDeclaration(this);
@@ -74,15 +82,55 @@ export class Param extends ASTNode {
     }
 }
 
-export class ExportDeclaration extends ASTNode {
+export class ConstantDeclaration extends ASTNode {
     name: string;
-    value: FunctionDeclaration | TypeDeclaration | Expression;
+    value: Expression;
+
+    visit<T>(visitor: INodeVisitor<T>): T {
+        return visitor.visitConstantDeclaration(this);
+    }
+}
+
+export class ExportDeclaration extends ASTNode {
+    /**
+     * Cases:
+     * - Default export of a name (export name = default, value name = value name, NO value)
+     * - Named export of a name (export name AND value name = value name, NO value)
+     * - Named export with an alias (export name = alias, value name = value name, NO value)
+     * - Default export of a named value (export name = default, value name = name from value, value = value)
+     * - Default export of an anonymous value (export name = default, NO value name, value = value)
+     * - Named export of a named value (export name AND value name = name from value, value = value)
+     */
+    exports: {
+        // export name is always present
+        exportName: string,
+        exportNameLocation: Location,
+        // value name is not present only for default anonymous exports
+        valueName?: string,
+        valueNameLocation?: Location,
+        // value is not present for exports of existing names
+        value?: FunctionDeclaration | TypeDeclaration | ConstantDeclaration | Expression,
+    }[];
     
     visit<T>(visitor: INodeVisitor<T>): T {
         return visitor.visitExportDeclaration(this);
     }
 
-    prettyName() {
-        return `export ${this.name}`;
+    prettyName(name: string) {
+        return `export ${name}`;
+    }
+}
+
+export class ExportForwardDeclaration extends ASTNode {
+    moduleName: string;
+    forwards: {
+        importName: string,
+        importLocation: Location,
+        exportName: string,
+        exportLocation: Location,
+    }[];
+
+    visit<T>(visitor: INodeVisitor<T>): T {
+        return visitor.visitExportForwardDeclaration(this);
     }
 }

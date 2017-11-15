@@ -74,6 +74,7 @@ export default class Tokenizer {
         'byte',     // byte type name (alias of u8)
         'catch',    // denotes a catch block in a try-catch block
         'char',     // character type name
+        'const',    // constant declaration keyword
         'continue', // statement to skip to the next iteration of a loop
         'default',  // used to declare a default export, also for a default case in a pattern match block
         'do',       // denotes the start of a do-while loop

@@ -27,6 +27,8 @@ export const FUNCTION_TYPE_INVALID_RETURN_TYPE = 'Invalid return type in functio
 export const TUPLE_TYPE_MISSING_COMMA = (tok: Token) => `Missing comma in tuple type, found '${tok.image}'`;
 export const INVALID_TYPE_NAME = (tok: Token) => `Invalid type name; expected identifier, found '${tok.image}'`;
 export const TYPE_DECL_MISSING_EQUALS = (tok: Token) => `Invalid type declaration; expected '=', found '${tok.image}'`;
+export const INVALID_CONST_NAME = (tok: Token) => `Invalid constant name; expected identifier, found '${tok.image}'`;
+export const CONST_MISSING_EQUALS = (tok: Token) => `Invalid constant declaration; expected '=', found '${tok.image}'`;
 export const INVALID_DEFAULT_EXPORT_VALUE = 'Invalid default export value; must be function, type, or expression';
 export const INVALID_NAMED_EXPORT_VALUE = 'Invalid named export value; must be function, type, or expression';
 export const EXPORT_NO_NEW_LINE = 'Exports must be followed by a new line or semicolon';

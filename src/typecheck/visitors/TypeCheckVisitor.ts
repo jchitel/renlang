@@ -138,6 +138,8 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
 
     visitProgram(_program: decls.Program): TType { throw new Error("Method not implemented."); }
     visitImportDeclaration(_decl: decls.ImportDeclaration): TType { throw new Error("Method not implemented."); }
+    visitExportDeclaration(_decl: decls.ExportDeclaration): TType { throw new Error("Method not implemented."); }
+    visitExportForwardDeclaration(_decl: decls.ExportForwardDeclaration): TType { throw new Error("Method not implemented."); }
 
     @baseCheck
     visitTypeDeclaration(decl: decls.TypeDeclaration): TType {
@@ -207,10 +209,10 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitExportDeclaration(decl: decls.ExportDeclaration): TType {
+    visitConstantDeclaration(decl: decls.ConstantDeclaration): TType {
         // new context
         this.context = new TypeCheckContext();
-        // visit the value of the export
+        // visit the value of the constant
         return (decl.value as exprs.Expression).visit(this);
     }
     
@@ -335,6 +337,11 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         const types = type.types.map(t => t.visit(this));
         if (types.some(t => t instanceof TUnknown)) return new TUnknown();
         else return new TUnion(types);
+    }
+
+    @baseCheck
+    visitNamespaceAccessType(type: types.NamespaceAccessType): TType {
+        //
     }
     
     /**************

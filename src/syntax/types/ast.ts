@@ -90,3 +90,12 @@ export class UnionType extends Type {
         return visitor.visitUnionType(this);
     }
 }
+
+export class NamespaceAccessType extends Type {
+    baseType: Type;
+    typeName: string;
+
+    visit<T>(visitor: INodeVisitor<T>) {
+        return visitor.visitNamespaceAccessType(this);
+    }
+}

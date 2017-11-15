@@ -19,12 +19,12 @@ import Parser from './Parser';
 // ///////////////
 
 /**
- * Program ::= ImportDeclaration* Declaration* EOF
+ * Program ::= ImportDeclaration* NonImportDeclaration* EOF
  */
 export function acceptProgram(parser: Parser) {
     return parser.accept([
         { name: 'imports', parse: acceptImportDeclaration, zeroOrMore: true, definite: true },
-        { name: 'declarations', parse: acceptDeclaration, zeroOrMore: true, definite: true },
+        { name: 'declarations', parse: acceptNonImportDeclaration, zeroOrMore: true, definite: true },
         { name: 'eof', type: 'EOF', definite: true },
     ], decls.STProgram);
 }
@@ -47,8 +47,11 @@ export function acceptImportDeclaration(parser: Parser) {
  */
 export function acceptImportList(parser: Parser) {
     return parser.acceptOneOf([
-        { type: 'IDENT' },
         { parse: acceptNamedImports },
+        { parse: acceptDefaultAndNamedImports },
+        { parse: acceptWildcardImport },
+        { parse: acceptDefaultAndWildcardImports },
+        { type: 'IDENT' },
     ], decls.STImportList);
 }
 
@@ -70,6 +73,7 @@ export function acceptImportComponent(parser: Parser) {
     return parser.acceptOneOf([
         { parse: acceptImportWithAlias },
         { type: 'IDENT' },
+        { parse: acceptWildcardImport }
     ], decls.STImportComponent);
 }
 
@@ -85,14 +89,69 @@ export function acceptImportWithAlias(parser: Parser) {
 }
 
 /**
- * Declaration ::= FunctionDeclaration | TypeDeclaration | ExportDeclaration
+ * WildcardImport ::= * AS IDENT
+ */
+export function acceptWildcardImport(parser: Parser) {
+    return parser.accept([
+        { name: 'multiplyToken', image: '*', definite: true },
+        { name: 'asToken', type: 'AS' },
+        { name: 'wildcardAliasToken', type: 'IDENT' },
+    ], decls.STWildcardImport);
+}
+
+/**
+ * DefaultAndNamedImports ::= IDENT COMMA NamedImports
+ */
+export function acceptDefaultAndNamedImports(parser: Parser) {
+    return parser.accept([
+        { name: 'defaultImportNameToken', type: 'IDENT' },
+        { name: 'commaToken', type: 'COMMA' },
+        { name: 'imports', parse: acceptNamedImports, definite: true },
+    ], decls.STDefaultAndNamedImports);
+}
+
+/**
+ * DefaultAndWildcardImports ::= IDENT COMMA, WildcardImport
+ */
+export function acceptDefaultAndWildcardImports(parser: Parser) {
+    return parser.accept([
+        { name: 'defaultImportNameToken', type: 'IDENT' },
+        { name: 'commaToken', type: 'COMMA' },
+        { name: 'wildcard', parse: acceptWildcardImport, definite: true },
+    ], decls.STDefaultAndWildcardImports);
+}
+
+/**
+ * NonImportDeclaration ::= Declaration | ExportDeclaration
+ */
+export function acceptNonImportDeclaration(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptDeclaration },
+        { parse: acceptExportDeclaration },
+        { parse: acceptExportForwardDeclaration }
+    ], decls.STNonImportDeclaration);
+}
+
+/**
+ * Declaration ::= FunctionDeclaration | TypeDeclaration | ConstantDeclaration
  */
 export function acceptDeclaration(parser: Parser) {
     return parser.acceptOneOf([
         { parse: acceptFunctionDeclaration },
         { parse: acceptTypeDeclaration },
-        { parse: acceptExportDeclaration },
+        { parse: acceptConstantDeclaration },
     ], decls.STDeclaration);
+}
+
+/**
+ * AnonDeclaration ::= AnonFunctionDeclaration | AnonTypeDeclaration | Expression
+ */
+export function acceptAnonDeclaration(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptAnonFunctionDeclaration },
+        { parse: acceptAnonTypeDeclaration },
+        { parse: acceptExpression },
+    ], decls.STAnonDeclaration);
 }
 
 /**
@@ -103,6 +162,20 @@ export function acceptFunctionDeclaration(parser: Parser) {
         { name: 'funcToken', type: 'FUNC', definite: true },
         { name: 'returnType', parse: acceptType, mess: mess.INVALID_RETURN_TYPE },
         { name: 'functionNameToken', type: 'IDENT', mess: mess.INVALID_FUNCTION_NAME },
+        { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
+        { name: 'paramsList', parse: acceptParameterList, mess: mess.INVALID_PARAMETER_LIST },
+        { name: 'fatArrowToken', type: 'FAT_ARROW', mess: mess.INVALID_FAT_ARROW },
+        { name: 'functionBody', parse: acceptFunctionBody },
+    ], decls.STFunctionDeclaration);
+}
+
+/**
+ * AnonFunctionDeclaration ::= FUNC Type TypeParamList? ParameterList FAT_ARROW FunctionBody
+ */
+export function acceptAnonFunctionDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'funcToken', type: 'FUNC', definite: true },
+        { name: 'returnType', parse: acceptType, mess: mess.INVALID_RETURN_TYPE },
         { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
         { name: 'paramsList', parse: acceptParameterList, mess: mess.INVALID_PARAMETER_LIST },
         { name: 'fatArrowToken', type: 'FAT_ARROW', mess: mess.INVALID_FAT_ARROW },
@@ -160,45 +233,180 @@ export function acceptTypeDeclaration(parser: Parser) {
 }
 
 /**
- * ExportDeclaration ::= EXPORT ExportName ExportValue
+ * AnonTypeDeclaration ::= TYPE TypeParamList? EQUALS Type
+ */
+export function acceptAnonTypeDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'typeToken', type: 'TYPE', definite: true },
+        { name: 'typeParamList', parse: acceptTypeParamList, optional: true },
+        { name: 'equalsToken', type: 'EQUALS', mess: mess.TYPE_DECL_MISSING_EQUALS },
+        { name: 'typeNode', parse: acceptType, mess: mess.INVALID_TYPE },
+    ], decls.STTypeDeclaration);
+}
+
+/**
+ * ConstantDeclaration ::= CONST IDENT EQUALS Expression
+ */
+export function acceptConstantDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'constToken', type: 'CONST', definite: true },
+        { name: 'identToken', type: 'IDENT', mess: mess.INVALID_CONST_NAME },
+        { name: 'equalsToken', type: 'EQUALS', mess: mess.CONST_MISSING_EQUALS },
+        { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+    ], decls.STConstantDeclaration);
+}
+
+/**
+ * ExportDeclaration ::= DefaultExportDeclaration
+ *                     | NamedExportDeclaration
  */
 export function acceptExportDeclaration(parser: Parser) {
-    return parser.accept([
-        { name: 'exportToken', type: 'EXPORT', definite: true },
-        { name: 'exportName', parse: acceptExportName },
-        { name: 'exportValue', parse: acceptExportValue },
+    return parser.acceptOneOf([
+        { parse: acceptDefaultExportDeclaration },
+        { parse: acceptNamedExportDeclaration },
     ], decls.STExportDeclaration);
 }
 
 /**
- * ExportName ::= DEFAULT | NamedExport
+ * DefaultExportDeclaration ::= EXPORT DEFAULT DefaultExportValue
  */
-export function acceptExportName(parser: Parser) {
-    return parser.acceptOneOf([
-        { type: 'DEFAULT' },
-        { parse: acceptNamedExport },
-    ], decls.STExportName);
-}
-
-/**
- * NamedExport ::= IDENT EQUALS
- */
-export function acceptNamedExport(parser: Parser) {
+export function acceptDefaultExportDeclaration(parser: Parser) {
     return parser.accept([
-        { name: 'exportNameToken', type: 'IDENT', definite: true },
-        { name: 'equalsToken', type: 'EQUALS' },
-    ], decls.STNamedExport);
+        { name: 'exportToken', type: 'EXPORT' },
+        { name: 'defaultToken', type: 'DEFAULT' },
+        { name: 'value', parse: acceptDefaultExportValue, definite: true },
+    ], decls.STDefaultExportDeclaration);
 }
 
 /**
- * ExportValue ::= FunctionDeclaration | TypeDeclaration | Expression
+ * DefaultExportValue ::= Declaration | AnonDeclaration | IDENT
  */
-export function acceptExportValue(parser: Parser) {
+export function acceptDefaultExportValue(parser: Parser) {
     return parser.acceptOneOf([
-        { parse: acceptFunctionDeclaration },
-        { parse: acceptTypeDeclaration },
-        { parse: acceptExpression },
-    ], decls.STExportValue);
+        { parse: acceptDeclaration },
+        { parse: acceptAnonDeclaration },
+        { type: 'IDENT' },
+    ], decls.STDefaultExportValue);
+}
+
+/**
+ * NamedExportDeclaration ::= EXPORT NamedExportValue
+ */
+export function acceptNamedExportDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'exportToken', type: 'EXPORT' },
+        { name: 'value', parse: acceptNamedExportValue, definite: true },
+    ], decls.STNamedExportDeclaration);
+}
+
+/**
+ * NamedExportValue ::= Declaration | NamedExports
+ */
+export function acceptNamedExportValue(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptDeclaration },
+        { parse: acceptNamedExports },
+    ], decls.STNamedExportValue);
+}
+
+/**
+ * NamedExports ::= LBRACE ExportComponent (+ sep COMMA) RBRACE
+ */
+export function acceptNamedExports(parser: Parser) {
+    return parser.accept([
+        { name: 'openBraceToken', type: 'LBRACE', definite: true },
+        { name: 'exports', parse: acceptExportComponent, oneOrMore: true, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeBraceToken', type: 'RBRACE' },
+    ], decls.STNamedExports);
+}
+
+/**
+ * ExportComponent ::= ImportWithAlias | IDENT
+ * 
+ * Note: we are reusing ImportWithAlias because it's exactly the same syntax.
+ */
+export function acceptExportComponent(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptImportWithAlias },
+        { type: 'IDENT' },
+    ], decls.STExportComponent);
+}
+
+/**
+ * ExportForwardDeclaration ::= DefaultExportForwardDeclaration | NamedExportForwardDeclaration
+ */
+export function acceptExportForwardDeclaration(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptDefaultExportForwardDeclaration },
+        { parse: acceptNamedExportForwardDeclaration },
+    ], decls.STExportForwardDeclaration);
+}
+
+/**
+ * NamedExportForwardDeclaration ::= EXPORT FROM STRING_LITERAL COLON ExportForwards
+ */
+export function acceptNamedExportForwardDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'exportToken', type: 'EXPORT' },
+        { name: 'fromToken', type: 'FROM', definite: true },
+        { name: 'moduleNameToken', type: 'STRING_LITERAL', mess: mess.INVALID_IMPORT_MODULE },
+        { name: 'colonToken', type: 'COLON', mess: mess.INVALID_IMPORT },
+        { name: 'forwards', parse: acceptNamedExportForwards },
+    ], decls.STNamedExportForwardDeclaration);
+}
+
+/**
+ * NamedExportForwards ::= ImportList | *
+ */
+export function acceptNamedExportForwards(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptImportList },
+        { image: '*' },
+    ], decls.STNamedExportForwards);
+}
+
+/**
+ * DefaultExportForwardDeclaration ::= EXPORT DEFAULT FROM STRING_LITERAL DefaultExportForwardSuffix?
+ */
+export function acceptDefaultExportForwardDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'exportToken', type: 'EXPORT' },
+        { name: 'defaultToken', type: 'DEFAULT' },
+        { name: 'fromToken', type: 'FROM', definite: true },
+        { name: 'moduleNameToken', type: 'STRING_LITERAL', mess: mess.INVALID_IMPORT_MODULE },
+        { name: 'suffix', parse: acceptDefaultExportForwardSuffix, optional: true },
+    ], decls.STDefaultExportForwardDeclaration);
+}
+
+/**
+ * DefaultExportForwardSuffix ::= COLON DefaultExportForwards
+ */
+export function acceptDefaultExportForwardSuffix(parser: Parser) {
+    return parser.accept([
+        { name: 'colonToken', type: 'COLON', definite: true },
+        { name: 'forwards', parse: acceptDefaultExportForwards },
+    ], decls.STDefaultExportForwardSuffix);
+}
+
+/**
+ * DefaultExportForwards ::= DefaultNamedExportForward | *
+ */
+export function acceptDefaultExportForwards(parser: Parser) {
+    return parser.acceptOneOf([
+        { parse: acceptDefaultNamedExportForward },
+        { image: '*' },
+    ], decls.STDefaultExportForwards);
+}
+
+/**
+ * DefaultNamedExportForward ::= LBRACE IDENT RBRACE
+ */
+export function acceptDefaultNamedExportForward(parser: Parser) {
+    return parser.accept([
+        { name: 'openBraceToken', type: 'LBRACE', definite: true },
+        { name: 'forwardNameToken', type: 'IDENT' },
+        { name: 'closeBraceToken', type: 'RBRACE' },
+    ], decls.STDefaultNamedExportForward);
 }
 
 /**
@@ -269,6 +477,7 @@ export function acceptTypeConstraint(parser: Parser) {
  *
  * TypeSuffix ::= ArrayTypeSuffix
  *              | UnionTypeSuffix
+ *              | NamespaceAccessSuffix
  */
 export function acceptType(parser: Parser): types.STTypeNode {
     return parser.acceptLeftRecursive({
@@ -295,6 +504,7 @@ export function acceptType(parser: Parser): types.STTypeNode {
         suffixes: [
             { baseName: 'baseType', parse: acceptArrayTypeSuffix },
             { baseName: 'left', parse: acceptUnionTypeSuffix },
+            { baseName: 'baseType', parse: acceptNamespaceAccessSuffix }
         ],
     }, types.STTypeNode);
 }
@@ -394,6 +604,16 @@ export function acceptUnionTypeSuffix(parser: Parser) {
         { name: 'vbarToken', image: '|', definite: true },
         { name: 'right', parse: acceptType, mess: mess.INVALID_UNION_TYPE },
     ], types.STUnionType);
+}
+
+/**
+ * NamespaceAccessSuffix ::= DOT IDENT
+ */
+export function acceptNamespaceAccessSuffix(parser: Parser) {
+    return parser.accept([
+        { name: 'dotToken', type: 'DOT', definite: true },
+        { name: 'typeNameToken', type: 'IDENT' },
+    ], types.STNamespaceAccess);
 }
 
 // //////////////

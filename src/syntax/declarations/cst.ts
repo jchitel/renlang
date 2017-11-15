@@ -7,12 +7,20 @@ import { STExpressionNode } from '~/syntax/expressions/cst';
 
 export class STProgram extends CSTNode {
     imports: STImportDeclaration[];
-    declarations: STDeclaration[];
+    declarations: STNonImportDeclaration[];
     eof: Token;
 }
 
 export class STDeclaration extends CSTNode {
-    choice: STFunctionDeclaration | STTypeDeclaration | STExportDeclaration;
+    choice: STFunctionDeclaration | STTypeDeclaration | STConstantDeclaration;
+}
+
+export class STAnonDeclaration extends CSTNode {
+    choice: STFunctionDeclaration | STTypeDeclaration | STExpressionNode;
+}
+
+export class STNonImportDeclaration extends CSTNode {
+    choice: STDeclaration | STExportDeclaration | STExportForwardDeclaration;
 }
 
 export class STImportDeclaration extends CSTNode {
@@ -24,7 +32,7 @@ export class STImportDeclaration extends CSTNode {
 }
 
 export class STImportList extends CSTNode {
-    choice: Token | STNamedImports;
+    choice: Token | STNamedImports | STDefaultAndNamedImports | STWildcardImport | STDefaultAndWildcardImports;
 }
 
 export class STNamedImports extends CSTNode {
@@ -34,7 +42,7 @@ export class STNamedImports extends CSTNode {
 }
 
 export class STImportComponent extends CSTNode {
-    choice: Token | STImportWithAlias;
+    choice: Token | STImportWithAlias | STWildcardImport;
 }
 
 export class STImportWithAlias extends CSTNode {
@@ -43,9 +51,27 @@ export class STImportWithAlias extends CSTNode {
     importAliasToken: Token;
 }
 
+export class STWildcardImport extends CSTNode {
+    multiplyToken: Token;
+    asToken: Token;
+    wildcardAliasToken: Token;
+}
+
+export class STDefaultAndNamedImports extends CSTNode {
+    defaultImportNameToken: Token;
+    commaToken: Token;
+    imports: STNamedImports;
+}
+
+export class STDefaultAndWildcardImports extends CSTNode {
+    defaultImportNameToken: Token;
+    commaToken: Token;
+    wildcard: STWildcardImport;
+}
+
 export class STTypeDeclaration extends CSTNode {
     typeToken: Token;
-    typeNameToken: Token;
+    typeNameToken?: Token;
     typeParamList?: STTypeParamList;
     equalsToken: Token;
     typeNode: STTypeNode;
@@ -75,7 +101,7 @@ export class STTypeConstraint extends CSTNode {
 export class STFunctionDeclaration extends CSTNode {
     funcToken: Token;
     returnType: STTypeNode;
-    functionNameToken: Token;
+    functionNameToken?: Token;
     typeParamList: STTypeParamList;
     paramsList: STParameterList;
     fatArrowToken: Token;
@@ -97,21 +123,81 @@ export class STFunctionBody extends CSTNode {
     choice: STBlock | STExpressionNode | STStatementNode;
 }
 
-export class STExportDeclaration extends CSTNode {
-    exportToken: Token;
-    exportName: STExportName;
-    exportValue: STExportValue;
-}
-
-export class STExportName extends CSTNode {
-    choice: Token | STNamedExport;
-}
-
-export class STNamedExport extends CSTNode {
-    exportNameToken: Token;
+export class STConstantDeclaration extends CSTNode {
+    constToken: Token;
+    identToken: Token;
     equalsToken: Token;
+    exp: STExpressionNode;
 }
 
-export class STExportValue extends CSTNode {
-    choice: STFunctionDeclaration | STTypeDeclaration | STExpressionNode;
+export class STExportDeclaration extends CSTNode {
+    choice: STDefaultExportDeclaration | STNamedExportDeclaration;
+}
+
+export class STDefaultExportDeclaration extends CSTNode {
+    exportToken: Token;
+    defaultToken: Token;
+    value: STDefaultExportValue;
+}
+
+export class STDefaultExportValue extends CSTNode {
+    choice: STDeclaration | STAnonDeclaration | Token;
+}
+
+export class STNamedExportDeclaration extends CSTNode {
+    exportToken: Token;
+    value: STNamedExportValue;
+}
+
+export class STNamedExportValue extends CSTNode {
+    choice: STDeclaration | STNamedExports;
+}
+
+export class STNamedExports extends CSTNode {
+    openBraceToken: Token;
+    exports: STExportComponent[];
+    closeBraceToken: Token;
+}
+
+export class STExportComponent extends CSTNode {
+    choice: Token | STImportWithAlias;
+}
+
+export class STExportForwardDeclaration extends CSTNode {
+    choice: STDefaultExportForwardDeclaration | STNamedExportForwardDeclaration;
+}
+
+export class STNamedExportForwardDeclaration extends CSTNode {
+    exportToken: Token;
+    fromToken: Token;
+    moduleNameToken: Token;
+    colonToken: Token;
+    forwards: STNamedExportForwards;
+}
+
+export class STNamedExportForwards extends CSTNode {
+    choice: STImportList | Token;
+}
+
+export class STDefaultExportForwardDeclaration extends CSTNode {
+    exportToken: Token;
+    defaultToken: Token;
+    fromToken: Token;
+    moduleNameToken: Token;
+    suffix?: STDefaultExportForwardSuffix;
+}
+
+export class STDefaultExportForwardSuffix extends CSTNode {
+    colonToken: Token;
+    forwards: STDefaultExportForwards;
+}
+
+export class STDefaultExportForwards extends CSTNode {
+    choice: STDefaultNamedExportForward | Token;
+}
+
+export class STDefaultNamedExportForward extends CSTNode {
+    openBraceToken: Token;
+    forwardNameToken: Token;
+    closeBraceToken: Token;
 }

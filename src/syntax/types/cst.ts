@@ -65,3 +65,9 @@ export class STUnionType extends STType {
     vbarToken: Token;
     right: STTypeNode;
 }
+
+export class STNamespaceAccess extends STType {
+    baseType: STTypeNode;
+    dotToken: Token;
+    typeNameToken: Token;
+}
