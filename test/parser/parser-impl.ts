@@ -29,46 +29,53 @@ describe('parser', () => {
             });
         });
 
-        it('should parse ImportWithAlias', () => {
-            const parsed = pars.acceptImportWithAlias(new Parser('myImport as myAlias'));
-            assert.deepEqual(nodeToObject(parsed), {
-                importNameToken: 'myImport',
-                asToken: 'as',
-                importAliasToken: 'myAlias',
-            });
-        });
-
-        it('should parse ImportComponent', () => {
-            let parsed = pars.acceptImportComponent(new Parser('myImport as myAlias'));
-            assert.containSubset(nodeToObject(parsed), { choice: {} });
-            parsed = pars.acceptImportComponent(new Parser('myImport'));
-            assert.containSubset(nodeToObject(parsed), { choice: 'myImport' });
-        });
-
-        it('should parse NamedImports', () => {
-            const parsed = pars.acceptNamedImports(new Parser('{ myImport, myImport as myAlias }'));
-            assert.containSubset(nodeToObject(parsed), {
-                openBraceToken: '{',
-                importComponents: { length: 2 },
-                closeBraceToken: '}',
-            });
-        });
-
-        it('should parse ImportList', () => {
-            let parsed = pars.acceptImportList(new Parser('myDefault'));
-            assert.containSubset(nodeToObject(parsed), { choice: 'myDefault' });
-            parsed = pars.acceptImportList(new Parser('{ myImport }'));
-            assert.containSubset(nodeToObject(parsed), { choice: {} });
-        });
-
         it('should parse ImportDeclaration', () => {
-            const parsed = pars.acceptImportDeclaration(new Parser('import from "module": myDefault'));
-            assert.containSubset(nodeToObject(parsed), {
-                importToken: 'import',
-                fromToken: 'from',
-                moduleNameToken: '"module"',
-                colonToken: ':',
-                imports: {},
+            const common = { importToken: 'import', fromToken: 'from', moduleNameToken: '""', colonToken: ':' };
+            const parse = (source: string) => nodeToObject(pars.acceptImportDeclaration(new Parser(source)));
+            assert.containSubset(parse('import from "": a'), {
+                ...common,
+                imports: { choice: 'a' },
+            });
+            assert.containSubset(parse('import from "": { a as b, * as c }'), {
+                ...common,
+                imports: {
+                    choice: {
+                        openBraceToken: '{',
+                        importComponents: [{
+                            choice: { importNameToken: 'a', asToken: 'as', importAliasToken: 'b' },
+                        }, {
+                            choice: { multiplyToken: '*', asToken: 'as', wildcardAliasToken: 'c' },
+                        }],
+                        commaTokens: [','],
+                        closeBraceToken: '}',
+                    },
+                },
+            });
+            assert.containSubset(parse('import from "": a, { b }'), {
+                ...common,
+                imports: {
+                    choice: {
+                        defaultImportNameToken: 'a',
+                        commaToken: ',',
+                        imports: { openBraceToken: '{', importComponents: [{ choice: 'b' }], closeBraceToken: '}' },
+                    },
+                },
+            });
+            assert.containSubset(parse('import from "": * as a'), {
+                ...common,
+                imports: {
+                    choice: { multiplyToken: '*', asToken: 'as', wildcardAliasToken: 'a' },
+                },
+            });
+            assert.containSubset(parse('import from "": a, * as b'), {
+                ...common,
+                imports: {
+                    choice: {
+                        defaultImportNameToken: 'a',
+                        commaToken: ',',
+                        wildcard: { multiplyToken: '*', asToken: 'as', wildcardAliasToken: 'b' },
+                    },
+                },
             });
         });
 
@@ -170,24 +177,6 @@ describe('parser', () => {
             });
         });
 
-        it('should parse NamedExport', () => {
-            assert.deepEqual(nodeToObject(pars.acceptNamedExport(new Parser('a ='))), {
-                exportNameToken: 'a',
-                equalsToken: '=',
-            });
-        });
-
-        it('should parse ExportName', () => {
-            assert.deepEqual(nodeToObject(pars.acceptExportName(new Parser('default'))), { choice: 'default' });
-            assert.containSubset(nodeToObject(pars.acceptExportName(new Parser('a ='))), { choice: {} });
-        });
-
-        it('should parse ExportValue', () => {
-            assert.containSubset(nodeToObject(pars.acceptExportValue(new Parser('func int a() => b'))), { choice: {} });
-            assert.containSubset(nodeToObject(pars.acceptExportValue(new Parser('type MyType = int'))), { choice: {} });
-            assert.containSubset(nodeToObject(pars.acceptExportValue(new Parser('a'))), { choice: {} });
-        });
-
         it('should parse ExportDeclaration', () => {
             assert.containSubset(nodeToObject(pars.acceptExportDeclaration(new Parser('export default a'))), {
                 exportToken: 'export',
@@ -285,23 +274,6 @@ describe('parser', () => {
             });
         });
 
-        it('should accept TypeArgList', () => {
-            const parsed = pars.acceptTypeArgList(new Parser('<int, int>'));
-            assert.containSubset(nodeToObject(parsed), {
-                openLtToken: '<',
-                types: { length: 2 },
-                closeGtToken: '>',
-            });
-        });
-
-        it('should parse SpecificType', () => {
-            const parsed = pars.acceptSpecificType(new Parser('MyType<int, string, void>'));
-            assert.containSubset(nodeToObject(parsed), {
-                nameToken: 'MyType',
-                typeArgList: {},
-            });
-        });
-
         it('should parse ArrayType', () => {
             // just left-recursive suffix
             let parsed: STType = pars.acceptArrayTypeSuffix(new Parser('[]'));
@@ -334,6 +306,31 @@ describe('parser', () => {
                     left: {},
                     vbarToken: '|',
                     right: {},
+                }
+            });
+        });
+        
+        it('should accept TypeArgList', () => {
+            const parsed = pars.acceptTypeArgList(new Parser('<int, int>'));
+            assert.containSubset(nodeToObject(parsed), {
+                openLtToken: '<',
+                types: { length: 2 },
+                closeGtToken: '>',
+            });
+        });
+
+        it('should parse SpecificType', () => {
+            // just left-recursive suffix
+            let parsed: STType = pars.acceptSpecificTypeSuffix(new Parser('<int, string, void>'));
+            assert.containSubset(nodeToObject(parsed), {
+                typeArgList: {},
+            });
+            // full type
+            parsed = pars.acceptType(new Parser('MyType<int, string, void>'));
+            assert.containSubset(nodeToObject(parsed), {
+                choice: {
+                    typeNode: {},
+                    typeArgList: {},
                 }
             });
         });

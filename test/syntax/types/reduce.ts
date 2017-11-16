@@ -4,7 +4,7 @@ import { parse } from '~test/test-utils';
 import * as accept from '~/parser/parser-impl'
 import reduceType, * as reduce from '~/syntax/types/reduce';
 import { Type } from '~/syntax/types/ast';
-import { STArrayType, STUnionType } from '~/syntax/types/cst';
+import { STArrayType, STUnionType, STSpecificType } from '~/syntax/types/cst';
 
 
 describe('Type reducers', () => {
@@ -88,10 +88,10 @@ describe('Type reducers', () => {
     });
 
     it('should reduce a specific type', () => {
-        const type = parse('Type<int, bool>', accept.acceptSpecificType);
+        const type = parse('Type<int, bool>', accept.acceptType).choice as STSpecificType;
         const ast = reduce.reduceSpecificType(type);
         assert.containSubset(ast, {
-            name: 'Type',
+            typeNode: {},
             typeArgs: { length: 2 },
         });
     });

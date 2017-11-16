@@ -33,7 +33,7 @@ export class STParenthesizedType extends STType {
 }
 
 export class STSpecificType extends STType {
-    nameToken: Token;
+    typeNode: STTypeNode;
     typeArgList: STTypeArgList;
 }
 

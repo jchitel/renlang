@@ -1,7 +1,8 @@
 import ITypeVisitor from './ITypeVisitor';
 import {
     TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
-    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred
+    TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred,
+    TNamespace
 } from '~/typecheck/types';
 import OrderedMap from '~/typecheck/types/OrderedMap';
 
@@ -42,6 +43,12 @@ import OrderedMap from '~/typecheck/types/OrderedMap';
  * or a string because ints can't be strings, and vice versa. However, a
  * union between "int" and "byte" is an integer because both are integers.
  * 
+ * Namespaces: namespaces are containers for types, functions, and constants,
+ * but for the purposes of type checking, they are effectively just structs
+ * for types. Since these are not actual types directly accessible in the
+ * language, they don't really have any behaviors aside from those restricted
+ * to namespaces.
+ * 
  * Any: "any" is a union of all types, so this logic is the same as union
  * types if the type was defined with all types in existence. Because there
  * are types included in "any" that do not have each behavioral property,
@@ -65,6 +72,7 @@ abstract class GenericVisitor<T> implements ITypeVisitor<T> {
     visitParam(type: TParam): T { return type.constraint.visit(this); }
     visitArg(type: TArg): T { return type.type.visit(this); }
     visitUnion(_type: TUnion): T { throw new Error("Method not implemented."); }
+    visitNamespace(_type: TNamespace): T { throw new Error("Method not implemented."); }
     visitAny(_type: TAny): T { throw new Error("Method not implemented."); }
     visitNever(_type: TNever): T { throw new Error("Method not implemented."); }
     visitRecursive(type: TRecursive): T { return type.decl.type.visit(this); }
@@ -89,6 +97,7 @@ abstract class IsXVisitor implements ITypeVisitor<bool> {
     visitParam(type: TParam): boolean { return type.constraint.visit(this); }
     visitArg(type: TArg): boolean { return type.type.visit(this); }
     visitUnion(type: TUnion): boolean { return type.types.every(t => t.visit(this)); }
+    visitNamespace(_type: TNamespace): boolean { return false; }
     visitAny(_type: TAny): boolean { return false; }
     visitNever(_type: TNever): boolean { return true; }
     visitRecursive(type: TRecursive): boolean { return type.decl.type.visit(this); }
@@ -123,6 +132,10 @@ export class IsGenericVisitor extends IsXVisitor {
     visitGeneric() { return true; }
     visitFunction(type: TFunction) { return !!type.typeParamTypes.length; }
     visitUnion() { return false; }
+}
+export class IsNamespaceVisitor extends IsXVisitor {
+    visitNamespace() { return true; }
+    visitUnion(): never { throw new Error('Unions cannot contain namespaces.'); }
 }
 export class IsNeverVisitor extends IsXVisitor {}
 
@@ -205,4 +218,8 @@ export class GetTypeParamsVisitor extends GenericVisitor<OrderedMap<TParam>> {
 export class GetReturnTypeVisitor extends GenericVisitor<TType> {
     visitFunction(type: TFunction) { return type.returnType; }
     visitUnion(type: TUnion): TType { return new TUnion(type.types.map(t => t.visit(this))); }
+}
+
+export class GetModuleIdVisitor extends GenericVisitor<number> {
+    visitNamespace(type: TNamespace) { return type.moduleId; }
 }

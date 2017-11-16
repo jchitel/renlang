@@ -40,9 +40,9 @@ describe('Declaration AST nodes', () => {
         assert.strictEqual(func.prettyName(), 'myFunc(bool p1, char p2)');
     });
 
-    it('should get pretty export name', () => {
-        const exp = new ast.ExportDeclaration();
-        exp.name = 'myExport';
-        assert.strictEqual(exp.prettyName(), 'export myExport');
+    it('should get pretty constant name', () => {
+        const con = new ast.ConstantDeclaration();
+        con.name = 'myConst';
+        assert.strictEqual(con.prettyName(), 'const myExport');
     });
 });

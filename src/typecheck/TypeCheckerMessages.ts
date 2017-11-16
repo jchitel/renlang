@@ -15,11 +15,12 @@ export const INVALID_CONTINUE_STATEMENT = '"continue" statement cannot be presen
 export const INVALID_UNARY_OPERATOR = (oper: string, type: TType) => `Operator "${oper}" does not operate on type "${type}"`;
 export const INVALID_BINARY_OPERATOR = (oper: string, left: TType, right: TType) => `Operator "${oper}" does not operate on types "${left}" and "${right}"`;
 export const NOT_INVOKABLE = 'Cannot invoke a value that is not a function';
-export const NOT_STRUCT = 'Cannot access field of a value that is not a struct';
+export const NOT_STRUCT = 'Cannot access field of a value that is not a struct or a namespace';
 export const NOT_ARRAY = 'Cannot access index of a value that is not an array';
 export const CONFLICTING_ASSOCIATIVITY = (oper1: string, oper2: string) => `Precedence order between operators "${oper1}" and "${oper2}" could not be established because they have conflicting associativity`;
 export const INVALID_ARG_COUNT = (expected: number, actual: number) => `Invalid argument count: expected ${expected}, actual ${actual}`;
-export const NOT_GENERIC = (name: string) => `Type "${name}" is not generic`;
+export const NOT_GENERIC = 'Type is not generic';
 export const NOT_GENERIC_FUNCTION = 'Function is not generic';
 export const INVALID_TYPE_ARG = (type: TType, name: string, constraint: TType) => `Type "${type}" is not assignable to type parameter "${name}" with constraint "${constraint}"`;
 export const INVALID_TYPE_ARG_COUNT = (expected: number, actual: number) => `Invalid type argument count: expected ${expected}, actual ${actual}`;
+export const NOT_NAMESPACE = (name: string) => `Value "${name}" is not a namespace`;

@@ -2,8 +2,11 @@ import Module, { ModuleElement } from '~/runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
 import { STProgram } from '~/syntax/declarations/cst';
-import { ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '~/syntax/declarations/ast';
-import { TType, TUnknown, TRecursive } from './types';
+import {
+    ImportDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
+    ExportDeclaration, ExportForwardDeclaration
+} from '~/syntax/declarations/ast';
+import { TType, TUnknown, TRecursive, TNamespace } from './types';
 import { Location } from '~/parser/Tokenizer';
 import { TypeCheckVisitor } from './visitors';
 import reduceProgram from '~/syntax/declarations/reduce';
@@ -76,7 +79,9 @@ export default class TypeChecker {
         for (const imp of module.ast.imports) this.processImport(module, imp);
         for (const typ of module.ast.types) this.processType(module, typ);
         for (const func of module.ast.functions) this.processFunction(module, func);
+        for (const con of module.ast.constants) this.processConstant(module, con);
         for (const exp of module.ast.exports) this.processExport(module, exp);
+        for (const fwd of module.ast.forwards) this.processForward(module, fwd);
     }
 
     /**
@@ -99,20 +104,10 @@ export default class TypeChecker {
     // PROCESSING DECLARATIONS //
     // //////////////////////////
 
-    /**
-     * Process an import of a module.
-     * This will load the imported module (if not already loaded),
-     * determine the validity of each imported name,
-     * and organize each imported value into the modules symbol tables.
-     */
-    processImport(module: Module, imp: ImportDeclaration) {
+    private resolveModule(sourceModule: Module, moduleName: string): Optional<Module> {
         // resolve the module's path
-        const importPath = module.resolvePath(imp.moduleName);
-        if (!importPath) {
-            // invalid module path specified
-            this.errors.push(new TypeCheckError(mess.MODULE_PATH_NOT_EXIST(imp.moduleName), module.path, imp.locations.moduleName));
-            return;
-        }
+        const importPath = sourceModule.resolvePath(moduleName);
+        if (!importPath) return null;
         // load the module. if it has been loaded already, get it from the cache
         let imported;
         if (!this.moduleCache[importPath]) {
@@ -124,25 +119,48 @@ export default class TypeChecker {
         } else {
             imported = this.modules[this.moduleCache[importPath]];
         }
-        // process the import names
-        for (const [name, alias] of Object.entries(imp.importNames)) {
-            // verify that the module exports the name
-            if (!imported.exports[name]) {
-                this.errors.push(new TypeCheckError(mess.MODULE_DOESNT_EXPORT_NAME(imp.moduleName, name), module.path, imp.locations[`importName_${name}`]));
+        return imported;
+    }
+
+    /**
+     * Process an import of a module.
+     * This will load the imported module (if not already loaded),
+     * determine the validity of each imported name,
+     * and organize each imported value into the modules symbol tables.
+     */
+    processImport(module: Module, imp: ImportDeclaration) {
+        // resolve the module
+        const imported = this.resolveModule(module, imp.moduleName);
+        if (!imported) {
+            // invalid module path specified
+            this.errors.push(new TypeCheckError(mess.MODULE_PATH_NOT_EXIST(imp.moduleName), module.path, imp.locations.moduleName));
+            return;
+        }
+        // process the imports
+        for (const { importName, importLocation, aliasName, aliasLocation } of imp.imports) {
+            // verify that the module exports the name, only if it isn't a wildcard import
+            if (importName !== '*' && !imported.exports[importName]) {
+                this.pushError(mess.MODULE_DOESNT_EXPORT_NAME(imp.moduleName, importName), module.path, importLocation);
                 continue;
             }
             // verify that the alias doesn't already exist; imports always come first, so we only need to check imports
-            if (module.imports[alias]) {
-                this.errors.push(new TypeCheckError(mess.NAME_CLASH(alias), module.path, imp.locations[`importAlias_${name}`]));
+            if (module.imports[aliasName]) {
+                this.pushError(mess.NAME_CLASH(aliasName), module.path, aliasLocation);
                 continue;
             }
             // valid import, create an import entry linking the import to the export
-            module.imports[alias] = { moduleId: imported.id, exportName: name, kind: imported.exports[name].kind, ast: imp };
+            module.imports[aliasName] = {
+                moduleId: imported.id,
+                exportName: importName,
+                kind: importName !== '*' ? imported.exports[importName].kind : 'namespace',
+                ast: imp
+            };
             // add the value to the appropriate table with a flag indicating that it exists in another module
-            switch (module.imports[alias].kind) {
-                case 'type': module.types[alias] = { imported: true } as ModuleElement<TypeDeclaration>; break;
-                case 'func': module.functions[alias] = { imported: true } as ModuleElement<FunctionDeclaration>; break;
-                case 'expr': module.constants[alias] = { imported: true } as ModuleElement<ExportDeclaration>; break;
+            switch (module.imports[aliasName].kind) {
+                case 'type': module.types[aliasName] = { imported: true } as ModuleElement<TypeDeclaration>; break;
+                case 'func': module.functions[aliasName] = { imported: true } as ModuleElement<FunctionDeclaration>; break;
+                case 'const': module.constants[aliasName] = { imported: true } as ModuleElement<ConstantDeclaration>; break;
+                case 'namespace': module.namespaces[aliasName] = imported.id; break;
             }
         }
     }
@@ -160,6 +178,7 @@ export default class TypeChecker {
             return;
         }
         if (module.functions[name]) this.addNameClash(name, module.path, module.functions[name].ast.locations.name, typ.locations.name);
+        else if (module.constants[name]) this.addNameClash(name, module.path, module.constants[name].ast.locations.name, typ.locations.name);
         module.types[name] = { ast: typ } as ModuleElement<TypeDeclaration>;
     }
 
@@ -176,7 +195,25 @@ export default class TypeChecker {
             return;
         }
         if (module.types[name]) this.addNameClash(name, module.path, module.types[name].ast.locations.name, func.locations.name);
+        else if (module.constants[name]) this.addNameClash(name, module.path, module.constants[name].ast.locations.name, func.locations.name);
         module.functions[name] = { ast: func } as ModuleElement<FunctionDeclaration>;
+    }
+
+    /**
+     * Process a constant declared in a module.
+     * This will determine the validity of the constant name
+     * and organize it into the constant symbol table in the module.
+     */
+    processConstant(module: Module, con: ConstantDeclaration) {
+        const name = con.name;
+        // handle name clashed
+        if (module.constants[name]) {
+            this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, con.locations.name));
+            return;
+        }
+        if (module.types[name]) this.addNameClash(name, module.path, module.types[name].ast.locations.name, con.locations.name);
+        else if (module.functions[name]) this.addNameClash(name, module.path, module.functions[name].ast.locations.name, con.locations.name);
+        module.constants[name] = { ast: con } as ModuleElement<ConstantDeclaration>;
     }
 
     /**
@@ -185,50 +222,97 @@ export default class TypeChecker {
      * and organize the exported value into the module's symbol tables.
      */
     processExport(module: Module, exp: ExportDeclaration) {
-        const { name, value } = exp;
-        // exports are in their own scope (unless they are expressions, which is handled below) so we only need to check expressions
-        if (module.exports[name]) {
-            this.errors.push(new TypeCheckError(mess.EXPORT_CLASH(name), module.path, exp.locations.name));
-            return;
-        }
-        // determine the kind and match it with a value
-        if (value) {
-            // inline export, the value will need to be added to the module
-            if (value instanceof TypeDeclaration) {
-                module.exports[name] = { kind: 'type', valueName: value.name };
-                this.processType(module, value);
-            } else if (value instanceof FunctionDeclaration) {
-                module.exports[name] = { kind: 'func', valueName: value.name };
-                this.processFunction(module, value);
-            } else {
-                // otherwise it's an expression, and the value is available in the module, check for name clashes
-                if (module.constants[name]) {
-                    this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), module.path, exp.locations.name));
-                    return;
-                }
-                if (module.types[name]) this.addNameClash(name, module.path, module.types[name].ast.locations.name, exp.locations.name);
-                else if (module.functions[name]) this.addNameClash(name, module.path, module.functions[name].ast.locations.name, exp.locations.name);
-                module.exports[name] = { kind: 'expr', valueName: name };
-                // expose it on a special constants table
-                module.constants[name] = { ast: exp } as ModuleElement<ExportDeclaration>;
+        for (const { exportName, exportNameLocation, valueName, valueNameLocation, value } of exp.exports) {
+            // exports are in their own scope, so we only need to check against export names
+            if (module.exports[exportName]) {
+                this.pushError(mess.EXPORT_CLASH(exportName), module.path, exportNameLocation);
+                continue;
             }
-        } else {
-            // it exports some already declared value, get the kind from that value
-            if (module.imports[name]) {
-                // we are re-exporting an import, get the kind from the import
-                module.exports[name] = { kind: module.imports[name].kind, valueName: name };
-            } else if (module.types[name]) {
-                module.exports[name] = { kind: 'type', valueName: name };
-            } else if (module.functions[name]) {
-                module.exports[name] = { kind: 'func', valueName: name };
-            } else {
-                // exporting a non-declared value
-                this.errors.push(new TypeCheckError(mess.VALUE_NOT_DEFINED(name), module.path, exp.locations.name));
+            // determine the kind and match it with a value
+            if (value) {
+                // inline export, the value will need to be added to the module, special name used for default export
+                if (value instanceof TypeDeclaration) {
+                    module.exports[exportName] = { kind: 'type', valueName };
+                    this.processType(module, value);
+                } else if (value instanceof FunctionDeclaration) {
+                    module.exports[exportName] = { kind: 'func', valueName };
+                    this.processFunction(module, value);
+                } else {
+                    module.exports[exportName] = { kind: 'const', valueName };
+                    this.processConstant(module, value);
+                }
+            } else if (valueName) { // this will always be true if there is no inline value
+                // export of existing value, get the kind from that value
+                if (module.imports[valueName]) {
+                    // re-export of an import, get the kind from the import
+                    module.exports[exportName] = { kind: module.imports[valueName].kind, valueName: valueName };
+                } else if (module.types[valueName]) {
+                    module.exports[exportName] = { kind: 'type', valueName };
+                } else if (module.functions[valueName]) {
+                    module.exports[exportName] = { kind: 'func', valueName };
+                } else if (module.constants[valueName]) {
+                    module.exports[exportName] = { kind: 'const', valueName };
+                } else {
+                    // exporting a non-declared value
+                    this.pushError(mess.VALUE_NOT_DEFINED(valueName), module.path, valueNameLocation!);
+                }
             }
         }
     }
 
-    addNameClash(name: string, path: string, loc1: Location, loc2: Location) {
+    /**
+     * Process an export forward declared in a module.
+     * This will determine the validity of the export name nad the import name,
+     * and organize the import and export into the module's symbol tables.
+     */
+    processForward(module: Module, fwd: ExportForwardDeclaration) {
+        // resolve the module
+        const imported = this.resolveModule(module, fwd.moduleName);
+        if (!imported) {
+            // invalid module path specified
+            this.errors.push(new TypeCheckError(mess.MODULE_PATH_NOT_EXIST(fwd.moduleName), module.path, fwd.locations.moduleName));
+            return;
+        }
+        // process the forwards, both as an import and as an export
+        for (const { importName, importLocation, exportName, exportLocation } of fwd.forwards) {
+            // verify that the module exports the name, only if it is not a wildcard import
+            if (importName !== '*' && !imported.exports[importName]) {
+                this.pushError(mess.MODULE_DOESNT_EXPORT_NAME(fwd.moduleName, importName), module.path, importLocation);
+                continue;
+            }
+            // verify that the export isn't already declared, only if it is not a wildcard export
+            if (exportName !== '*' && module.exports[exportName]) {
+                this.pushError(mess.EXPORT_CLASH(exportName), module.path, exportLocation);
+                continue;
+            }
+            if (exportName !== '*') {
+                // valid forward, create an import and export entry, use the module name and the import name as a dummy ID
+                const dummyImport = `"${fwd.moduleName}"_${importName}`;
+                module.imports[dummyImport] = {
+                    moduleId: imported.id,
+                    exportName: importName,
+                    kind: importName !== '*' ? imported.exports[importName].kind : 'namespace',
+                    ast: fwd
+                };
+                module.exports[exportName] = { kind: module.imports[dummyImport].kind, valueName: dummyImport };
+            } else {
+                // wildcard export, this forwards ALL exports of the forwarded module
+                for (const imp of Object.keys(imported.exports)) {
+                    // verify that the forward isn't already exported
+                    if (module.exports[imp]) {
+                        this.pushError(mess.EXPORT_CLASH(imp), module.path, exportLocation);
+                        continue;
+                    }
+                    // valid, setup forward entries
+                    const dummyImport = `"${fwd.moduleName}"_${imp}`;
+                    module.imports[dummyImport] = { moduleId: imported.id, exportName: imp, kind: imported.exports[imp].kind, ast: fwd };
+                    module.exports[imp] = { kind: module.imports[dummyImport].kind, valueName: dummyImport };
+                }
+            }
+        }
+    }
+
+    private addNameClash(name: string, path: string, loc1: Location, loc2: Location) {
         // set the error on whichever comes last
         if (loc1.startLine < loc2.startLine || (loc1.startLine === loc2.startLine && loc1.startColumn < loc2.startColumn)) {
             this.errors.push(new TypeCheckError(mess.NAME_CLASH(name), path, loc2));
@@ -249,7 +333,7 @@ export default class TypeChecker {
      * If a type resolution reaches a name, it will resolve that name in place, calling either getType() or getValueType() below.
      * To prevent double resolution, we track which ones have already been resolved.
      */
-    resolveType(module: Module, decl: ModuleElement<TypeDeclaration | FunctionDeclaration | ExportDeclaration>) {
+    resolveType(module: Module, decl: ModuleElement<TypeDeclaration | FunctionDeclaration | ConstantDeclaration>) {
         if (decl.ast.type) return decl.ast.type; // resolved already
         if (decl.resolving) {
             // type recursion is handled in getType(), so this will only happen for recursively defined constants
@@ -276,8 +360,13 @@ export default class TypeChecker {
      * to track down the actual declaration.
      * The type is also resolved here if it hasn't been already.
      */
-    getType(module: Module, name: string): TType {
+    getType(module: Module, name: string): Optional<TType> {
+        if (module.namespaces.hasOwnProperty(name)) {
+            // namespaces can be present in types
+            return new TNamespace(module.namespaces[name]);
+        }
         const type = module.types[name];
+        if (!type) return null;
         if (type.imported) {
             // type is imported, resolve the import to the corresponding export in the imported module
             const imp = module.imports[name];
@@ -301,7 +390,10 @@ export default class TypeChecker {
      * to track down the actual declaration.
      * The type is also resolves here if it hasn't been already.
      */
-    getValueType(module: Module, name: string): TType | null {
+    getValueType(module: Module, name: string): Optional<TType> {
+        if (module.namespaces.hasOwnProperty(name)) {
+            return new TNamespace(module.namespaces[name]);
+        }
         const value = module.functions[name] || module.constants[name];
         if (!value) return null;
         if (value.imported) {

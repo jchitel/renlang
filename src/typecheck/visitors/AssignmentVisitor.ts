@@ -176,6 +176,11 @@ export default class AssignmentVisitor implements ITypeVisitor<bool> {
         return false;
     }
 
+    visitNamespace() {
+        // namespaces can't just be passed around
+        return false;
+    }
+
     @baseCheck
     visitParam(to: TParam): boolean {
         return to.constraint.visit(this);

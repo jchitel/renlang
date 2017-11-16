@@ -13,7 +13,9 @@ export class TestVisitor implements INodeVisitor<any> {
     visitFunctionDeclaration(_decl: ast.FunctionDeclaration) {}
     visitParam(_param: ast.Param) {}
     visitLambdaParam(_param: ast.LambdaParam) {}
+    visitConstantDeclaration(_decl: ast.ConstantDeclaration) {}
     visitExportDeclaration(_decl: ast.ExportDeclaration) {}
+    visitExportForwardDeclaration(_decl: ast.ExportForwardDeclaration) {}
     visitPrimitiveType(_type: ast.PrimitiveType) {}
     visitIdentifierType(_type: ast.IdentifierType) {}
     visitArrayType(_type: ast.ArrayType) {}
@@ -23,6 +25,7 @@ export class TestVisitor implements INodeVisitor<any> {
     visitStructType(_type: ast.StructType) {}
     visitTupleType(_type: ast.TupleType) {}
     visitUnionType(_type: ast.UnionType) {}
+    visitNamespaceAccessType(_type: ast.NamespaceAccessType) {}
     visitBlock(_block: ast.Block) {}
     visitBreakStatement(_stmt: ast.BreakStatement) {}
     visitContinueStatement(_stmt: ast.ContinueStatement) {}

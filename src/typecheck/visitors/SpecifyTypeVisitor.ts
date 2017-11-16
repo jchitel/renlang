@@ -63,6 +63,11 @@ export default class SpecifyTypeVisitor implements ITypeVisitor<TType> {
         // this should never be called on a generic type
         throw new Error("Method not implemented.");
     }
+    
+    visitNamespace(): TType {
+        // this should never be called on a namespace
+        throw new Error("Method not implemented.");
+    }
 
     /**
      * This is the "leaf" operation of this visitor.

@@ -1,5 +1,5 @@
 import Func from './Func';
-import { ExportDeclaration } from '~/syntax/declarations/ast';
+import { ConstantDeclaration } from '~/syntax/declarations/ast';
 import { Expression } from '~/syntax/expressions/ast';
 import { ConstBranch, ConstSet, ConstRef, Return } from '~/runtime/instructions';
 import Translator from './Translator';
@@ -7,9 +7,9 @@ import TranslationVisitor from './TranslationVisitor';
 
 
 export default class ConstFunc extends Func {
-    ast: ExportDeclaration;
+    ast: ConstantDeclaration;
 
-    constructor(id: number, moduleFunction: { ast: ExportDeclaration }, moduleId: number, modulePath: string = '') {
+    constructor(id: number, moduleFunction: { ast: ConstantDeclaration }, moduleId: number, modulePath: string = '') {
         super(id, moduleFunction, moduleId, modulePath);
     }
 

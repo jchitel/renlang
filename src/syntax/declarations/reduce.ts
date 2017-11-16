@@ -44,16 +44,6 @@ function reduceDeclaration(decl: cst.STDeclaration) {
     } 
 }
 
-function reduceAnonDeclaration(decl: cst.STAnonDeclaration) {
-    if (decl.choice instanceof cst.STTypeDeclaration) {
-        return reduceTypeDeclaration(decl.choice);
-    } else if (decl.choice instanceof cst.STFunctionDeclaration) {
-        return reduceFunctionDeclaration(decl.choice);
-    } else  {
-        return reduceExpression(decl.choice);
-    } 
-}
-
 /**
  * Cases for import declarations:
  * - import default (import default as a local name)
@@ -126,7 +116,7 @@ export function reduceTypeDeclaration(decl: cst.STTypeDeclaration) {
         node.name = decl.typeNameToken.image;
         node.registerLocation('name', decl.typeNameToken.getLocation());
     } else {
-        node.name = '';
+        node.name = '##DEFAULT';
     }
     node.typeParams = decl.typeParamList ? reduceTypeParamList(decl.typeParamList) : [];
     node.typeNode = reduceTypeNode(decl.typeNode);
@@ -167,7 +157,7 @@ export function reduceFunctionDeclaration(decl: cst.STFunctionDeclaration) {
         node.name = decl.functionNameToken.image;
         node.registerLocation('name', decl.functionNameToken.getLocation());
     } else {
-        node.name = '';
+        node.name = '##DEFAULT';
     }
     node.returnType = reduceTypeNode(decl.returnType);
     node.typeParams = decl.typeParamList ? reduceTypeParamList(decl.typeParamList) : [];
@@ -197,8 +187,12 @@ export function reduceFunctionBody(body: cst.STFunctionBody): Statement | Expres
 
 export function reduceConstantDeclaration(decl: cst.STConstantDeclaration) {
     const node = new ast.ConstantDeclaration();
-    node.name = decl.identToken.image;
-    node.registerLocation('name', decl.identToken.getLocation());
+    if (decl.identToken) {
+        node.name = decl.identToken.image;
+        node.registerLocation('name', decl.identToken.getLocation());
+    } else {
+        node.name = '##DEFAULT';
+    }
     node.value = reduceExpression(decl.exp);
     node.createAndRegisterLocation('self', node.locations.name, node.value.locations.self);
     return node;
@@ -224,10 +218,9 @@ export function reduceExportDeclaration(decl: cst.STExportDeclaration) {
             node.exports.push({ valueName: value.choice.image, valueNameLocation: value.choice.getLocation(), ...exp });
         } else if (value.choice instanceof cst.STDeclaration) {
             const v = reduceDeclaration(value.choice);
-            node.exports.push({ valueName: v.name, valueNameLocation: v.locations.name, value: v, ...exp });
-        } else {
-            const v = reduceAnonDeclaration(value.choice);
-            node.exports.push({ value: v, ...exp });
+            // anonymous declarations have no name, and thus no name location
+            const loc = v.name === '##DEFAULT' ? exp.exportNameLocation : v.locations.name;
+            node.exports.push({ valueName: v.name, valueNameLocation: loc, value: v, ...exp });
         }
     } else {
         const value = decl.choice.value;

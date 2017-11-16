@@ -1,6 +1,7 @@
 import {
     TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TFunction,
     TGeneric, TParam, TArg, TUnion, TAny, TNever, TRecursive, TInferred,
+    TNamespace
 } from '~/typecheck/types';
 
 
@@ -30,4 +31,5 @@ export default interface ITypeVisitor<T> {
     // hidden types
     visitRecursive(type: TRecursive): T;
     visitInferred(type: TInferred): T;
+    visitNamespace(type: TNamespace): T;
 }

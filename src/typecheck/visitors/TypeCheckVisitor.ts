@@ -80,12 +80,16 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         return this.pushError(mess.VALUE_NOT_DEFINED(name), location);
     }
 
-    notGeneric(node: types.SpecificType) {
-        return this.pushError(mess.NOT_GENERIC(node.name), node.locations.self);
+    notGeneric(node: ASTNode) {
+        return this.pushError(mess.NOT_GENERIC, node.locations.self);
     }
 
     notArray(node: ASTNode) {
         return this.pushError(mess.NOT_ARRAY, node.locations.self);
+    }
+
+    notNamespace(name: string, node: ASTNode) {
+        return this.pushError(mess.NOT_NAMESPACE(name), node.locations.self);
     }
 
     notStruct(node: ASTNode) {
@@ -248,11 +252,10 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         // check for a type param first
         if (this.context.typeParams[type.name]) {
             return this.context.typeParams[type.name];
-        } else if (!this.module.types[type.name]) {
-            // no type param, no module-scoped type, it's an error
-            return this.typeNotDefined(type.name, type);
         } else {
-            return this.getModuleType(type.name);
+            const moduleType = this.getModuleType(type.name);
+            if (!moduleType) return this.typeNotDefined(type.name, type);
+            return moduleType;
         }
     }
 
@@ -289,16 +292,9 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      */
     @baseCheck
     visitSpecificType(type: types.SpecificType): TType {
-        // first, resolve the TGeneric associated with the name
-        let genericType: TType;
-        if (!this.module.types[type.name]) {
-            // no module-scoped type, it's an error
-            return this.typeNotDefined(type.name, type);
-        } else {
-            genericType = this.getModuleType(type.name);
-            // not a generic type
-            if (!genericType.isGeneric()) return this.notGeneric(type);
-        }
+        // first, resolve the TGeneric
+        const genericType = type.typeNode.visit(this);
+        if (!genericType.isGeneric()) return this.notGeneric(type);
         // second, resolve all type arguments
         const typeArgs = type.typeArgs.map(a => a.visit(this));
         // third, make sure the number of type arguments is correct
@@ -341,7 +337,19 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
 
     @baseCheck
     visitNamespaceAccessType(type: types.NamespaceAccessType): TType {
-        //
+        const baseType = type.baseType.visit(this);
+        /**
+         * The lowest-level node that can resolve to a namespace is an identifier type,
+         * but those don't have to be namespaces, so the actual error-throwing happens here.
+         */
+        if (!baseType.isNamespace() && type.baseType instanceof types.IdentifierType)
+            return this.notNamespace(type.baseType.name, type.baseType);
+        // resolve the module of the namespace
+        const module = this.typeChecker.modules[baseType.getModuleId()];
+        // resolve the corresponding type
+        const resolvedType = this.typeChecker.getType(module, type.typeName);
+        if (!resolvedType) return this.typeNotDefined(type.typeName, type);
+        return resolvedType;
     }
     
     /**************
@@ -561,10 +569,21 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
 
     @baseCheck
     visitFieldAccess(acc: exprs.FieldAccess): TType {
-        const structType = acc.target.visit(this);
-        if (!structType.isStruct()) return this.notStruct(acc.target);
-        if (!structType.hasField(acc.field)) return this.valueNotDefined(acc.field, acc.locations.field);
-        return structType.getField(acc.field);
+        const type = acc.target.visit(this);
+        // the type can be either a struct or a namespace
+        if (type.isStruct()) {
+            if (!type.hasField(acc.field)) return this.valueNotDefined(acc.field, acc.locations.field);
+            return type.getField(acc.field);
+        } else if (type.isNamespace()) {
+            // resolve the module of the namespace
+            const module = this.typeChecker.modules[type.getModuleId()];
+            // resolve the corresponding type
+            const resolvedType = this.typeChecker.getValueType(module, acc.field);
+            if (!resolvedType) return this.valueNotDefined(acc.field, acc.locations.field);
+            return resolvedType;
+        } else {
+            return this.notStruct(acc.target);
+        }
     }
 
     /**

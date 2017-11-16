@@ -89,6 +89,10 @@ export class ConstantDeclaration extends ASTNode {
     visit<T>(visitor: INodeVisitor<T>): T {
         return visitor.visitConstantDeclaration(this);
     }
+
+    prettyName() {
+        return `const ${this.name}`;
+    }
 }
 
 export class ExportDeclaration extends ASTNode {
@@ -105,19 +109,15 @@ export class ExportDeclaration extends ASTNode {
         // export name is always present
         exportName: string,
         exportNameLocation: Location,
-        // value name is not present only for default anonymous exports
-        valueName?: string,
-        valueNameLocation?: Location,
+        // value name is always present (##DEFAULT for anonymous default exports)
+        valueName: string,
+        valueNameLocation: Location,
         // value is not present for exports of existing names
-        value?: FunctionDeclaration | TypeDeclaration | ConstantDeclaration | Expression,
+        value?: FunctionDeclaration | TypeDeclaration | ConstantDeclaration,
     }[];
     
     visit<T>(visitor: INodeVisitor<T>): T {
         return visitor.visitExportDeclaration(this);
-    }
-
-    prettyName(name: string) {
-        return `export ${name}`;
     }
 }
 

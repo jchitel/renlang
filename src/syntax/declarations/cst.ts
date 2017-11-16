@@ -15,10 +15,6 @@ export class STDeclaration extends CSTNode {
     choice: STFunctionDeclaration | STTypeDeclaration | STConstantDeclaration;
 }
 
-export class STAnonDeclaration extends CSTNode {
-    choice: STFunctionDeclaration | STTypeDeclaration | STExpressionNode;
-}
-
 export class STNonImportDeclaration extends CSTNode {
     choice: STDeclaration | STExportDeclaration | STExportForwardDeclaration;
 }
@@ -125,7 +121,7 @@ export class STFunctionBody extends CSTNode {
 
 export class STConstantDeclaration extends CSTNode {
     constToken: Token;
-    identToken: Token;
+    identToken?: Token;
     equalsToken: Token;
     exp: STExpressionNode;
 }
@@ -141,7 +137,7 @@ export class STDefaultExportDeclaration extends CSTNode {
 }
 
 export class STDefaultExportValue extends CSTNode {
-    choice: STDeclaration | STAnonDeclaration | Token;
+    choice: STDeclaration | Token;
 }
 
 export class STNamedExportDeclaration extends CSTNode {

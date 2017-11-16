@@ -10,6 +10,11 @@ function getTokens(str: string, flipIgnore = false) {
     return [...tokenizer];
 }
 
+function assertSingleToken(str: string, type: string, value?: any) {
+    const [token] = getTokens(str, true);
+    assert.deepEqual(token, new Token(type, 1, 1, str, value));
+}
+
 describe('Tokenizer', () => {
     it('should construct a lazy list', () => {
         const tokenizer = new Tokenizer('hello');
@@ -17,74 +22,40 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a single-line comment', () => {
-        let [token] = getTokens('// this is a comment', true);
-        assert.deepEqual(token, new Token('COMMENT', 1, 1, '// this is a comment'));
-
-        [token] = getTokens('// this is a comment\n', true);
-        assert.deepEqual(token, new Token('COMMENT', 1, 1, '// this is a comment\n'));
+        assertSingleToken('// this is a comment', 'COMMENT');
+        assertSingleToken('//this is a comment\n', 'COMMENT');
     });
 
     it('should consume a multi-line comment', () => {
-        let [token] = getTokens('/* this is a comment */', true);
-        assert.deepEqual(token, new Token('COMMENT', 1, 1, '/* this is a comment */'));
-
-        [token] = getTokens('/* this is a comment', true);
-        assert.deepEqual(token, new Token('COMMENT', 1, 1, '/* this is a comment'));
-
-        [token] = getTokens('/* this is a comment\nand another line */', true);
-        assert.deepEqual(token, new Token('COMMENT', 1, 1, '/* this is a comment\nand another line */'));
+        assertSingleToken('/* this is a comment */', 'COMMENT');
+        assertSingleToken('/* this is a comment', 'COMMENT');
+        assertSingleToken('/* this is a comment\nand another line */', 'COMMENT');
     });
 
     it('should consume an identifier', () => {
-        let [token] = getTokens('hello');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, 'hello'));
-
-        [token] = getTokens('h');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, 'h'));
-
-        [token] = getTokens('HeLlO');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, 'HeLlO'));
-
-        [token] = getTokens('_hello');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, '_hello'));
-
-        [token] = getTokens('h_E_l_L_o');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, 'h_E_l_L_o'));
-
-        [token] = getTokens('h3110');
-        assert.deepEqual(token, new Token('IDENT', 1, 1, 'h3110'));
+        assertSingleToken('hello', 'IDENT');
+        assertSingleToken('h', 'IDENT');
+        assertSingleToken('HeLl0', 'IDENT');
+        assertSingleToken('_hello', 'IDENT');
+        assertSingleToken('h_E_l_L_o', 'IDENT');
+        assertSingleToken('h3110', 'IDENT');
     });
 
     it('should consume keywords', () => {
-        for (const kw of Tokenizer.KEYWORD_TOKENS) {
-            const [token] = getTokens(kw);
-            assert.deepEqual(token, new Token(kw.toUpperCase(), 1, 1, kw));
-        }
+        for (const kw of Tokenizer.KEYWORD_TOKENS) assertSingleToken(kw, kw.toUpperCase());
     });
 
     it('should consume an integer', () => {
-        let [token] = getTokens('1');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '1', 1));
-
-        [token] = getTokens('31415926');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '31415926', 31415926));
-
-        [token] = getTokens('-42');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '-42', -42));
-
-        [token] = getTokens('0');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '0', 0));
-
-        [token] = getTokens('01');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '01', 1));
-
-        [token] = getTokens('-0');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '-0', -0));
+        assertSingleToken('1', 'INTEGER_LITERAL', 1);
+        assertSingleToken('31415926', 'INTEGER_LITERAL', 31415926);
+        assertSingleToken('-42', 'INTEGER_LITERAL', -42);
+        assertSingleToken('0', 'INTEGER_LITERAL', 0);
+        assertSingleToken('01', 'INTEGER_LITERAL', 1);
+        assertSingleToken('-0', 'INTEGER_LITERAL', -0);
     });
 
     it('should consume a hexadecimal literal', () => {
-        const [token] = getTokens('0x1f');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '0x1f', 31));
+        assertSingleToken('0x1f', 'INTEGER_LITERAL', 31);
     });
 
     it("should handle '0x' case", () => {
@@ -97,8 +68,7 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a binary literal', () => {
-        const [token] = getTokens('0b11011');
-        assert.deepEqual(token, new Token('INTEGER_LITERAL', 1, 1, '0b11011', 27));
+        assertSingleToken('0b11011', 'INTEGER_LITERAL', 27);
     });
 
     it("should handle '0b' case", () => {
@@ -111,23 +81,12 @@ describe('Tokenizer', () => {
     });
 
     it('should consume a floating point literal', () => {
-        let [token] = getTokens('0.1');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '0.1', 0.1));
-
-        [token] = getTokens('0.12');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '0.12', 0.12));
-
-        [token] = getTokens('0e1');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '0e1', 0));
-
-        [token] = getTokens('0.1e2');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '0.1e2', 10));
-
-        [token] = getTokens('1e12');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '1e12', 1e12));
-
-        [token] = getTokens('123.456');
-        assert.deepEqual(token, new Token('FLOAT_LITERAL', 1, 1, '123.456', 123.456));
+        assertSingleToken('0.1', 'FLOAT_LITERAL', 0.1);
+        assertSingleToken('0.12', 'FLOAT_LITERAL', 0.12);
+        assertSingleToken('0e1', 'FLOAT_LITERAL', 0);
+        assertSingleToken('0.1e2', 'FLOAT_LITERAL', 10);
+        assertSingleToken('1e12', 'FLOAT_LITERAL', 1e12);
+        assertSingleToken('123.456', 'FLOAT_LITERAL', 123.456);
     });
 
     it("should handle '0.' and '0e' case", () => {
@@ -170,213 +129,123 @@ describe('Tokenizer', () => {
     });
 
     it('should consume lonely minus as operator', () => {
-        let [token] = getTokens('-');
-        assert.deepEqual(token, new Token('OPER', 1, 1, '-'));
-
-        [token] = getTokens('-+');
-        assert.deepEqual(token, new Token('OPER', 1, 1, '-+'));
+        assertSingleToken('-', 'OPER');
+        assertSingleToken('-+', 'OPER');
     });
 
     it('should consume a string literal', () => {
-        let [token] = getTokens('""');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '""', ''));
-
-        [token] = getTokens('"hello"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"hello"', 'hello'));
+        assertSingleToken('""', 'STRING_LITERAL', '');
+        assertSingleToken('"hello"', 'STRING_LITERAL', 'hello');
     });
 
     it('should handle simple escape characters in strings', () => {
-        let [token] = getTokens('"\\n"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\n"', '\n'));
-
-        [token] = getTokens('"\\r"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\r"', '\r'));
-
-        [token] = getTokens('"\\t"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\t"', '\t'));
-
-        [token] = getTokens('"\\v"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\v"', '\v'));
-
-        [token] = getTokens('"\\f"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\f"', '\f'));
-
-        [token] = getTokens('"\\b"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\b"', '\b'));
-
-        [token] = getTokens('"\\a"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\a"', 'a'));
+        assertSingleToken('"\\n"', 'STRING_LITERAL', '\n');
+        assertSingleToken('"\\r"', 'STRING_LITERAL', '\r');
+        assertSingleToken('"\\t"', 'STRING_LITERAL', '\t');
+        assertSingleToken('"\\v"', 'STRING_LITERAL', '\v');
+        assertSingleToken('"\\f"', 'STRING_LITERAL', '\f');
+        assertSingleToken('"\\b"', 'STRING_LITERAL', '\b');
+        assertSingleToken('"\\a"', 'STRING_LITERAL', 'a');
     });
 
     it('should handle ascii escape sequences in strings', () => {
-        let [token] = getTokens('"\\x61"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\x61"', 'a'));
-
-        [token] = getTokens('"\\xn1"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\xn1"', 'xn1'));
+        assertSingleToken('"\\x61"', 'STRING_LITERAL', 'a');
+        assertSingleToken('"\\xn1"', 'STRING_LITERAL', 'xn1');
     });
 
     it('should handle unicode escape sequences in strings', () => {
-        let [token] = getTokens('"\\u0061"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\u0061"', 'a'));
-
-        [token] = getTokens('"\\u{00061}"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\u{00061}"', 'a'));
-
-        [token] = getTokens('"\\u{000061}"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\u{000061}"', 'a'));
-
-        [token] = getTokens('"\\u00n1"');
-        assert.deepEqual(token, new Token('STRING_LITERAL', 1, 1, '"\\u00n1"', 'u00n1'));
+        assertSingleToken('"\\u0061"', 'STRING_LITERAL', 'a');
+        assertSingleToken('"\\u{00061}"', 'STRING_LITERAL', 'a');
+        assertSingleToken('"\\u{000061}"', 'STRING_LITERAL', 'a');
+        assertSingleToken('"\\u00n1"', 'STRING_LITERAL', 'u00n1');
     });
 
     it('should throw an error for unterminated string', () => {
         assert.throws(() => getTokens('"'), 'Unterminated string (Line 1, Column 1)');
-
         assert.throws(() => getTokens('"abcd'), 'Unterminated string (Line 1, Column 5)');
     });
 
     it('should consume a character literal', () => {
-        const [token] = getTokens("'a'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'a'", 'a'));
+        assertSingleToken("'a'", 'CHARACTER_LITERAL', 'a');
     });
 
     it('should handle simple escape characters in characters', () => {
-        let [token] = getTokens("'\\n'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\n'", '\n'));
-
-        [token] = getTokens("'\\r'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\r'", '\r'));
-
-        [token] = getTokens("'\\t'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\t'", '\t'));
-
-        [token] = getTokens("'\\v'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\v'", '\v'));
-
-        [token] = getTokens("'\\f'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\f'", '\f'));
-
-        [token] = getTokens("'\\b'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\b'", '\b'));
-
-        [token] = getTokens("'\\a'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\a'", 'a'));
+        assertSingleToken("'\\n'", 'CHARACTER_LITERAL', '\n');
+        assertSingleToken("'\\r'", 'CHARACTER_LITERAL', '\r');
+        assertSingleToken("'\\t'", 'CHARACTER_LITERAL', '\t');
+        assertSingleToken("'\\v'", 'CHARACTER_LITERAL', '\v');
+        assertSingleToken("'\\f'", 'CHARACTER_LITERAL', '\f');
+        assertSingleToken("'\\b'", 'CHARACTER_LITERAL', '\b');
+        assertSingleToken("'\\a'", 'CHARACTER_LITERAL', 'a');
     });
 
     it('should handle ascii escape sequences in characters', () => {
-        const [token] = getTokens("'\\x61'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\x61'", 'a'));
-
+        assertSingleToken("'\\x61'", 'CHARACTER_LITERAL', 'a');
         assert.throws(() => getTokens("'\\xn1'"), 'Unterminated character (Line 1, Column 6)');
     });
 
     it('should handle unicode escape sequences in characters', () => {
-        let [token] = getTokens("'\\u0061'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\u0061'", 'a'));
-
-        [token] = getTokens("'\\u{00061}'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\u{00061}'", 'a'));
-
-        [token] = getTokens("'\\u{000061}'");
-        assert.deepEqual(token, new Token('CHARACTER_LITERAL', 1, 1, "'\\u{000061}'", 'a'));
-
+        assertSingleToken("'\\u0061'", 'CHARACTER_LITERAL', 'a');
+        assertSingleToken("'\\u{00061}'", 'CHARACTER_LITERAL', 'a');
+        assertSingleToken("'\\u{000061}'", 'CHARACTER_LITERAL', 'a');
         assert.throws(() => getTokens("'\\u00n1'"), 'Unterminated character (Line 1, Column 8)');
     });
 
     it('should throw an error for invalid character literal', () => {
         assert.throws(() => getTokens("'"), 'Unterminated character (Line 1, Column 1)');
-
         assert.throws(() => getTokens("'a"), 'Unterminated character (Line 1, Column 2)');
-
         assert.throws(() => getTokens("''"), 'Empty character (Line 1, Column 2)');
     });
 
     it('should consume a non-equals symbol', () => {
-        let [token] = getTokens(':');
-        assert.deepEqual(token, new Token('COLON', 1, 1, ':'));
-
-        [token] = getTokens('{');
-        assert.deepEqual(token, new Token('LBRACE', 1, 1, '{'));
-
-        [token] = getTokens('}');
-        assert.deepEqual(token, new Token('RBRACE', 1, 1, '}'));
-
-        [token] = getTokens('(');
-        assert.deepEqual(token, new Token('LPAREN', 1, 1, '('));
-
-        [token] = getTokens(')');
-        assert.deepEqual(token, new Token('RPAREN', 1, 1, ')'));
-
-        [token] = getTokens('[');
-        assert.deepEqual(token, new Token('LBRACK', 1, 1, '['));
-
-        [token] = getTokens(']');
-        assert.deepEqual(token, new Token('RBRACK', 1, 1, ']'));
-
-        [token] = getTokens(',');
-        assert.deepEqual(token, new Token('COMMA', 1, 1, ','));
-
-        [token] = getTokens('`');
-        assert.deepEqual(token, new Token('BACKTICK', 1, 1, '`'));
-
-        [token] = getTokens('.');
-        assert.deepEqual(token, new Token('DOT', 1, 1, '.'));
+        assertSingleToken(':', 'COLON');
+        assertSingleToken('{', 'LBRACE');
+        assertSingleToken('}', 'RBRACE');
+        assertSingleToken('(', 'LPAREN');
+        assertSingleToken(')', 'RPAREN');
+        assertSingleToken('[', 'LBRACK');
+        assertSingleToken(']', 'RBRACK');
+        assertSingleToken(':', 'COLON');
+        assertSingleToken(',', 'COMMA');
+        assertSingleToken('`', 'BACKTICK');
+        assertSingleToken('.', 'DOT');
     });
 
     it('should consume a symbol starting with an equals', () => {
-        let [token] = getTokens('=>');
-        assert.deepEqual(token, new Token('FAT_ARROW', 1, 1, '=>'));
-
-        [token] = getTokens('=');
-        assert.deepEqual(token, new Token('EQUALS', 1, 1, '='));
+        assertSingleToken('=>', 'FAT_ARROW');
+        assertSingleToken('=', 'EQUALS');
     });
 
     it('should consume an operator starting with equals', () => {
-        const [token] = getTokens('=+');
-        assert.deepEqual(token, new Token('OPER', 1, 1, '=+'));
+        assertSingleToken('=+', 'OPER');
     });
 
     it('should consume an operator', () => {
         for (const c of Tokenizer.OPER_CHARS) {
             if (c === '=') continue; // lonely equals is a special case
-            const [token] = getTokens(c);
-            assert.deepEqual(token, new Token('OPER', 1, 1, c));
+            assertSingleToken(c, 'OPER');
         }
-        const [token] = getTokens('~!$%^&+=-|</');
-        assert.deepEqual(token, new Token('OPER', 1, 1, '~!$%^&+=-|</'));
+        assertSingleToken('~!$%^&+=-|</', 'OPER');
     });
 
     it('should consume a new line token', () => {
-        let [token] = getTokens('\n', true);
-        assert.deepEqual(token, new Token('NEWLINE', 1, 1, '\n'));
-
-        [token] = getTokens(';', true);
-        assert.deepEqual(token, new Token('NEWLINE', 1, 1, ';'));
+        assertSingleToken('\n', 'NEWLINE');
+        assertSingleToken(';', 'NEWLINE');
     });
 
     it('should consume a CRLF new line', () => {
-        const [token] = getTokens('\r\n', true);
-        assert.deepEqual(token, new Token('NEWLINE', 1, 1, '\r\n'));
+        assertSingleToken('\r\n', 'NEWLINE');
     });
 
     it('should consume lonely \\r as whitespace', () => {
-        let [token] = getTokens('\r', true);
-        assert.deepEqual(token, new Token('WHITESPACE', 1, 1, '\r'));
-
-        [token] = getTokens('\r \t', true);
-        assert.deepEqual(token, new Token('WHITESPACE', 1, 1, '\r \t'));
+        assertSingleToken('\r', 'WHITESPACE');
+        assertSingleToken('\r \t', 'WHITESPACE');
     });
 
     it('should consume whitespace', () => {
-        let [token] = getTokens(' ', true);
-        assert.deepEqual(token, new Token('WHITESPACE', 1, 1, ' '));
-
-        [token] = getTokens('\t', true);
-        assert.deepEqual(token, new Token('WHITESPACE', 1, 1, '\t'));
-
-        [token] = getTokens(' \t \t', true);
-        assert.deepEqual(token, new Token('WHITESPACE', 1, 1, ' \t \t'));
+        assertSingleToken(' ', 'WHITESPACE');
+        assertSingleToken('\t', 'WHITESPACE');
+        assertSingleToken(' \t \t', 'WHITESPACE');
     });
 
     it('should register an invalid character as an error', () => {

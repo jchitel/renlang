@@ -150,8 +150,8 @@ export function acceptAnonDeclaration(parser: Parser) {
     return parser.acceptOneOf([
         { parse: acceptAnonFunctionDeclaration },
         { parse: acceptAnonTypeDeclaration },
-        { parse: acceptExpression },
-    ], decls.STAnonDeclaration);
+        { parse: acceptAnonConstantDeclaration },
+    ], decls.STDeclaration);
 }
 
 /**
@@ -251,6 +251,17 @@ export function acceptConstantDeclaration(parser: Parser) {
     return parser.accept([
         { name: 'constToken', type: 'CONST', definite: true },
         { name: 'identToken', type: 'IDENT', mess: mess.INVALID_CONST_NAME },
+        { name: 'equalsToken', type: 'EQUALS', mess: mess.CONST_MISSING_EQUALS },
+        { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
+    ], decls.STConstantDeclaration);
+}
+
+/**
+ * AnonConstantDeclaration ::= CONST EQUALS Expression
+ */
+export function acceptAnonConstantDeclaration(parser: Parser) {
+    return parser.accept([
+        { name: 'constToken', type: 'CONST', definite: true },
         { name: 'equalsToken', type: 'EQUALS', mess: mess.CONST_MISSING_EQUALS },
         { name: 'exp', parse: acceptExpression, mess: mess.INVALID_EXPRESSION },
     ], decls.STConstantDeclaration);
@@ -471,13 +482,13 @@ export function acceptTypeConstraint(parser: Parser) {
  *          TupleType |            # Tuple type
  *          FunctionType |         # Function type
  *          ParenthesizedType |    # Parenthesized type
- *          SpecificType |         # Specific type ("instantiation" of generic type)
  *          IDENT |                # Already defined type
  *          Type TypeSuffix
  *
  * TypeSuffix ::= ArrayTypeSuffix
  *              | UnionTypeSuffix
  *              | NamespaceAccessSuffix
+ *              | SpecificTypeSuffix
  */
 export function acceptType(parser: Parser): types.STTypeNode {
     return parser.acceptLeftRecursive({
@@ -498,13 +509,13 @@ export function acceptType(parser: Parser): types.STTypeNode {
             { parse: acceptFunctionType },
             { parse: acceptParenthesizedType },
             { parse: acceptTupleType },
-            { parse: acceptSpecificType },
             { type: 'IDENT' },
         ],
         suffixes: [
             { baseName: 'baseType', parse: acceptArrayTypeSuffix },
             { baseName: 'left', parse: acceptUnionTypeSuffix },
-            { baseName: 'baseType', parse: acceptNamespaceAccessSuffix }
+            { baseName: 'baseType', parse: acceptNamespaceAccessSuffix },
+            { baseName: 'typeNode', parse: acceptSpecificTypeSuffix },
         ],
     }, types.STTypeNode);
 }
@@ -566,27 +577,6 @@ export function acceptTupleType(parser: Parser) {
 }
 
 /**
- * SpecificType ::= IDENT TypeArgList
- */
-export function acceptSpecificType(parser: Parser) {
-    return parser.accept([
-        { name: 'nameToken', type: 'IDENT' },
-        { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
-    ], types.STSpecificType);
-}
-
-/**
- * TypeArgList ::= LT Type(* sep COMMA) GT
- */
-export function acceptTypeArgList(parser: Parser) {
-    return parser.accept([
-        { name: 'openLtToken', image: '<', definite: true },
-        { name: 'types', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE_ARG, sep: { name: 'commaTokens', type: 'COMMA' } },
-        { name: 'closeGtToken', image: '>', mess: mess.INVALID_TYPE_ARG_LIST },
-    ], types.STTypeArgList);
-}
-
-/**
  * ArrayTypeSuffix ::= LBRACK RBRACK
  */
 export function acceptArrayTypeSuffix(parser: Parser) {
@@ -614,6 +604,26 @@ export function acceptNamespaceAccessSuffix(parser: Parser) {
         { name: 'dotToken', type: 'DOT', definite: true },
         { name: 'typeNameToken', type: 'IDENT' },
     ], types.STNamespaceAccess);
+}
+
+/**
+ * SpecificTypeSuffix ::= TypeArgList
+ */
+export function acceptSpecificTypeSuffix(parser: Parser) {
+    return parser.accept([
+        { name: 'typeArgList', parse: acceptTypeArgList, definite: true },
+    ], types.STSpecificType);
+}
+
+/**
+ * TypeArgList ::= LT Type(* sep COMMA) GT
+ */
+export function acceptTypeArgList(parser: Parser) {
+    return parser.accept([
+        { name: 'openLtToken', image: '<', definite: true },
+        { name: 'types', parse: acceptType, zeroOrMore: true, mess: mess.INVALID_TYPE_ARG, sep: { name: 'commaTokens', type: 'COMMA' } },
+        { name: 'closeGtToken', image: '>', mess: mess.INVALID_TYPE_ARG_LIST },
+    ], types.STTypeArgList);
 }
 
 // //////////////

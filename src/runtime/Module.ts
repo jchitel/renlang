@@ -2,7 +2,10 @@ import { resolve, dirname, join } from 'path';
 import { existsSync as exists, lstatSync as lstat, readFileSync as readFile } from 'fs';
 
 import ASTNode from '~/syntax/ASTNode';
-import { Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration } from '~/syntax/declarations/ast';
+import {
+    Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
+    ExportForwardDeclaration
+} from '~/syntax/declarations/ast';
 import parse from '~/parser';
 import Func from '~/translator/Func';
 import reduceProgram from '~/syntax/declarations/reduce';
@@ -11,12 +14,12 @@ import reduceProgram from '~/syntax/declarations/reduce';
 export interface Import {
     moduleId: number;
     exportName: string;
-    kind: 'type' | 'func' | 'expr';
-    ast: ImportDeclaration;
+    kind: 'type' | 'func' | 'const' | 'namespace';
+    ast: ImportDeclaration | ExportForwardDeclaration;
 }
 
 export interface Export {
-    kind: 'type' | 'func' | 'expr';
+    kind: 'type' | 'func' | 'const' | 'namespace';
     valueName: string;
 }
 
@@ -38,7 +41,8 @@ export default class Module {
     imports: { [name: string]: Import };
     types: { [name: string]: ModuleElement<TypeDeclaration> };
     functions: { [name: string]: ModuleElement<FunctionDeclaration> };
-    constants: { [name: string]: ModuleElement<ExportDeclaration> };
+    constants: { [name: string]: ModuleElement<ConstantDeclaration> };
+    namespaces: { [name: string]: number }; // module id of the namespace
     exports: { [name: string]: Export };
 
     /**

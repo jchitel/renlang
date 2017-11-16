@@ -37,7 +37,7 @@ describe('Translator', () => {
 
     it('should translate a function', () => {
         const src = 'func int add(int a, int b) => a + b';
-        const ast = reduceFunctionDeclaration(parse(src).declarations[0].choice as STFunctionDeclaration);
+        const ast = reduceFunctionDeclaration(parse(src).declarations[0].choice.choice as STFunctionDeclaration);
         const func = new FunctionFunc(0, { ast }, 0);
         const tr = new Translator();
         func.translate(tr);

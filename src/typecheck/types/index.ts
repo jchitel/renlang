@@ -15,6 +15,7 @@ export { default as TType } from './TType';
 export { default as TUnion } from './TUnion';
 export { default as TUnknown } from './TUnknown';
 export { default as TInferred } from './TInferred';
+export { default as TNamespace } from './TNamespace';
 
 import TType from './TType';
 import TAny from './TAny';

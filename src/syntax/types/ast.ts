@@ -59,7 +59,7 @@ export class ParenthesizedType extends Type {
 }
 
 export class SpecificType extends Type {
-    name: string;
+    typeNode: Type;
     typeArgs: Type[];
     
     visit<T>(visitor: INodeVisitor<T>) {

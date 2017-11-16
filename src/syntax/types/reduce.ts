@@ -47,8 +47,7 @@ export const reduceParenthesizedType = reducerMap.add(cst.STParenthesizedType, (
 
 export const reduceSpecificType = reducerMap.add(cst.STSpecificType, (type) => {
     const node = new ast.SpecificType();
-    node.name = type.nameToken.image;
-    node.registerLocation('name', type.nameToken.getLocation());
+    node.typeNode = reduceType(type.typeNode);
     node.typeArgs = reduceTypeArgList(type.typeArgList);
     node.createAndRegisterLocation('self', node.locations.name, type.typeArgList.closeGtToken.getLocation());
     return node;

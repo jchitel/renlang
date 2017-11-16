@@ -37,6 +37,7 @@ export default abstract class TType {
     isTuple() { return this.visit(new visitors.IsTupleVisitor()); }
     isFunction() { return this.visit(new visitors.IsFunctionVisitor()); }
     isGeneric() { return this.visit(new visitors.IsGenericVisitor()); }
+    isNamespace() { return this.visit(new visitors.IsNamespaceVisitor()); }
     isNever() { return this.visit(new visitors.IsNeverVisitor()); }
 
     isSigned() { return this.visit(new visitors.IsSignedVisitor()); }
@@ -49,6 +50,7 @@ export default abstract class TType {
     getParams() { return this.visit(new visitors.GetParamsVisitor()); }
     getTypeParams() { return this.visit(new visitors.GetTypeParamsVisitor()); }
     getReturnType() { return this.visit(new visitors.GetReturnTypeVisitor()); }
+    getModuleId() { return this.visit(new visitors.GetModuleIdVisitor()); }
 
     /**
      * Return an exact (shallow) copy of this instance

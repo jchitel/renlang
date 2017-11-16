@@ -53,6 +53,11 @@ export default class InferTypeArgsVisitor implements ITypeVisitor<void> {
         // this should never be called on generic
         throw new Error("Method not implemented.");
     }
+    
+    visitNamespace(): void {
+        // this should never be called on a namespace
+        throw new Error("Method not implemented.");
+    }
 
     /**
      * This is the leaf visitor method for this process.
