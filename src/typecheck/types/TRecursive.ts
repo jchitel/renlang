@@ -1,5 +1,5 @@
 import TType from './TType';
-import { TypeDeclaration } from '~/syntax/declarations/ast';
+import { TypeDeclaration } from '~/syntax';
 import ITypeVisitor from '~/typecheck/visitors';
 
 

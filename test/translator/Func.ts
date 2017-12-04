@@ -3,8 +3,8 @@ import * as sinon from 'sinon';
 
 import { FunctionFunc } from '../../src/translator/Func';
 import Translator from '../../src/translator/Translator';
-import { UnaryExpression, FunctionDeclaration, Block } from '../../src/syntax/ast';
 import { Return, AddToScope, PushScopeFrame, PopFrame } from '../../src/runtime/instructions';
+import { FunctionDeclaration, PrefixExpression, Block } from '~/syntax';
 
 
 let sandbox: sinon.SinonSandbox;
@@ -23,7 +23,7 @@ describe('Func', () => {
     });
 
     it('should translate expression body', () => {
-        const exp = new UnaryExpression();
+        const exp = new PrefixExpression();
         const stub = sandbox.stub(exp, 'visit').returns(1);
         const func = new FunctionFunc(0, {
             ast: Object.assign(new FunctionDeclaration(), {

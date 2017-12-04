@@ -22,7 +22,7 @@ describe('Typecheck Type Classes', () => {
         // for each TType class, it should be assignable from TUnknown
         for (const t of Object.values(Types)) {
             if (t !== TUnknown && typeof(t) === 'function' && getSuperClass(t as Class<TType>) === TType) {
-                expect(new (t as Class<TType>)().isAssignableFrom(new TUnknown())).to.eql(true);
+                expect(Reflect.construct(t, []).isAssignableFrom(new TUnknown())).to.eql(true);
             }
         }
     });
@@ -233,7 +233,7 @@ describe('Typecheck Type Classes', () => {
             // for each TType class, it should be assignable to TAny
             for (const t of Object.values(Types)) {
                 if (typeof(t) === 'function' && getSuperClass(t as Class<TType>) === TType) {
-                    expect(new TAny().isAssignableFrom(new (t as Class<TType>)())).to.eql(true);
+                    expect(new TAny().isAssignableFrom(Reflect.construct(t, []))).to.eql(true);
                 }
             }
         });

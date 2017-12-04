@@ -1,8 +1,7 @@
 import INodeVisitor from '~/syntax/INodeVisitor';
-import * as ast from '~/syntax/ast';
+import ASTNode from '~/syntax/ASTNode';
 import Parser from '~/parser/Parser';
-import CSTNode from '~/syntax/CSTNode';
-import { STProgram } from '~/syntax/cst';
+import * as ast from '~/syntax';
 
 
 export class TestVisitor implements INodeVisitor<any> {
@@ -16,7 +15,7 @@ export class TestVisitor implements INodeVisitor<any> {
     visitConstantDeclaration(_decl: ast.ConstantDeclaration) {}
     visitExportDeclaration(_decl: ast.ExportDeclaration) {}
     visitExportForwardDeclaration(_decl: ast.ExportForwardDeclaration) {}
-    visitPrimitiveType(_type: ast.PrimitiveType) {}
+    visitBuiltInType(_type: ast.BuiltInType) {}
     visitIdentifierType(_type: ast.IdentifierType) {}
     visitArrayType(_type: ast.ArrayType) {}
     visitFunctionType(_type: ast.FunctionType) {}
@@ -27,11 +26,11 @@ export class TestVisitor implements INodeVisitor<any> {
     visitUnionType(_type: ast.UnionType) {}
     visitNamespaceAccessType(_type: ast.NamespaceAccessType) {}
     visitBlock(_block: ast.Block) {}
+    visitExpressionStatement(_exp: ast.ExpressionStatement) {}
     visitBreakStatement(_stmt: ast.BreakStatement) {}
     visitContinueStatement(_stmt: ast.ContinueStatement) {}
     visitDoWhileStatement(_stmt: ast.DoWhileStatement) {}
     visitForStatement(_stmt: ast.ForStatement) {}
-    visitNoop(_stmt: ast.Noop) {}
     visitReturnStatement(_stmt: ast.ReturnStatement) {}
     visitThrowStatement(_stmt: ast.ThrowStatement) {}
     visitTryCatchStatement(_stmt: ast.TryCatchStatement) {}
@@ -56,12 +55,10 @@ export class TestVisitor implements INodeVisitor<any> {
     visitVarDeclaration(_decl: ast.VarDeclaration) {}
 }
 
-type acceptFunction<T extends CSTNode> = (parser: Parser) => T;
-
-export function parse<T extends CSTNode = STProgram>(source: string, acceptFunction: acceptFunction<T>) {
-    return acceptFunction(new Parser(source));
-}
-
 export function mock<T>(cls: Class<T>, props: Partial<T> = {}): T {
     return Object.assign(Object.create(cls.prototype), props);
+}
+
+export function createParser<T extends ASTNode>(cls: Class<T>): (source: string) => T {
+    return (source) => new Parser(source).parse(cls) as T;
 }

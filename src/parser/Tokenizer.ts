@@ -38,13 +38,13 @@ export class Location {
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
 export class Token {
-    type: string;
+    type: TokenType;
     line: number;
     column: number;
     image: string;
     value?: any;
 
-    constructor(type: string, line: number, column: number, image: string, value?: any) {
+    constructor(type: TokenType, line: number, column: number, image: string, value?: any) {
         this.type = type;
         this.line = line;
         this.column = column;
@@ -57,6 +57,80 @@ export class Token {
     }
 }
 
+export enum TokenType {
+    COMMENT,           // characters ignored from code
+    IDENT,             // identifier
+    RESERVED,          // reserved word
+    INTEGER_LITERAL,   // integer number literals
+    FLOAT_LITERAL,     // floating-point number literals
+    STRING_LITERAL,    // character string literals
+    CHARACTER_LITERAL, // single character literals
+    OPER,              // operators
+    COLON,             // colon (:) symbol
+    LBRACE,            // left brace ({) symbol
+    RBRACE,            // right brace (}) symbol
+    LPAREN,            // left parenthesis (() symbol
+    RPAREN,            // right parenthesis ()) symbol
+    LBRACK,            // left bracket ([) symbol
+    RBRACK,            // right bracket (]) symbol
+    COMMA,             // comma (,) symbol
+    EQUALS,            // equals (=) symbol
+    FAT_ARROW,         // fat arrow (=>) symbol
+    BACKTICK,          // backtick (`) symbol
+    DOT,               // dot (.) symbol
+    WHITESPACE,        // any non-new-line whitespace (spaces, tabs, etc.)
+    NEWLINE,           // any character sequence that produces a new line (inluding ;)
+    EOF                // special end-of-file token
+}
+
+export const RESERVED = [
+    'as',       // used for renaming imports
+    'any',      // supertype of all types
+    'bool',     // boolean type name
+    'break',    // statement to break from a loop
+    'byte',     // byte type name (alias of u8)
+    'catch',    // denotes a catch block in a try-catch block
+    'char',     // character type name
+    'const',    // constant declaration keyword
+    'continue', // statement to skip to the next iteration of a loop
+    'default',  // used to declare a default export, also for a default case in a pattern match block
+    'do',       // denotes the start of a do-while loop
+    'double',   // double type name (alias for f64)
+    'else',     // denotes the start of an else clause
+    'export',   // declares a module export
+    'f32',      // 32-bit floating point type (equivalent to 'float')
+    'f64',      // 64-bit floating point type (equivalent to 'double')
+    'false',    // boolean false value
+    'finally',  // denotes a finally block in a try-catch-finally block
+    'float',    // float type name (alias for f32)
+    'for',      // denotes the start of a for loop
+    'from',     // used in import and export declarations to specify the name of another module
+    'func',     // denotes a named function declaration
+    'i16',      // 16 bit signed integer type
+    'i32',      // 32 bit signed integer type (equivalent to 'int')
+    'i64',      // 64 bit signed integer type (equivalent to 'long')
+    'i8',       // 8 bit signed integer type
+    'if',       // denotes the start of an if block
+    'import',   // declares a module import
+    'in',       // separates iterator variable and iterable expression in for statements
+    'int',      // int type name (alias for i32)
+    'integer',  // integer type name (true integer, infinite capacity)
+    'long',     // long type name (alias for i64)
+    'return',   // denotes a return statement to return a value from a function
+    'short',    // short type name (alias for u16)
+    'string',   // string type name
+    'throw',    // denotes a throw statement to throw an exception from a function
+    'true',     // boolean true value
+    'try',      // denotes the start of a try-catch block
+    'type',     // denotes the start of a type declaration
+    'u16',      // 16 bit unsigned integer type (equivalent to 'short')
+    'u32',      // 32 bit unsigned integer type
+    'u64',      // 64 bit unsigned integer type
+    'u8',       // 8 bit unsigned integer type (equivalent to 'byte')
+    'void',     // return type of functions, indicates no value is returned (alias for '()')
+    'while',    // denotes the start of a while loop
+]
+
 /**
  * Class responsible for lexical analysis of a source string: splitting the source string into tokens.
  * This class implements the Iterable interface, so it must be iterated, which yields each token in the source string.
@@ -65,70 +139,20 @@ export default class Tokenizer {
     // set of characters allowed for semantic operators (note that equals by itself or followed by a greater-than are both reserved)
     static OPER_CHARS = ['~', '!', '$', '%', '^', '&', '*', '+', '-', '=', '|', '<', '>', '?', '/'];
 
-    // reserved language keywords, any identifier that matches one of these is registered as a keyword instead
-    static KEYWORD_TOKENS = [
-        'as',       // used for renaming imports
-        'any',      // supertype of all types
-        'bool',     // boolean type name
-        'break',    // statement to break from a loop
-        'byte',     // byte type name (alias of u8)
-        'catch',    // denotes a catch block in a try-catch block
-        'char',     // character type name
-        'const',    // constant declaration keyword
-        'continue', // statement to skip to the next iteration of a loop
-        'default',  // used to declare a default export, also for a default case in a pattern match block
-        'do',       // denotes the start of a do-while loop
-        'double',   // double type name (alias for f64)
-        'else',     // denotes the start of an else clause
-        'export',   // declares a module export
-        'f32',      // 32-bit floating point type (equivalent to 'float')
-        'f64',      // 64-bit floating point type (equivalent to 'double')
-        'false',    // boolean false value
-        'finally',  // denotes a finally block in a try-catch-finally block
-        'float',    // float type name (alias for f32)
-        'for',      // denotes the start of a classic for loop
-        'foreach',  // denotes the start of an iterator loop
-        'from',     // used in import and export declarations to specify the name of another module
-        'func',     // denotes a named function declaration
-        'i16',      // 16 bit signed integer type
-        'i32',      // 32 bit signed integer type (equivalent to 'int')
-        'i64',      // 64 bit signed integer type (equivalent to 'long')
-        'i8',       // 8 bit signed integer type
-        'if',       // denotes the start of an if block
-        'import',   // declares a module import
-        'in',       // separates iterator variable and iterable expression in for statements
-        'int',      // int type name (alias for i32)
-        'integer',  // integer type name (true integer, infinite capacity)
-        'long',     // long type name (alias for i64)
-        'return',   // denotes a return statement to return a value from a function
-        'short',    // short type name (alias for u16)
-        'string',   // string type name
-        'throw',    // denotes a throw statement to throw an exception from a function
-        'true',     // boolean true value
-        'try',      // denotes the start of a try-catch block
-        'type',     // denotes the start of a type declaration
-        'u16',      // 16 bit unsigned integer type (equivalent to 'short')
-        'u32',      // 32 bit unsigned integer type
-        'u64',      // 64 bit unsigned integer type
-        'u8',       // 8 bit unsigned integer type (equivalent to 'byte')
-        'void',     // return type of functions, indicates no value is returned (alias for '()')
-        'while',    // denotes the start of a while loop
-    ];
-
     // reserved syntactic symbols, no operator can contain these (except =)
-    static SYMBOL_MAP: { [sym: string]: string } = {
-        ':': 'COLON',      // used in a default import (as in 'import from "module": identifier'), also to separate keys from values in an object literal
-        '{': 'LBRACE',     // used with RBRACE to delimit a block, used in several places, most notably function bodies
-        '}': 'RBRACE',
-        '(': 'LPAREN',     // used with RPAREN to delimit an explicitly bounded expression or type expression, also used as delimiter in several other places
-        ')': 'RPAREN',
-        '[': 'LBRACK',     // used with RBRACK to delimit an array literal, also in array index expressions
-        ']': 'RBRACK',
-        ',': 'COMMA',      // used as a delimiter in several places: function params, arrays, object literals, imports, exports, etc.
-        '=': 'EQUALS',     // used to bind a value to an identifier, also used in a few other places
-        '=>': 'FAT_ARROW', // used to separate a function's parameter list from its body
-        '`': 'BACKTICK',   // used to allow certain functions to be used akin to an operator, either prefix, postfix, or infix
-        '.': 'DOT',        // used in field access expressions
+    static SYMBOL_MAP: { [sym: string]: TokenType } = {
+        ':': TokenType.COLON,
+        '{': TokenType.LBRACE,
+        '}': TokenType.RBRACE,
+        '(': TokenType.LPAREN,
+        ')': TokenType.RPAREN,
+        '[': TokenType.LBRACK,
+        ']': TokenType.RBRACK,
+        ',': TokenType.COMMA,
+        '=': TokenType.EQUALS,
+        '=>': TokenType.FAT_ARROW,
+        '`': TokenType.BACKTICK,
+        '.': TokenType.DOT,
     };
 
     public list: LazyList<string>;
@@ -223,17 +247,16 @@ export default class Tokenizer {
 
             // This logic follows a specific order for attempting to extract tokens:
             // 1. Identifiers (also checks keywords that match an identifier string)
-            // 2. Negative numbers (via minus, fall back to operator if there is no number)
-            // 3. Numbers (includes 0, hex, binary, float, and decimal integers)
-            // 4. String literals
-            // 5. Char literals
-            // 6. Special syntactic symbols (reserved symbols that have syntactic meaning, ignoring =)
-            // 7. Symbols starting with = (just '=' and '=>', fall back to operator if neither matches)
-            // 8. Operators (tokens made from a specific list of allowed operator characters)
-            // 9. New lines (\n and ;, semi is for separating a line in two without an actual new line)
-            // 10. CRLF new lines (\r is treated as normal whitespace if not followed by a \n)
-            // 11. Whitespace (space and tab)
-            // 12. Everything else (throws an error for now)
+            // 2. Numbers (includes 0, hex, binary, float, and decimal integers)
+            // 3. String literals
+            // 4. Char literals
+            // 5. Special syntactic symbols (reserved symbols that have syntactic meaning, ignoring =)
+            // 6. Symbols starting with = (just '=' and '=>', fall back to operator if neither matches)
+            // 7. Operators (tokens made from a specific list of allowed operator characters)
+            // 8. New lines (\n and ;, semi is for separating a line in two without an actual new line)
+            // 9. CRLF new lines (\r is treated as normal whitespace if not followed by a \n)
+            // 10. Whitespace (space and tab)
+            // 11. Everything else (throws an error for now)
 
             if (c === '/' && c1 === '/') {
                 // single-line comment
@@ -246,13 +269,6 @@ export default class Tokenizer {
             } else if (kind === 'uppercase' || kind === 'lowercase' || c === '_') {
                 // valid identifier start, consume an identifier
                 yield this.consumeIdentifier(c);
-            } else if (c === '-') {
-                // if it is followed by a number, consume it as a number
-                if (this.kind(c1) === 'number') yield this.consumeNumber(c);
-                else {
-                    // other non-colon operator character, consume as operator
-                    yield this.consumeOperator(c);
-                }
             } else if (kind === 'number') {
                 // consume the number
                 yield this.consumeNumber(c);
@@ -283,7 +299,7 @@ export default class Tokenizer {
                 yield this.consumeOperator(c);
             } else if (c === '\n' || c === ';') {
                 // new line character
-                if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.columnNumber, c);
+                if (!this.ignoreMode) yield new Token(TokenType.NEWLINE, this.lineNumber, this.columnNumber, c);
                 if (c === '\n') {
                     // increment line number
                     this.lineNumber++;
@@ -293,7 +309,7 @@ export default class Tokenizer {
                 if (c1 === '\n') {
                     // treat the whole thing as a new line
                     this.moveNext();
-                    if (!this.ignoreMode) yield new Token('NEWLINE', this.lineNumber, this.getColumnNumber(2), '\r\n');
+                    if (!this.ignoreMode) yield new Token(TokenType.NEWLINE, this.lineNumber, this.getColumnNumber(2), '\r\n');
                     // increment line number
                     this.lineNumber++;
                     this.currentLineOffset = this.list.start;
@@ -312,7 +328,7 @@ export default class Tokenizer {
             }
         }
         // yield a EOF token
-        yield new Token('EOF', this.lineNumber, this.getColumnNumber(0), '');
+        yield new Token(TokenType.EOF, this.lineNumber, this.getColumnNumber(0), '');
     }
 
     /**
@@ -331,7 +347,7 @@ export default class Tokenizer {
             image = this.appendTo(image);
         }
         if (this.list.peek() === '\n') image = this.appendTo(image);
-        return new Token('COMMENT', this.lineNumber, this.getColumnNumber(image.length), image);
+        return new Token(TokenType.COMMENT, this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     consumeMultiLineComment(image: string) {
@@ -347,7 +363,7 @@ export default class Tokenizer {
         }
         if (this.list.peek() === '*') image = this.appendTo(image);
         if (this.list.peek() === '/') image = this.appendTo(image);
-        return new Token('COMMENT', lineNumber, columnNumber, image);
+        return new Token(TokenType.COMMENT, lineNumber, columnNumber, image);
     }
 
     /**
@@ -366,10 +382,10 @@ export default class Tokenizer {
                 if (kind1 !== 'uppercase' && kind1 !== 'lowercase' && kind1 !== 'number' && kind1 !== '_') break;
             }
         }
-        // if the identifier we captured matches a keyword, return the keyword
-        if (Tokenizer.KEYWORD_TOKENS.includes(image)) return new Token(image.toUpperCase(), this.lineNumber, this.getColumnNumber(image.length), image);
+        // if the identifier we captured is a reserved word, return the reserved word
+        if (RESERVED.includes(image)) return new Token(TokenType.RESERVED, this.lineNumber, this.getColumnNumber(image.length), image);
         // otherwise, return an identifier
-        else return new Token('IDENT', this.lineNumber, this.getColumnNumber(image.length), image);
+        else return new Token(TokenType.IDENT, this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     /**
@@ -377,12 +393,6 @@ export default class Tokenizer {
      * Figure out what kind and return a token.
      */
     consumeNumber(image: string) {
-        if (image === '-') {
-            // number starts with minus, save that information and shift forward
-            image = this.appendTo(image);
-            // it may be that next was the last character in the source. handle that here.
-            if (!this.list.peek()) return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
-        }
         const [c, c1] = this.list.peeks(2);
         if (image.endsWith('0') && c && c1) {
             // literals that start with 0 are a special case, check for alternative bases.
@@ -420,7 +430,7 @@ export default class Tokenizer {
         image = this.appendTo(image);
         // while the next character is a hex digit, add it to the image
         while (this.isHexidecimalDigit(this.list.peek())) image = this.appendTo(image);
-        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 16));
+        return new Token(TokenType.INTEGER_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 16));
     }
 
     /**
@@ -435,7 +445,7 @@ export default class Tokenizer {
         // while the next character is a binary digit, add it to the image
         while (this.isBinaryDigit(this.list.peek())) image = this.appendTo(image);
         // JS doesn't have binary literals, so we need to remove the prefix when parsing
-        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image.replace(/0b/i, ''), 2));
+        return new Token(TokenType.INTEGER_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image.replace(/0b/i, ''), 2));
     }
 
     isBinaryDigit = (c: string) => c === '0' || c === '1';
@@ -467,7 +477,7 @@ export default class Tokenizer {
             while (this.kind(this.list.peek()) === 'number') image = this.appendTo(image);
         }
         // we arrive here when we've consumed as much floating point characters as we can
-        return new Token('FLOAT_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseFloat(image));
+        return new Token(TokenType.FLOAT_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, parseFloat(image));
     }
 
     /**
@@ -497,7 +507,7 @@ export default class Tokenizer {
             }
         }
         // otherwise take the numbers we have enumerated so far and parse them as an int
-        return new Token('INTEGER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
+        return new Token(TokenType.INTEGER_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, parseInt(image, 10));
     }
 
     /**
@@ -572,7 +582,7 @@ export default class Tokenizer {
         // next character is double quote
         this.moveNext();
         image += '"';
-        return new Token('STRING_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
+        return new Token(TokenType.STRING_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
 
     /**
@@ -645,7 +655,7 @@ export default class Tokenizer {
         // next character is single quote
         this.moveNext();
         image += "'";
-        return new Token('CHARACTER_LITERAL', this.lineNumber, this.getColumnNumber(image.length), image, value);
+        return new Token(TokenType.CHARACTER_LITERAL, this.lineNumber, this.getColumnNumber(image.length), image, value);
     }
 
     /**
@@ -653,9 +663,9 @@ export default class Tokenizer {
      */
     consumeOperator(image: string) {
         // < and > have special behavior in the parser, so we tokenize them individually
-        if (image === '<' || image === '>') return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
+        if (image === '<' || image === '>') return new Token(TokenType.OPER, this.lineNumber, this.getColumnNumber(image.length), image);
         while (Tokenizer.OPER_CHARS.includes(this.list.peek())) image = this.appendTo(image);
-        return new Token('OPER', this.lineNumber, this.getColumnNumber(image.length), image);
+        return new Token(TokenType.OPER, this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     /**
@@ -663,7 +673,7 @@ export default class Tokenizer {
      */
     consumeWhitespace(image: string) {
         while (this.isWhitespace(this.list.peek())) image = this.appendTo(image);
-        return new Token('WHITESPACE', this.lineNumber, this.getColumnNumber(image.length), image);
+        return new Token(TokenType.WHITESPACE, this.lineNumber, this.getColumnNumber(image.length), image);
     }
 
     isWhitespace = (c: string) => c === ' ' || c === '\t';

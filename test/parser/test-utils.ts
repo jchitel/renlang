@@ -1,18 +1,7 @@
-import { Token } from '~/parser/Tokenizer';
-import CSTNode from '~/syntax/CSTNode';
-
-
-export function nodeToObject(node: CSTNode) {
-    const obj: { [key: string]: any } = {};
-    for (const key of Object.keys(node)) {
-        const val = node[key];
-        if (val instanceof Token) {
-            obj[key] = val.image;
-        } else if (val instanceof CSTNode) {
-            obj[key] = nodeToObject(val);
-        } else if (Array.isArray(val)) {
-            obj[key] = val.map(v => (v instanceof Token) ? v.image : nodeToObject(v));
-        }
-    }
-    return obj;
+/**
+ * Short and sweet: create an object of the specified class type
+ * with the specified properties. 
+ */
+export function create(cls: Function, props: {}) {
+    return Object.assign(Object.create(cls.prototype), props);
 }

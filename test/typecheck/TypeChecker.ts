@@ -7,14 +7,11 @@ import { Location } from '~/parser/Tokenizer';
 import TypeChecker from '../../src/typecheck/TypeChecker';
 import Module from '../../src/runtime/Module';
 import parse from '../../src/parser';
-import {
-    Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ExportDeclaration, IntegerLiteral,
-    ConstantDeclaration
-} from '../../src/syntax/ast';
 import { TUnknown, TRecursive, TAny } from '../../src/typecheck/types';
-import reduceProgram from '~/syntax/declarations/reduce';
 import { FunctionFunc } from '~/translator/Func';
 import { mock } from '~test/test-utils';
+import { TypeDeclaration, Program ,ImportDeclaration, FunctionDeclaration, DefaultExportDeclaration,
+    NamedExportDeclaration, ConstantDeclaration, IntegerLiteral } from '~/syntax';
 
 
 function loc(startLine: number, startColumn: number, endLine: number, endColumn: number) {
@@ -36,7 +33,7 @@ describe('TypeChecker', () => {
         it('should error for non-existent import path', () => {
             const ast = parse('import from "./idontexist": Something');
             const path = resolve(dirname(__filename), '../testfiles/someModule.ren');
-            const module = new Module(0, path, reduceProgram(ast));
+            const module = new Module(0, path, ast);
             const tc = new TypeChecker();
             tc.processImport(module, module.ast.imports[0]);
             expect(tc.errors.map(e => e.message)).to.eql([`Module "./idontexist" does not exist [${path}:1:13]`]);
@@ -46,7 +43,7 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": Something');
             const path = resolve(dirname(__filename), '../../../testfiles/someModule.ren');
-            const module = new Module(0, path, reduceProgram(ast));
+            const module = new Module(0, path, ast);
             // create type checker, add main module to it
             const tc = new TypeChecker();
             tc.modules.push(module);
@@ -68,7 +65,7 @@ describe('TypeChecker', () => {
             expect(module.imports.Something).to.eql({
                 moduleId: 1,
                 exportName: 'default',
-                kind: 'expr',
+                kind: 'const',
                 ast: module.ast.imports[0],
             });
             expect(module.constants.Something).to.eql({ imported: true });
@@ -78,7 +75,7 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { myFunc, myType }');
             const path = resolve(dirname(__filename), '../../../testfiles/someModule.ren');
-            const module = new Module(0, path, reduceProgram(ast));
+            const module = new Module(0, path, ast);
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../../../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
@@ -110,7 +107,7 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { idontexist }');
             const path = resolve(dirname(__filename), '../../../testfiles/someModule.ren');
-            const module = new Module(0, path, reduceProgram(ast));
+            const module = new Module(0, path, ast);
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../../../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
@@ -133,7 +130,7 @@ describe('TypeChecker', () => {
             // set up main module
             const ast = parse('import from ".": { myFunc };import from ".": { myFunc }');
             const path = resolve(dirname(__filename), '../../../testfiles/someModule.ren');
-            const module = new Module(0, path, reduceProgram(ast));
+            const module = new Module(0, path, ast);
             // set up imported module
             const importedPath = resolve(dirname(__filename), '../../../testfiles/index.ren');
             const importedModule = new Module(1, importedPath);
@@ -243,9 +240,14 @@ describe('TypeChecker', () => {
     describe('Export Processing', () => {
         it('should handle name clash between two exports', () => {
             const module = Object.assign(new Module(0, '/index.ren', {} as Program), {
-                exports: { myExport: {} }
+                exports: { myExport: {} },
             });
-            const exp = Object.assign(new ExportDeclaration(), { name: 'myExport', locations: { name: loc(1, 1, 1, 1) } });
+            const exp = Object.assign(new NamedExportDeclaration(), {
+                exports: [{
+                    exportName: 'myExport', exportNameLocation: loc(1, 1, 1, 1),
+                    valueName: 'myValue', valueNameLocation: loc(1, 1, 1, 1),
+                }]
+            });
             const tc = new TypeChecker();
             tc.processExport(module, exp);
             expect(tc.errors.map(e => e.message)).to.eql(['An export with name "myExport" is already declared [/index.ren:1:1]']);
@@ -255,9 +257,10 @@ describe('TypeChecker', () => {
             const module = mock(Module, {
                 exports: {},
                 types: {},
-                functions: {}
+                functions: {},
+                constants: {},
             });
-            const exp = mock(ExportDeclaration, {
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myType',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -277,9 +280,10 @@ describe('TypeChecker', () => {
             const module = mock(Module, {
                 exports: {},
                 types: {},
-                functions: {}
+                functions: {},
+                constants: {},
             });
-            const exp = mock(ExportDeclaration, {
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myFunc',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -339,12 +343,20 @@ describe('TypeChecker', () => {
 
         it('should handle exported constant', () => {
             const module = mock(Module, { exports: {}, constants: {}, types: {}, functions: {} });
-            const exp = mock(ConstantDeclaration, { name: 'myConst', value: mock(IntegerLiteral) });
+            const exp = mock(DefaultExportDeclaration, {
+                exports: [{
+                    exportName: 'myConst',
+                    exportNameLocation: loc(1, 1, 1, 1),
+                    valueName: 'myConst',
+                    valueNameLocation: loc(1, 1, 1, 1),
+                    value: mock(ConstantDeclaration, { name: 'myConst', value: mock(IntegerLiteral) }),
+                }]
+            });
             const tc = new TypeChecker();
-            tc.processConstant(module, exp);
+            tc.processExport(module, exp);
             expect(tc.errors).to.eql([]);
-            expect(module.exports).to.eql({ myConst: { kind: 'expr', valueName: 'myConst' } });
-            expect(module.constants).to.eql({ myConst: { ast: exp } });
+            expect(module.exports).to.eql({ myConst: { kind: 'const', valueName: 'myConst' } });
+            expect(module.constants).to.eql({ myConst: { ast: exp.exports[0].value } });
         });
 
         it('should handle exported import', () => {
@@ -354,7 +366,7 @@ describe('TypeChecker', () => {
                     myImport: { kind: 'const', moduleId: 0, exportName: '', ast: mock(ImportDeclaration) }
                 }
             });
-            const exp = mock(ExportDeclaration, {
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myImport',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -370,7 +382,7 @@ describe('TypeChecker', () => {
 
         it('should handle exported declared types', () => {
             const module = mock(Module, { exports: {}, imports: {}, types: { myType: { ast: mock(TypeDeclaration), func: mock(FunctionFunc) } } });
-            const exp = mock(ExportDeclaration, {
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myType',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -386,7 +398,7 @@ describe('TypeChecker', () => {
 
         it('should handle exported declared function', () => {
             const module = mock(Module, { exports: {}, imports: {}, types: {}, functions: { myFunc: { ast: mock(FunctionDeclaration), func: mock(FunctionFunc) } } });
-            const exp = mock(ExportDeclaration, {
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myFunc',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -401,8 +413,10 @@ describe('TypeChecker', () => {
         });
 
         it('should error for exporting an undefined value', () => {
-            const module = mock(Module, { exports: {}, imports: {}, types: {}, functions: {}, path: '/index.ren' });
-            const exp = mock(ExportDeclaration, {
+            const module = mock(Module, {
+                exports: {}, imports: {}, types: {}, functions: {}, constants: {}, path: '/index.ren'
+            });
+            const exp = mock(DefaultExportDeclaration, {
                 exports: [{
                     exportName: 'myValue',
                     exportNameLocation: loc(1, 1, 1, 1),
@@ -454,7 +468,8 @@ describe('TypeChecker', () => {
             const module = mock(Module, {
                 types: {
                     myType: { ast: mock(TypeDeclaration, { type: new TAny() }), func: mock(FunctionFunc) }
-                }
+                },
+                namespaces: {},
             });
             expect(new TypeChecker().getType(module, 'myType')).to.eql(new TAny());
         });
@@ -463,13 +478,17 @@ describe('TypeChecker', () => {
             const module = mock(Module, {
                 types: {
                     myType: { resolving: true, ast: mock(TypeDeclaration), func: mock(FunctionFunc) }
-                }
+                },
+                namespaces: {},
             });
             expect(new TypeChecker().getType(module, 'myType')).to.eql(new TRecursive(mock(TypeDeclaration)));
         });
 
         it('should resolve and retrieve a type', () => {
-            const module = mock(Module, { types: { myType: { ast: new TypeDeclaration(), func: mock(FunctionFunc) } } });
+            const module = mock(Module, {
+                types: { myType: { ast: new TypeDeclaration(), func: mock(FunctionFunc) } },
+                namespaces: {},
+            });
             const stub = sandbox.stub(module.types.myType.ast, 'visit').callsFake(() => {
                 module.types.myType.ast.type = new TAny();
             });
@@ -480,13 +499,15 @@ describe('TypeChecker', () => {
         it('should retrieve an imported type', () => {
             const module = mock(Module, {
                 types: { myType: { imported: true, ast: mock(TypeDeclaration), func: mock(FunctionFunc) } },
-                imports: { myType: { moduleId: 1, exportName: 'default', kind: 'func', ast: mock(ImportDeclaration) } }
+                imports: { myType: { moduleId: 1, exportName: 'default', kind: 'func', ast: mock(ImportDeclaration) } },
+                namespaces: {},
             });
             const importedModule = mock(Module, {
                 exports: {
                     default: { kind: 'type', valueName: 'theType' }
                 },
-                types: { theType: { ast: mock(TypeDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } }
+                types: { theType: { ast: mock(TypeDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } },
+                namespaces: {},
             });
             const tc = new TypeChecker();
             tc.modules = [module, importedModule];
@@ -494,17 +515,25 @@ describe('TypeChecker', () => {
         });
 
         it('should return null for non-existent value', () => {
-            const module = mock(Module, { functions: {}, constants: {} });
+            const module = mock(Module, { functions: {}, constants: {}, namespaces: {} });
             expect(new TypeChecker().getValueType(module, 'someName')).to.eql(null);
         });
 
         it('should retrieve the type of a local, already resolved value', () => {
-            const module = mock(Module, { functions: {}, constants: { myValue: { ast: mock(ConstantDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } } });
+            const module = mock(Module, {
+                functions: {},
+                constants: { myValue: { ast: mock(ConstantDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } },
+                namespaces: {},
+            });
             expect(new TypeChecker().getValueType(module, 'myValue')).to.eql(new TAny());
         });
 
         it('should resolve and retrieve a value\'s type', () => {
-            const module = mock(Module, { functions: {}, constants: { myValue: { ast: new ConstantDeclaration(), func: mock(FunctionFunc) } } });
+            const module = mock(Module, {
+                functions: {},
+                constants: { myValue: { ast: new ConstantDeclaration(), func: mock(FunctionFunc) } },
+                namespaces: {},
+            });
             const stub = sandbox.stub(module.constants.myValue.ast, 'visit').callsFake(() => {
                 module.constants.myValue.ast.type = new TAny();
             });
@@ -516,12 +545,14 @@ describe('TypeChecker', () => {
             const module = mock(Module, {
                 functions: {},
                 constants: { myValue: { imported: true, ast: mock(ConstantDeclaration), func: mock(FunctionFunc) } },
-                imports: { myValue: { moduleId: 1, exportName: 'default', kind: 'const', ast: mock(ImportDeclaration) } }
+                imports: { myValue: { moduleId: 1, exportName: 'default', kind: 'const', ast: mock(ImportDeclaration) } },
+                namespaces: {},
             });
             const importedModule = mock(Module, {
                 exports: { default: { kind: 'const', valueName: 'theValue' } },
                 functions: {},
-                constants: { theValue: { ast: mock(ConstantDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } }
+                constants: { theValue: { ast: mock(ConstantDeclaration, { type: new TAny() }), func: mock(FunctionFunc) } },
+                namespaces: {},
             });
             const tc = new TypeChecker();
             tc.modules = [module, importedModule];

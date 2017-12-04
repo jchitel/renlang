@@ -1,4 +1,5 @@
-import CSTNode from '../../src/syntax/CSTNode';
+import * as sinon from 'sinon';
+
 import ASTNode from '~/syntax/ASTNode';
 import INodeVisitor from '~/syntax/INodeVisitor';
 import { TType, TInteger } from '../../src/typecheck/types';
@@ -7,20 +8,8 @@ import TypeChecker from '../../src/typecheck/TypeChecker';
 import TypeCheckContext from '../../src/typecheck/TypeCheckContext';
 import Module from '../../src/runtime/Module';
 import { FunctionFunc } from '../../src/translator/Func';
+import { TestVisitor } from '~test/test-utils';
 
-
-/**
- * This is a dummy CST node class that simply returns
- * the provided value when you call reduce().
- */
-export class STDummyNode extends CSTNode {
-    value: any;
-
-    constructor(value: any = {}) {
-        super({});
-        this.value = value;
-    }
-}
 
 /**
  * This is a dummy AST node class that simply returns
@@ -101,4 +90,26 @@ export function createInstance<T>(cls: Class<T>, props: {}): T {
  */
 export function o<T extends {}>(obj: {} = {}): T {
     return obj as T;
+}
+
+/**
+ * Add this to each AST node test suite as:
+ * ```
+ * describe('visit()', generateVisitorTest(Class, '<name of visit method on visitor>'));
+ * ```
+ */
+export function generateVisitorTest<T extends ASTNode>(cls: Class<T>, method: keyof INodeVisitor<any>) {
+    return () => {
+        let sandbox: sinon.SinonSandbox;
+
+        beforeEach(() => sandbox = sinon.sandbox.create());
+        afterEach(() => sandbox.restore());
+
+        it(`should call ${method}()`, () => {
+            const visitor = new TestVisitor();
+            const spy = sandbox.spy(visitor, method);
+            Object.create(cls.prototype).visit(visitor);
+            sinon.assert.calledOnce(spy);
+        });
+    }
 }

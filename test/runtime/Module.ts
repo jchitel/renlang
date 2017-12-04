@@ -2,7 +2,7 @@ import { assert } from 'chai';
 import { resolve } from 'path';
 
 import Module from '../../src/runtime/Module';
-import { Program } from '../../src/syntax/ast';
+import { Program } from '~/syntax';
 
 
 function testfilePath(path: string) {

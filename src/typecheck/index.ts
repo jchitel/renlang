@@ -1,7 +1,7 @@
 import TypeChecker from './TypeChecker';
-import { STProgram } from '~/syntax/declarations/cst';
+import { Program } from '~/syntax';
 
 
-export default function typecheck(ast: STProgram, path: string) {
+export default function typecheck(ast: Program, path: string) {
     return new TypeChecker().check(ast, path);
 }

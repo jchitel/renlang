@@ -2,13 +2,10 @@ import { resolve, dirname, join } from 'path';
 import { existsSync as exists, lstatSync as lstat, readFileSync as readFile } from 'fs';
 
 import ASTNode from '~/syntax/ASTNode';
-import {
-    Program, ImportDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
-    ExportForwardDeclaration
-} from '~/syntax/declarations/ast';
 import parse from '~/parser';
 import Func from '~/translator/Func';
-import reduceProgram from '~/syntax/declarations/reduce';
+import { ImportDeclaration, ExportForwardDeclaration, Program,
+    TypeDeclaration, FunctionDeclaration, ConstantDeclaration } from '~/syntax';
 
 
 export interface Import {
@@ -61,6 +58,7 @@ export default class Module {
         this.types = {};     // types declared in this module
         this.functions = {}; // functions declared in this module
         this.constants = {}; // constants declared in this module (only possible as part of an export, or an import of one from another module)
+        this.namespaces = {};
     }
 
     /**
@@ -116,8 +114,6 @@ export default class Module {
         // read the file
         const contents = readFile(this.path).toString();
         // parse it
-        const parsed = parse(contents);
-        // reduce it
-        return reduceProgram(parsed);
+        return parse(contents) as Program;
     }
 }

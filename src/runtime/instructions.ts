@@ -531,7 +531,7 @@ export class InteropReference extends Instruction {
 
     execute(interp: Interpreter) {
         const constructor = this.construct;
-        interp.references[this.ref] = new constructor(this.operation(...this.inRefs.map(r => interp.references[r].value)));
+        interp.references[this.ref] = Reflect.construct(constructor, [this.operation(...this.inRefs.map(r => interp.references[r].value))]);
     }
 }
 

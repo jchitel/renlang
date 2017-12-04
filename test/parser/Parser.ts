@@ -1,323 +1,260 @@
 import { assert } from 'chai';
 
-import Parser, { ParserComponentSequentialDef } from '~/parser/Parser';
-import CSTNode from '~/syntax/CSTNode';
-import { nodeToObject } from './test-utils';
+import Parser, { parser, nonTerminal, exp } from '~/parser/Parser';
+import { TokenType, Token } from '~/parser/Tokenizer';
+import ASTNode from '~/syntax/ASTNode';
+import { create } from '~test/parser/test-utils';
 
 
-class TestNode extends CSTNode {}
+describe('Parser', () => {
+    describe('@parser decorator', () => {
+        it('should define sequence in the correct order', () => {
+            class TestNode {
+                @parser('a') setA() {}
+                @parser('b') setB() {}
+                @parser('c') setC() {}
+            }
+            const entries = Reflect.get(TestNode, 'parser');
+            assert.containSubset(entries, [{
+                methodName: 'setA',
+                exp: { tokenImage: 'a' },
+            }, {
+                methodName: 'setB',
+                exp: { tokenImage: 'b' },
+            }, {
+                methodName: 'setC',
+                exp: { tokenImage: 'c' },
+            }]);
+        })
+    });
 
-describe('parser control logic', () => {
-    describe('sequential expansions', () => {
-        it('should parse some basic sequential token definitions', () => {
-            const parser = new Parser('if (abc) bcd else xyz');
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'elseToken', type: 'ELSE' },
-                { name: 'alternateToken', type: 'IDENT' },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'bcd',
-                elseToken: 'else',
-                alternateToken: 'xyz',
-            });
+    describe('@nonTerminal decorator', () => {
+        it('should define abstract non-terminal', () => {
+            @nonTerminal({ abstract: true })
+            class TestNode {}
+            const cfg = Reflect.get(TestNode, 'abstract');
+            assert.deepEqual(cfg, { choices: [], suffixes: [] });
         });
 
-        it('should parse sequential token definition with optional tokens included', () => {
-            const parser = new Parser('if (abc) bcd else xyz');
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'elseToken', type: 'ELSE', optional: true },
-                { name: 'alternateToken', type: 'IDENT', optional: true },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'bcd',
-                elseToken: 'else',
-                alternateToken: 'xyz',
-            });
+        it('should throw if implementing a non-abstract non-terminal', () => {
+            class TestNode {}
+            assert.throws(() => {
+                // @ts-ignore a class name is required
+                @nonTerminal({ implements: TestNode }) class ImplementingNode {}
+            }, 'Non-terminal cannot implement non-abstract non-terminal');
         });
 
-        it('should parse sequential token definition with optional tokens not included', () => {
-            let parser = new Parser('if (abc) bcd');
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'elseToken', type: 'ELSE', optional: true },
-                { name: 'alternateToken', type: 'IDENT', optional: true },
-            ];
-            let node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'bcd',
-            });
-            // try again with partial inclusion
-            parser = new Parser('if (abc) bcd else');
-            node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'bcd',
-                elseToken: 'else',
-            });
+        it('should add an implementing non-terminal as a choice', () => {
+            @nonTerminal({ abstract: true }) abstract class AbstractNode extends ASTNode {}
+            @nonTerminal({ implements: AbstractNode }) class ImplementingNode {}
+            
+            const choices = Reflect.get(AbstractNode, 'abstract').choices.map((e: any) => e.nonTerminal);
+            assert.deepEqual(choices, [ImplementingNode]);
         });
 
-        it('should throw when required token not included and error message not included', () => {
-            const parser = new Parser('if');
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'thenToken', image: 'then' },
-            ];
-            assert.throws(() => parser.accept(defs, TestNode));
+        it('should insert an implementor before a specified list', () => {
+            @nonTerminal({ abstract: true }) abstract class AbstractNode extends ASTNode {}
+            @nonTerminal({ implements: AbstractNode }) abstract class ImplC extends AbstractNode {}
+            @nonTerminal({ implements: AbstractNode, before: [ImplC] }) abstract class ImplB extends AbstractNode {}
+            @nonTerminal({ implements: AbstractNode, before: [ImplB, ImplC] }) class ImplA {}
+            @nonTerminal({ implements: AbstractNode, before: [] }) class Impl0 {}
+
+            const choices = Reflect.get(AbstractNode, 'abstract').choices.map((e: any) => e.nonTerminal);
+            assert.deepEqual(choices, [ImplA, ImplB, ImplC, Impl0]);
         });
 
-        it('should throw error when required token not included and error message included', () => {
-            const parser = new Parser('if');
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'thenToken', image: 'then', mess: 'NOT FOUND' },
-            ];
-            assert.throws(() => parser.accept(defs, TestNode), 'NOT FOUND (Line 1, Column 3)');
+        it('should add an implementing non-terminal as a left-recursive suffix', () => {
+            @nonTerminal({ abstract: true }) abstract class AbstractNode extends ASTNode {}
+            @nonTerminal({ implements: AbstractNode, leftRecursive: 'a' }) class LeftRecursive {}
+
+            const suffixes = Reflect.get(AbstractNode, 'abstract').suffixes.map((e: any) => ({ baseName: e.baseName, exp: e.exp.nonTerminal }));
+            assert.deepEqual(suffixes, [{ baseName: 'a', exp: LeftRecursive }]);
         });
 
-        it('should parse sequential definition with sub-parse', () => {
-            const parser = new Parser('if (abc) def else xyz');
-            const acceptAlternate = (p: Parser) => p.accept([
-                { name: 'elseToken', type: 'ELSE', definite: true },
-                { name: 'alternateToken', type: 'IDENT' },
-            ], TestNode);
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'alternate', parse: acceptAlternate },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'def',
-                alternate: {
-                    elseToken: 'else',
-                    alternateToken: 'xyz',
-                },
-            });
-        });
+        it('should insert an implementing left-recursive non-terminal before a specified list', () => {
+            @nonTerminal({ abstract: true }) abstract class AbstractNode extends ASTNode {}
+            @nonTerminal({ implements: AbstractNode, leftRecursive: 'c' }) abstract class ImplC extends AbstractNode {}
+            @nonTerminal({ implements: AbstractNode, leftRecursive: 'b', before: [ImplC] }) abstract class ImplB extends AbstractNode {}
+            @nonTerminal({ implements: AbstractNode, leftRecursive: 'a', before: [ImplB, ImplC] }) class ImplA {}
+            @nonTerminal({ implements: AbstractNode, leftRecursive: '0', before: [] }) class Impl0 {}
 
-        it('should parse sequential definition with optional sub-parse', () => {
-            const parser = new Parser('if (abc) def else xyz');
-            const acceptAlternate = (p: Parser) => p.accept([
-                { name: 'elseToken', type: 'ELSE', definite: true },
-                { name: 'alternateToken', type: 'IDENT' },
-            ], TestNode);
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'alternate', parse: acceptAlternate, optional: true },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'def',
-                alternate: {
-                    elseToken: 'else',
-                    alternateToken: 'xyz',
-                },
-            });
-            assert.strictEqual(parser.tokenizer.peek().type, 'EOF');
-        });
-
-
-        it('should ignore optional not-included sub-parses', () => {
-            const parser = new Parser('if (abc) def');
-            const acceptAlternate = (p: Parser) => p.accept([
-                { name: 'elseToken', type: 'ELSE', definite: true },
-                { name: 'alternateToken', type: 'IDENT' },
-            ], TestNode);
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'alternate', parse: acceptAlternate, optional: true },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'def',
-            });
-        });
-
-        it('should ignore a failed parse of an optional non-terminal', () => {
-            const parser = new Parser('if (abc) def else 1');
-            const acceptAlternate = (p: Parser) => p.accept([
-                { name: 'elseToken', type: 'ELSE' },
-                { name: 'alternateToken', type: 'IDENT', definite: true },
-            ], TestNode);
-            const defs = [
-                { name: 'ifToken', type: 'IF', definite: true },
-                { name: 'openParenToken', type: 'LPAREN' },
-                { name: 'conditionToken', type: 'IDENT' },
-                { name: 'closeParenToken', type: 'RPAREN' },
-                { name: 'consequentToken', type: 'IDENT' },
-                { name: 'alternate', parse: acceptAlternate, optional: true },
-            ];
-            const node = parser.accept(defs, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                ifToken: 'if',
-                openParenToken: '(',
-                conditionToken: 'abc',
-                closeParenToken: ')',
-                consequentToken: 'def',
-            });
-            assert.strictEqual(parser.tokenizer.peek().image, 'else');
+            const choices = Reflect.get(AbstractNode, 'abstract').suffixes.map((e: any) => ({ baseName: e.baseName, exp: e.exp.nonTerminal }));
+            assert.deepEqual(choices, [
+                { baseName: 'a', exp: ImplA },
+                { baseName: 'b', exp: ImplB },
+                { baseName: 'c', exp: ImplC },
+                { baseName: '0', exp: Impl0 }
+            ]);
         });
     });
 
-    describe('choice expansions', () => {
-        it('should parse from a set of single-token choices', () => {
+    describe('class', () => {
+        it('should parse token by type', () => {
             const parser = new Parser('abc');
-            const choices = [
-                { image: 'a' },
-                { image: 'ab' },
-                { image: 'abc' },
-                { image: 'abcd' },
-            ];
-            const node = parser.acceptOneOf(choices, TestNode);
-            assert.deepEqual(nodeToObject(node), {
-                choice: 'abc'
+            const parsed = parser.parseTokenType(TokenType.IDENT);
+            assert.strictEqual(parsed.image, 'abc');
+
+            assert.throws(() => new Parser('abc').parseTokenType(TokenType.INTEGER_LITERAL));
+        });
+
+        it('should parse token by image', () => {
+            const parser = new Parser('abc');
+            const parsed = parser.parseTokenImage('abc');
+            assert.strictEqual(parsed.image, 'abc');
+
+            assert.throws(() => new Parser('abc').parseTokenImage('abcd'));
+        });
+
+        it('should parse sequential non-terminal class', () => {
+            abstract class TestNode extends ASTNode {
+                @parser('a', { definite: true }) setA(token: Token) { this.a = token.image; }
+                @parser('b') setB(token: Token) { this.b = token.image; }
+                @parser('c') setC(token: Token) { this.c = token.image; }
+                a: string; b: string; c: string;
+            }
+
+            const p = new Parser('a b c');
+            const parsed = p.parseNonTerminal(TestNode);
+            assert.instanceOf(parsed, TestNode);
+            assert.containSubset(parsed, { a: 'a', b: 'b', c: 'c' });
+        });
+
+        it('should parse abstract non-terminal class', () => {
+            @nonTerminal({ abstract: true })
+            abstract class Abstract extends ASTNode {
+                me: string;
+            }
+            @nonTerminal({ implements: Abstract })
+            // @ts-ignore unused
+            abstract class A extends Abstract {
+                @parser('a', { definite: true }) setMe(token: Token) { this.me = token.image; }
+            }
+            @nonTerminal({ implements: Abstract })
+            // @ts-ignore unused
+            abstract class B extends Abstract {
+                @parser('b', { definite: true }) setMe(token: Token) { this.me = token.image; }
+            }
+
+            const p = new Parser('b');
+            const parsed = p.parseNonTerminal(Abstract);
+            assert.instanceOf(parsed, B);
+            assert.containSubset(parsed, { me: 'b' });
+        });
+
+        it('should parse sequence', () => {
+            const p = new Parser('a b c');
+            const parsed = p.parseSequence({ a: exp('a', { definite: true }), b: 'b', c: 'c' });
+            assert.containSubset(parsed, { a: { image: 'a' }, b: { image: 'b' }, c: { image: 'c' } });
+        });
+
+        it('should parse choices', () => {
+            const p = new Parser('b');
+            const parsed = p.parseChoices([exp('a', { definite: true }), exp('b', { definite: true })]);
+            assert.containSubset(parsed, { image: 'b' });
+
+            assert.throws(() => new Parser('b').parseChoices([]));
+        });
+
+        it('should parse left-recursive abstract non-terminal', () => {
+            @nonTerminal({ abstract: true }) abstract class Abstract extends ASTNode {}
+            // @ts-ignore unused class
+            @nonTerminal({ implements: Abstract }) abstract class Choice extends Abstract {
+                @parser('a', { definite: true }) setA(token: Token) { this.a = token.image; }
+                a: string;
+            }
+            @nonTerminal({ implements: Abstract, leftRecursive: 'setLR' })
+            // @ts-ignore unused class
+            abstract class LeftRecursive1 extends Abstract {
+                setLR(a: Abstract) { this.abstract = a; }
+                @parser('b', { definite: true }) setB(token: Token) { this.b = token.image; }
+                abstract: Abstract;
+                b: string;
+            }
+            @nonTerminal({ implements: Abstract, leftRecursive: 'setLR' })
+            abstract class LeftRecursive2 extends Abstract {
+                setLR(a: Abstract) { this.abstract = a; }
+                @parser('c', { definite: true }) setC(token: Token) { this.c = token.image; }
+                abstract: Abstract;
+                c: string;
+            }
+
+            const p = new Parser('a b c b b c c');
+            const parsed = p.parseNonTerminal(Abstract);
+            assert.deepEqual(parsed, create(LeftRecursive2, {
+                c: 'c',
+                abstract: create(LeftRecursive2, {
+                    c: 'c',
+                    abstract: create(LeftRecursive1, {
+                        b: 'b',
+                        abstract: create(LeftRecursive1, {
+                            b: 'b',
+                            abstract: create(LeftRecursive2, {
+                                c: 'c',
+                                abstract: create(LeftRecursive1, {
+                                    b: 'b',
+                                    abstract: create(Choice, { a: 'a' })
+                                })
+                            })
+                        })
+                    })
+                })
+            }));
+        });
+
+        it('should throw for no defined "definite" expression', () => {
+            assert.throws(() => new Parser('a').parseSequence({ a: 'a' }), 'No definite set on a sequential expansion');
+        });
+
+        it('should throw for failed required expressions', () => {
+            assert.throws(() => new Parser('a').parseSequence({ b: exp('b', { definite: true, err: 'INVALID_EXPRESSION' }) }), 'Invalid expression');
+        });
+
+        it('should ignore failed optional expressions', () => {
+            const parsed = new Parser('a').parseSequence({ b: exp('b', { definite: true, optional: true }) });
+            assert.deepEqual(parsed, {});
+        });
+
+        it('should parse basic * repetition', () => {
+            const parsed = new Parser('a a a').parseSequence({ a: exp('a', { definite: true, repeat: '*' }) });
+            assert.containSubset(parsed, { a: { length: 3 } });
+        });
+
+        it('should parse basic + repetition', () => {
+            const parsed = new Parser('a a a').parseSequence({ a: exp('a', { definite: true, repeat: '+' }) });
+            assert.containSubset(parsed, { a: { length: 3 } });
+        });
+
+        it('should error for non-satisfied + repetition', () => {
+            assert.throws(() => {
+                new Parser('b').parseSequence({ a: exp('a', { definite: true, repeat: '+', err: 'INVALID_EXPRESSION' }) });
+            }, 'Invalid expression');
+        });
+
+        it('should parse repetition with separator', () => {
+            const parsed = new Parser('a,a,a').parseSequence({ a: exp('a', { definite: true, repeat: '*', sep: TokenType.COMMA }) });
+            assert.containSubset(parsed, {
+                a: { length: 3 },
+                a_sep: { length: 2, 0: { image: ',' }, 1: { image: ',' } }
             });
         });
 
-        it('should throw for an unmatched token', () => {
-            const parser = new Parser('awef');
-            const choices = [
-                { name: 'aToken', image: 'a' },
-                { name: 'abToken', image: 'ab' },
-                { name: 'abcToken', image: 'abc' },
-                { name: 'abcdToken', image: 'abcd' },
-            ];
-            assert.throws(() => parser.acceptOneOf(choices, TestNode));
+        it('should error for missing expression after separator', () => {
+            assert.throws(() => {
+                new Parser('a,').parseSequence({ a: exp('a', { definite: true, repeat: '*', sep: TokenType.COMMA, err: 'INVALID_EXPRESSION' }) });
+            }, 'Invalid expression');
         });
 
-        it('should parse from a set of non-terminal choices', () => {
-            const parser = new Parser('a b');
-            const choices = [
-                { name: 'abcd', parse: (p: Parser) => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c' }, { name: 'dToken', image: 'd', definite: true }], TestNode) },
-                { name: 'abc', parse: (p: Parser) => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b' }, { name: 'cToken', image: 'c', definite: true }], TestNode) },
-                { name: 'ab', parse: (p: Parser) => p.accept([{ name: 'aToken', image: 'a' }, { name: 'bToken', image: 'b', definite: true }], TestNode) },
-                { name: 'a', parse: (p: Parser) => p.accept([{ name: 'aToken', image: 'a', definite: true }], TestNode) },
-            ];
-            assert.deepEqual(nodeToObject(parser.acceptOneOf(choices, TestNode)), {
-                choice: {
-                    aToken: 'a',
-                    bToken: 'b'
-                },
+        it('should flatten a result', () => {
+            const parsed = new Parser('a b').parseSequence({
+                awef: exp({
+                    a: exp('a', { definite: true }),
+                    b: 'b',
+                }, { definite: true, flatten: true }),
             });
-        });
-    });
-
-    describe('left-recursive expansions', () => {
-        it('should parse from a set of left-recursive choices', () => {
-            class MyNode extends CSTNode {}
-            const parser = new Parser('a c');
-            const bases = [{ image: 'a' }];
-            const suffixes = [
-                { name: 'b', baseName: 'base', parse: (p: Parser) => p.accept([{ name: 'bToken', image: 'b', definite: true }], TestNode) },
-                { name: 'c', baseName: 'base', parse: (p: Parser) => p.accept([{ name: 'cToken', image: 'c', definite: true }], TestNode) },
-                { name: 'd', baseName: 'base', parse: (p: Parser) => p.accept([{ name: 'dToken', image: 'd', definite: true }], TestNode) },
-            ];
-            assert.deepEqual(nodeToObject(parser.acceptLeftRecursive({ bases, suffixes }, MyNode)), {
-                choice: {
-                    base: { choice: 'a' },
-                    cToken: 'c'
-                },
+            assert.containSubset(parsed, {
+                a: { image: 'a' },
+                b: { image: 'b' },
             });
-        });
-    });
-
-    describe('repetitive expansions', () => {
-        it('should handle basic zeroOrMore expansion', () => {
-            const parser = new Parser('a a a');
-            const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true }];
-            assert.deepEqual(nodeToObject(parser.accept(defs, TestNode)), {
-                aTokens: ['a', 'a', 'a'],
-            });
-        });
-
-        it('should handle basic oneOrMore expansion', () => {
-            const parser = new Parser('a a a');
-            const defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true }];
-            assert.deepEqual(nodeToObject(parser.accept(defs, TestNode)), {
-                aTokens: ['a', 'a', 'a'],
-            });
-        });
-
-        it('should throw an error for unsatisfied oneOrMore expansion', () => {
-            let parser = new Parser('b');
-            let defs: ParserComponentSequentialDef<TestNode>[] = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true }];
-            assert.throws(() => parser.accept(defs, TestNode));
-
-            parser = new Parser('b');
-            defs = [{ name: 'aTokens', image: 'a', oneOrMore: true, definite: true, mess: 'NOT FOUND' }];
-            assert.throws(() => parser.accept(defs, TestNode), 'NOT FOUND (Line 1, Column 1)');
-        });
-
-        it('should handle repetition with a separator', () => {
-            const parser = new Parser('a | a | a');
-            const defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, sep: { name: 'bars', image: '|' } }];
-            assert.deepEqual(nodeToObject(parser.accept(defs, TestNode)), {
-                aTokens: ['a', 'a', 'a'],
-                bars: ['|', '|'],
-            });
-        });
-
-        it('should error when a new item is expected after a separator but there isnt one', () => {
-            let parser = new Parser('a | a |');
-            let defs: ParserComponentSequentialDef<TestNode>[] = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, sep: { name: 'bars', image: '|' } }];
-            assert.throws(() => parser.accept(defs, TestNode));
-            parser = new Parser('a | a |');
-            defs = [{ name: 'aTokens', image: 'a', zeroOrMore: true, definite: true, mess: 'NOT FOUND', sep: { name: 'bars', image: '|' } }];
-            assert.throws(() => parser.accept(defs, TestNode), 'NOT FOUND (Line 1, Column 8)');
         });
     });
 });

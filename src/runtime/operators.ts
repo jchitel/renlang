@@ -1,6 +1,6 @@
 import ParserError from '~/parser/ParserError';
-import { INVALID_EXPRESSION } from '~/parser/ParserMessages';
-import { Token } from '~/parser/Tokenizer';
+import { getMessage } from '~/parser/ParserMessages';
+import { Token, TokenType } from '~/parser/Tokenizer';
 import { TType, TInteger, TFloat, TChar, TBool, TArray, TFunction, TAny, TUnknown, determineGeneralType } from '~/typecheck/types';
 import Interpreter from '~/interpreter/Interpreter';
 import RValue, { RInteger, RFloat, RBool, RArray, RString, RFunction } from './types';
@@ -13,17 +13,17 @@ import { FunctionCallRef } from './instructions';
  * Any parser node that uses operator tokens should call this method in reduce()
  * before doing anything else, passing the list of operator tokens.
  */
-export function verifyMultiOperator(tokens: Token) {
+export function verifyMultiOperator(tokens: Token[]) {
     // this can happen during testing
     if (!Array.isArray(tokens)) return tokens;
     // single token, just return it
     if (tokens.length === 1) return tokens[0];
     // if there are multiple tokens, throw an error if any of them is not < or >
     if (tokens.some(t => t.image.indexOf('<') === -1 && t.image.indexOf('>') !== -1)) {
-        throw new ParserError(INVALID_EXPRESSION, tokens[0].line, tokens[0].column);
+        throw new ParserError(getMessage('INVALID_EXPRESSION'), tokens[0].line, tokens[0].column);
     }
     // otherwise just combine them all into one token
-    return new Token('OPER', tokens[0].line, tokens[0].column, tokens.map(t => t.image).join(''));
+    return new Token(TokenType.OPER, tokens[0].line, tokens[0].column, tokens.map(t => t.image).join(''));
 }
 
 type OperatorType = 'prefix' | 'postfix' | 'infix';
@@ -64,7 +64,7 @@ export function createUnary(symbol: string, type: 'prefix' | 'postfix', operandT
     const oper = operators[type][symbol];
     if (oper) {
         const cls = oper.cls as Class<UnaryOperator>;
-        return new cls(operandType);
+        return Reflect.construct(cls, [operandType]);
     }
     return null;
 }
@@ -73,7 +73,7 @@ export function createBinary(symbol: string, type: 'infix', operand1Type: TType,
     const oper = operators[type][symbol];
     if (oper) {
         const cls = oper.cls as Class<BinaryOperator>;
-        return new cls(operand1Type, operand2Type);
+        return Reflect.construct(cls, [operand1Type, operand2Type]);
     }
     return null;
 }
@@ -463,7 +463,7 @@ export class PostfixIncrementOperator extends UnaryOperator {
         const val = interp.references[ref];
         const retVal = val.value as number;
         (interp.references[ref].value as number)++;
-        interp.references[targetRef] = new type(retVal);
+        interp.references[targetRef] = Reflect.construct(type, [retVal]);
     }
 }
 
@@ -483,7 +483,7 @@ export class PostfixDecrementOperator extends UnaryOperator {
         const val = interp.references[ref];
         const retVal = val.value as number;
         (interp.references[ref].value as number)--;
-        interp.references[targetRef] = new type(retVal);
+        interp.references[targetRef] = Reflect.construct(type, [retVal]);
     }
 }
 

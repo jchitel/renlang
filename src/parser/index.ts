@@ -1,7 +1,7 @@
-import { acceptProgram } from './parser-impl';
+import { Program } from '~/syntax';
 import Parser from './Parser';
 
 
 export default function parse(source: string) {
-    return acceptProgram(new Parser(source));
+    return new Parser(source).parse(Program) as Program;
 }

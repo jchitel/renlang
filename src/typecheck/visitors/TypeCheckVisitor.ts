@@ -4,15 +4,12 @@ import INodeVisitor from '~/syntax/INodeVisitor';
 import { TType, TInteger, TFloat, TChar, TBool, TArray, TStruct, TTuple, TInferred,
     TFunction, TUnion, TGeneric, TParam, TAny, TNever, TUnknown, determineGeneralType } from '~/typecheck/types';
 import Module from '~/runtime/Module';
-import * as decls from '~/syntax/declarations/ast';
-import * as types from '~/syntax/types/ast';
-import * as stmts from '~/syntax/statements/ast';
-import * as exprs from '~/syntax/expressions/ast';
 import TypeChecker from '~/typecheck/TypeChecker';
 import TypeCheckContext, { SymbolTable } from '~/typecheck/TypeCheckContext';
 import * as mess from '~/typecheck/TypeCheckerMessages';
 import OrderedMap from '~/typecheck/types/OrderedMap';
 import { createUnary, createBinary } from '~/runtime/operators';
+import * as ast from '~/syntax';
 
 
 /**
@@ -124,15 +121,15 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         return this.pushError(mess.INVALID_CONTINUE_STATEMENT, node.locations.self);
     }
 
-    invalidLoopNum(stmt: stmts.BreakStatement | stmts.ContinueStatement) {
+    invalidLoopNum(stmt: ast.BreakStatement | ast.ContinueStatement) {
         return this.pushError(mess.INVALID_LOOP_NUM(stmt.loopNumber, this.context.loopNumber), stmt.locations.self);
     }
 
-    invalidBinaryOp(exp: exprs.BinaryExpression, left: TType, right: TType) {
+    invalidBinaryOp(exp: ast.BinaryExpression, left: TType, right: TType) {
         return this.pushError(mess.INVALID_BINARY_OPERATOR(exp.symbol, left, right), exp.locations.self);
     }
 
-    invalidUnaryOp(exp: exprs.UnaryExpression, target: TType) {
+    invalidUnaryOp(exp: ast.UnaryExpression, target: TType) {
         return this.pushError(mess.INVALID_UNARY_OPERATOR(exp.symbol, target), exp.locations.self);
     }
 
@@ -140,13 +137,13 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * DECLARATIONS *
      ****************/
 
-    visitProgram(_program: decls.Program): TType { throw new Error("Method not implemented."); }
-    visitImportDeclaration(_decl: decls.ImportDeclaration): TType { throw new Error("Method not implemented."); }
-    visitExportDeclaration(_decl: decls.ExportDeclaration): TType { throw new Error("Method not implemented."); }
-    visitExportForwardDeclaration(_decl: decls.ExportForwardDeclaration): TType { throw new Error("Method not implemented."); }
+    visitProgram(_program: ast.Program): TType { throw new Error("Method not implemented."); }
+    visitImportDeclaration(_decl: ast.ImportDeclaration): TType { throw new Error("Method not implemented."); }
+    visitExportDeclaration(_decl: ast.ExportDeclaration): TType { throw new Error("Method not implemented."); }
+    visitExportForwardDeclaration(_decl: ast.ExportForwardDeclaration): TType { throw new Error("Method not implemented."); }
 
     @baseCheck
-    visitTypeDeclaration(decl: decls.TypeDeclaration): TType {
+    visitTypeDeclaration(decl: ast.TypeDeclaration): TType {
         this.context = new TypeCheckContext();
         // if there are type parameters, this is a generic type
         if (decl.typeParams) {
@@ -162,7 +159,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitTypeParam(param: decls.TypeParam): TType {
+    visitTypeParam(param: ast.TypeParam): TType {
         // no defined variance means it needs to be inferred from how it is used
         const variance = param.varianceOp === '+' ? 'covariant' : param.varianceOp === '-' ? 'contravariant' : 'invariant';
         // no defined constraint means it defaults to any
@@ -171,7 +168,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitFunctionDeclaration(decl: decls.FunctionDeclaration): TType {
+    visitFunctionDeclaration(decl: ast.FunctionDeclaration): TType {
         let type: TType;
         this.context = new TypeCheckContext();
         // resolve type parameter types (this must be done first because param and return types may use them)
@@ -202,22 +199,22 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitParam(param: decls.Param): TType {
+    visitParam(param: ast.Param): TType {
         return param.typeNode.visit(this);
     }
 
     @baseCheck
-    visitLambdaParam(_param: exprs.LambdaParam): TType {
+    visitLambdaParam(_param: ast.LambdaParam): TType {
         // if the type isn't explicit, we can't infer it, that will happen during type checking
         return new TInferred();
     }
 
     @baseCheck
-    visitConstantDeclaration(decl: decls.ConstantDeclaration): TType {
+    visitConstantDeclaration(decl: ast.ConstantDeclaration): TType {
         // new context
         this.context = new TypeCheckContext();
         // visit the value of the constant
-        return (decl.value as exprs.Expression).visit(this);
+        return (decl.value as ast.Expression).visit(this);
     }
     
     /*********
@@ -225,7 +222,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      *********/
 
     @baseCheck
-    visitPrimitiveType(type: types.PrimitiveType): TType {
+    visitBuiltInType(type: ast.BuiltInType): TType {
         switch (type.typeNode) {
             case 'u8': case 'byte': return new TInteger(8, false);
             case 'i8': return new TInteger(8, true);
@@ -248,7 +245,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitIdentifierType(type: types.IdentifierType): TType {
+    visitIdentifierType(type: ast.IdentifierType): TType {
         // check for a type param first
         if (this.context.typeParams[type.name]) {
             return this.context.typeParams[type.name];
@@ -260,7 +257,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitArrayType(type: types.ArrayType): TType {
+    visitArrayType(type: ast.ArrayType): TType {
         const baseType = type.baseType.visit(this);
         if (baseType instanceof TUnknown) return new TUnknown();
         else return new TArray(baseType);
@@ -271,7 +268,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * If so, the syntax will have to be extended to allow for that...
      */
     @baseCheck
-    visitFunctionType(type: types.FunctionType): TType {
+    visitFunctionType(type: ast.FunctionType): TType {
         const paramTypes = type.paramTypes.map(t => t.visit(this));
         const returnType = type.returnType.visit(this);
         if (paramTypes.some(t => t instanceof TUnknown) || returnType instanceof TUnknown) return new TUnknown();
@@ -279,7 +276,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitParenthesizedType(type: types.ParenthesizedType): TType {
+    visitParenthesizedType(type: ast.ParenthesizedType): TType {
         return type.inner.visit(this);
     }
 
@@ -291,7 +288,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * so that we know what types are assignable to the specific type.
      */
     @baseCheck
-    visitSpecificType(type: types.SpecificType): TType {
+    visitSpecificType(type: ast.SpecificType): TType {
         // first, resolve the TGeneric
         const genericType = type.typeNode.visit(this);
         if (!genericType.isGeneric()) return this.notGeneric(type);
@@ -311,7 +308,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitStructType(type: types.StructType): TType {
+    visitStructType(type: ast.StructType): TType {
         const fields: { [name: string]: TType } = {};
         for (const field of type.fields) {
             if (fields[field.name]) return this.nameClash(field.name, type.locations[`field_${field.name}`]);
@@ -322,27 +319,27 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitTupleType(type: types.TupleType): TType {
+    visitTupleType(type: ast.TupleType): TType {
         const types = type.types.map(t => t.visit(this));
         if (types.some(t => t instanceof TUnknown)) return new TUnknown();
         else return new TTuple(types);
     }
 
     @baseCheck
-    visitUnionType(type: types.UnionType): TType {
+    visitUnionType(type: ast.UnionType): TType {
         const types = type.types.map(t => t.visit(this));
         if (types.some(t => t instanceof TUnknown)) return new TUnknown();
         else return new TUnion(types);
     }
 
     @baseCheck
-    visitNamespaceAccessType(type: types.NamespaceAccessType): TType {
+    visitNamespaceAccessType(type: ast.NamespaceAccessType): TType {
         const baseType = type.baseType.visit(this);
         /**
          * The lowest-level node that can resolve to a namespace is an identifier type,
          * but those don't have to be namespaces, so the actual error-throwing happens here.
          */
-        if (!baseType.isNamespace() && type.baseType instanceof types.IdentifierType)
+        if (!baseType.isNamespace() && type.baseType instanceof ast.IdentifierType)
             return this.notNamespace(type.baseType.name, type.baseType);
         // resolve the module of the namespace
         const module = this.typeChecker.modules[baseType.getModuleId()];
@@ -357,10 +354,10 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      **************/
 
     @baseCheck
-    visitBlock(block: stmts.Block): TType {
+    visitBlock(block: ast.Block): TType {
         let returnType: TType = new TNever();
         for (const statement of block.statements) {
-            if (statement instanceof exprs.Expression) {
+            if (statement instanceof ast.Expression) {
                 // types of expression statements are not used in blocks
                 statement.visit(this);
             } else {
@@ -373,7 +370,13 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitBreakStatement(stmt: stmts.BreakStatement): TType {
+    visitExpressionStatement(exp: ast.ExpressionStatement): TType {
+        exp.expression.visit(this);
+        return new TNever();
+    }
+
+    @baseCheck
+    visitBreakStatement(stmt: ast.BreakStatement): TType {
         if (this.context.loopNumber < 0) {
             this.invalidBreak(stmt);
         } else if (stmt.loopNumber < 0 || stmt.loopNumber > this.context.loopNumber) {
@@ -383,7 +386,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitContinueStatement(stmt: stmts.ContinueStatement): TType {
+    visitContinueStatement(stmt: ast.ContinueStatement): TType {
         if (this.context.loopNumber < 0) {
             this.invalidContinue(stmt);
         } else if (stmt.loopNumber < 0 || stmt.loopNumber > this.context.loopNumber) {
@@ -393,7 +396,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitDoWhileStatement(stmt: stmts.DoWhileStatement): TType {
+    visitDoWhileStatement(stmt: ast.DoWhileStatement): TType {
         // increment the loop number
         this.context.loopNumber++;
         // type check the body
@@ -408,7 +411,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitForStatement(stmt: stmts.ForStatement): TType {
+    visitForStatement(stmt: ast.ForStatement): TType {
         // type check the iterable expression, will fill in the base type of the array
         const arrayType = stmt.iterableExp.visit(this);
         let iterType;
@@ -428,12 +431,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitNoop(_stmt: stmts.Noop): TType {
-        return new TNever();
-    }
-
-    @baseCheck
-    visitReturnStatement(stmt: stmts.ReturnStatement): TType {
+    visitReturnStatement(stmt: ast.ReturnStatement): TType {
         // no return value, assumed to be ()
         if (!stmt.exp) return new TTuple([]);
         // otherwise check the return value
@@ -441,14 +439,14 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitThrowStatement(stmt: stmts.ThrowStatement): TType {
+    visitThrowStatement(stmt: ast.ThrowStatement): TType {
         // type check the expression, it can be anything so we don't have to do anything with the result
         stmt.exp.visit(this);
         return new TNever();
     }
 
     @baseCheck
-    visitTryCatchStatement(stmt: stmts.TryCatchStatement): TType {
+    visitTryCatchStatement(stmt: ast.TryCatchStatement): TType {
         // type check the try
         let returnType = stmt.try.visit(this);
         // type check each try
@@ -466,7 +464,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitWhileStatement(stmt: stmts.WhileStatement): TType {
+    visitWhileStatement(stmt: ast.WhileStatement): TType {
         // type check the condition
         const conditionType = stmt.conditionExp.visit(this);
         if (!conditionType.isBool()) {
@@ -485,22 +483,22 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      ***************/
 
     @baseCheck
-    visitBoolLiteral(_lit: exprs.BoolLiteral): TType {
+    visitBoolLiteral(_lit: ast.BoolLiteral): TType {
         return new TBool();
     }
 
     @baseCheck
-    visitCharLiteral(_lit: exprs.CharLiteral): TType {
+    visitCharLiteral(_lit: ast.CharLiteral): TType {
         return new TChar();
     }
 
     @baseCheck
-    visitFloatLiteral(_lit: exprs.FloatLiteral): TType {
+    visitFloatLiteral(_lit: ast.FloatLiteral): TType {
         return new TFloat(64);
     }
 
     @baseCheck
-    visitIntegerLiteral(lit: exprs.IntegerLiteral): TType {
+    visitIntegerLiteral(lit: ast.IntegerLiteral): TType {
         let signed, size;
         if (lit.value < 0) {
             signed = true;
@@ -521,12 +519,12 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitStringLiteral(_lit: exprs.StringLiteral): TType {
+    visitStringLiteral(_lit: ast.StringLiteral): TType {
         return new TArray(new TChar());
     }
 
     @baseCheck
-    visitIdentifierExpression(exp: exprs.IdentifierExpression): TType {
+    visitIdentifierExpression(exp: ast.IdentifierExpression): TType {
         let actualType: TType = this.context.symbolTable[exp.name];
         if (!actualType) actualType = this.getModuleValueType(exp.name) as TType;
         if (!actualType) return this.valueNotDefined(exp.name, exp.locations.self);
@@ -534,7 +532,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitArrayAccess(acc: exprs.ArrayAccess): TType {
+    visitArrayAccess(acc: ast.ArrayAccess): TType {
         const arrayType = acc.target.visit(this);
         if (!arrayType.isArray()) return this.notArray(acc.target);
         // verify that the index expression is an integer
@@ -545,14 +543,14 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitArrayLiteral(lit: exprs.ArrayLiteral): TType {
+    visitArrayLiteral(lit: ast.ArrayLiteral): TType {
         // for all items, make sure there is one base assignable type for them all
         const baseType = lit.items.map(i => i.visit(this)).reduce(determineGeneralType, new TNever())
         return new TArray(baseType);
     }
 
     @baseCheck
-    visitBinaryExpression(exp: exprs.BinaryExpression): TType {
+    visitBinaryExpression(exp: ast.BinaryExpression): TType {
         // resolve the left and right expression types
         const leftType = exp.left.visit(this);
         const rightType = exp.right.visit(this);
@@ -568,7 +566,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitFieldAccess(acc: exprs.FieldAccess): TType {
+    visitFieldAccess(acc: ast.FieldAccess): TType {
         const type = acc.target.visit(this);
         // the type can be either a struct or a namespace
         if (type.isStruct()) {
@@ -594,7 +592,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * 3. Calling a generic function without type arguments (requiring inference)
      */
     @baseCheck
-    visitFunctionApplication(app: exprs.FunctionApplication): TType {
+    visitFunctionApplication(app: ast.FunctionApplication): TType {
         // get the type of the function
         const funcType = app.target.visit(this);
         if (funcType instanceof TUnknown) return funcType;
@@ -652,19 +650,19 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
         return !error;
     }
 
-    private completeLambdaResolutions(args: exprs.Expression[], paramTypes: TType[]) {
+    private completeLambdaResolutions(args: ast.Expression[], paramTypes: TType[]) {
         for (let i = 0; i < args.length; ++i) {
             // function application is the only place that lambdas can be passed (for now),
             // so we need to complete the resolution of the type and the lambda body
-            if (args[i] instanceof exprs.LambdaExpression && (args[i].type instanceof TFunction)) {
+            if (args[i] instanceof ast.BaseLambdaExpression && (args[i].type instanceof TFunction)) {
                 (args[i].type as TFunction).completeResolution(paramTypes[i]);
-                this.completeLambdaResolution(args[i] as exprs.LambdaExpression);
+                this.completeLambdaResolution(args[i] as ast.BaseLambdaExpression);
             }
         }
     }
 
     @baseCheck
-    visitIfElseExpression(exp: exprs.IfElseExpression): TType {
+    visitIfElseExpression(exp: ast.IfElseExpression): TType {
         const conditionType = exp.condition.visit(this);
         if (!conditionType.isBool()) this.typeMismatch(conditionType, 'bool', exp.condition);
         const type = exp.consequent.visit(this);
@@ -673,7 +671,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitLambdaExpression(exp: exprs.LambdaExpression): TType {
+    visitLambdaExpression(exp: ast.LambdaExpression): TType {
         const paramTypes = exp.params.map(p => p.visit(this));
         // can't infer return type, that will happen when we are checking types
         return new TFunction(paramTypes, new TInferred());
@@ -683,7 +681,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
      * Once the type of the lambda has been inferred and filled in,
      * we need to do resolution on the body.
      */
-    private completeLambdaResolution(exp: exprs.LambdaExpression) {
+    private completeLambdaResolution(exp: ast.BaseLambdaExpression) {
         // create a new context for this function
         this.context = new TypeCheckContext();
         for (let i = 0; i < exp.params.length; ++i) {
@@ -696,12 +694,12 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitParenthesizedExpression(exp: exprs.ParenthesizedExpression): TType {
+    visitParenthesizedExpression(exp: ast.ParenthesizedExpression): TType {
         return exp.inner.visit(this);
     }
 
     @baseCheck
-    visitStructLiteral(lit: exprs.StructLiteral): TType {
+    visitStructLiteral(lit: ast.StructLiteral): TType {
         const fields: SymbolTable<TType> = {};
         for (const { key, value } of lit.entries) {
             fields[key] = value.visit(this);
@@ -710,7 +708,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitTupleLiteral(lit: exprs.TupleLiteral): TType {
+    visitTupleLiteral(lit: ast.TupleLiteral): TType {
         const itemTypes = [];
         for (const item of lit.items) {
             itemTypes.push(item.visit(this));
@@ -719,7 +717,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitUnaryExpression(exp: exprs.UnaryExpression): TType {
+    visitUnaryExpression(exp: ast.UnaryExpression): TType {
         const targetType = exp.target.visit(this);
         // check if the operator exists
         const oper = createUnary(exp.symbol, exp.prefix ? 'prefix' : 'postfix', targetType);
@@ -733,7 +731,7 @@ export default class TypeCheckVisitor implements INodeVisitor<TType> {
     }
 
     @baseCheck
-    visitVarDeclaration(decl: exprs.VarDeclaration): TType {
+    visitVarDeclaration(decl: ast.VarDeclaration): TType {
         const expType = decl.initExp.visit(this);
         if (this.context.symbolTable[decl.name] || this.getModuleValueType(decl.name)) {
             // symbol already exists

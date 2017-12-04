@@ -231,7 +231,7 @@ ${this.stackTrace.map(f => `  ${this.functions[f.func].getStackEntry()}`)}`);
      */
     operateOnRef<T, U>(ref: number, operation: (value: T) => U, constructor: Class<RValue<U>>): RValue<U> {
         const val = this.references[ref];
-        return new constructor(operation(val.value));
+        return Reflect.construct(constructor, [operation(val.value)]);
     }
 
     /**
@@ -240,7 +240,7 @@ ${this.stackTrace.map(f => `  ${this.functions[f.func].getStackEntry()}`)}`);
     operateOnRefs<T1, T2, U>(ref1: number, ref2: number, operation: (v1: T1, v2: T2) => U, constructor: Class<RValue<U>>): RValue<U> {
         const v1 = this.references[ref1];
         const v2 = this.references[ref2];
-        return new constructor(operation(v1.value, v2.value));
+        return Reflect.construct(constructor, [operation(v1.value, v2.value)]);
     }
 
     /**
@@ -251,7 +251,7 @@ ${this.stackTrace.map(f => `  ${this.functions[f.func].getStackEntry()}`)}`);
         const v1 = this.references[ref1];
         const v2 = this.references[ref2];
         const constructor = v1.constructor as Class<RValue<T1>>;
-        const newVal = new constructor(operation(v1.value, v2.value));
+        const newVal = Reflect.construct(constructor, [operation(v1.value, v2.value)]);
         this.references[ref1] = newVal;
         return newVal;
     }

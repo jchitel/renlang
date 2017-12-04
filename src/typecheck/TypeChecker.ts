@@ -1,15 +1,11 @@
 import Module, { ModuleElement } from '~/runtime/Module';
 import TypeCheckError from './TypeCheckError';
 import * as mess from './TypeCheckerMessages';
-import { STProgram } from '~/syntax/declarations/cst';
-import {
-    ImportDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
-    ExportDeclaration, ExportForwardDeclaration
-} from '~/syntax/declarations/ast';
 import { TType, TUnknown, TRecursive, TNamespace } from './types';
 import { Location } from '~/parser/Tokenizer';
 import { TypeCheckVisitor } from './visitors';
-import reduceProgram from '~/syntax/declarations/reduce';
+import { Program, TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
+    ExportDeclaration, ExportForwardDeclaration, ImportDeclaration } from '~/syntax';
 
 
 export type SymbolTable<T> = { [symbol: string]: T };
@@ -50,9 +46,9 @@ export default class TypeChecker {
      * The outputted value will be a table of all modules in the program,
      * with the main module at position 0.
      */
-    check(mainAst: STProgram, mainModulePath: string) {
+    check(mainAst: Program, mainModulePath: string) {
         // create a module for the main AST
-        this.mainModule = new Module(0, mainModulePath, reduceProgram(mainAst));
+        this.mainModule = new Module(0, mainModulePath, mainAst);
         this.modules.push(this.mainModule);
         this.moduleCache = { [mainModulePath]: 0 };
         // process all declarations, recursively traversing all modules
@@ -77,11 +73,13 @@ export default class TypeChecker {
      */
     processDeclarations(module: Module) {
         for (const imp of module.ast.imports) this.processImport(module, imp);
-        for (const typ of module.ast.types) this.processType(module, typ);
-        for (const func of module.ast.functions) this.processFunction(module, func);
-        for (const con of module.ast.constants) this.processConstant(module, con);
-        for (const exp of module.ast.exports) this.processExport(module, exp);
-        for (const fwd of module.ast.forwards) this.processForward(module, fwd);
+        for (const decl of module.ast.declarations) {
+            if (decl instanceof TypeDeclaration) this.processType(module, decl);
+            else if (decl instanceof FunctionDeclaration) this.processFunction(module, decl);
+            else if (decl instanceof ConstantDeclaration) this.processConstant(module, decl);
+            else if (decl instanceof ExportDeclaration) this.processExport(module, decl);
+            else if (decl instanceof ExportForwardDeclaration) this.processForward(module, decl);
+        }
     }
 
     /**
@@ -237,7 +235,7 @@ export default class TypeChecker {
                 } else if (value instanceof FunctionDeclaration) {
                     module.exports[exportName] = { kind: 'func', valueName };
                     this.processFunction(module, value);
-                } else {
+                } else if (value instanceof ConstantDeclaration) {
                     module.exports[exportName] = { kind: 'const', valueName };
                     this.processConstant(module, value);
                 }

@@ -1,63 +1,60 @@
-import * as decls from './declarations/ast';
-import * as types from './types/ast';
-import * as stmts from './statements/ast';
-import * as exprs from './expressions/ast';
+import * as ast from '.';
 
 
 export default interface INodeVisitor<T> {
     // declarations
-    visitProgram(program: decls.Program): T;
-    visitImportDeclaration(decl: decls.ImportDeclaration): T;
-    visitTypeDeclaration(decl: decls.TypeDeclaration): T;
-    visitTypeParam(param: decls.TypeParam): T;
-    visitFunctionDeclaration(decl: decls.FunctionDeclaration): T;
-    visitParam(param: decls.Param): T;
-    visitLambdaParam(param: exprs.LambdaParam): T;
-    visitConstantDeclaration(decl: decls.ConstantDeclaration): T;
-    visitExportDeclaration(decl: decls.ExportDeclaration): T;
-    visitExportForwardDeclaration(decl: decls.ExportForwardDeclaration): T;
+    visitProgram(program: ast.Program): T;
+    visitImportDeclaration(decl: ast.ImportDeclaration): T;
+    visitTypeDeclaration(decl: ast.TypeDeclaration): T;
+    visitTypeParam(param: ast.TypeParam): T;
+    visitFunctionDeclaration(decl: ast.FunctionDeclaration): T;
+    visitParam(param: ast.Param): T;
+    visitLambdaParam(param: ast.LambdaParam): T;
+    visitConstantDeclaration(decl: ast.ConstantDeclaration): T;
+    visitExportDeclaration(decl: ast.ExportDeclaration): T;
+    visitExportForwardDeclaration(decl: ast.ExportForwardDeclaration): T;
 
     // types
-    visitPrimitiveType(type: types.PrimitiveType): T;
-    visitIdentifierType(type: types.IdentifierType): T;
-    visitArrayType(type: types.ArrayType): T;
-    visitFunctionType(type: types.FunctionType): T;
-    visitParenthesizedType(type: types.ParenthesizedType): T;
-    visitSpecificType(type: types.SpecificType): T;
-    visitStructType(type: types.StructType): T;
-    visitTupleType(type: types.TupleType): T;
-    visitUnionType(type: types.UnionType): T;
-    visitNamespaceAccessType(type: types.NamespaceAccessType): T;
+    visitBuiltInType(type: ast.BuiltInType): T;
+    visitIdentifierType(type: ast.IdentifierType): T;
+    visitArrayType(type: ast.ArrayType): T;
+    visitFunctionType(type: ast.FunctionType): T;
+    visitParenthesizedType(type: ast.ParenthesizedType): T;
+    visitSpecificType(type: ast.SpecificType): T;
+    visitStructType(type: ast.StructType): T;
+    visitTupleType(type: ast.TupleType): T;
+    visitUnionType(type: ast.UnionType): T;
+    visitNamespaceAccessType(type: ast.NamespaceAccessType): T;
 
     // statements
-    visitBlock(block: stmts.Block): T;
-    visitBreakStatement(stmt: stmts.BreakStatement): T;
-    visitContinueStatement(stmt: stmts.ContinueStatement): T;
-    visitDoWhileStatement(stmt: stmts.DoWhileStatement): T;
-    visitForStatement(stmt: stmts.ForStatement): T;
-    visitNoop(stmt: stmts.Noop): T;
-    visitReturnStatement(stmt: stmts.ReturnStatement): T;
-    visitThrowStatement(stmt: stmts.ThrowStatement): T;
-    visitTryCatchStatement(stmt: stmts.TryCatchStatement): T;
-    visitWhileStatement(stmt: stmts.WhileStatement): T;
+    visitBlock(block: ast.Block): T;
+    visitExpressionStatement(exp: ast.ExpressionStatement): T;
+    visitBreakStatement(stmt: ast.BreakStatement): T;
+    visitContinueStatement(stmt: ast.ContinueStatement): T;
+    visitDoWhileStatement(stmt: ast.DoWhileStatement): T;
+    visitForStatement(stmt: ast.ForStatement): T;
+    visitReturnStatement(stmt: ast.ReturnStatement): T;
+    visitThrowStatement(stmt: ast.ThrowStatement): T;
+    visitTryCatchStatement(stmt: ast.TryCatchStatement): T;
+    visitWhileStatement(stmt: ast.WhileStatement): T;
 
     // expressions
-    visitBoolLiteral(lit: exprs.BoolLiteral): T;
-    visitCharLiteral(lit: exprs.CharLiteral): T;
-    visitFloatLiteral(lit: exprs.FloatLiteral): T;
-    visitIntegerLiteral(lit: exprs.IntegerLiteral): T;
-    visitStringLiteral(lit: exprs.StringLiteral): T;
-    visitIdentifierExpression(exp: exprs.IdentifierExpression): T;
-    visitArrayAccess(acc: exprs.ArrayAccess): T;
-    visitArrayLiteral(lit: exprs.ArrayLiteral): T;
-    visitBinaryExpression(exp: exprs.BinaryExpression): T;
-    visitFieldAccess(acc: exprs.FieldAccess): T;
-    visitFunctionApplication(app: exprs.FunctionApplication): T;
-    visitIfElseExpression(exp: exprs.IfElseExpression): T;
-    visitLambdaExpression(exp: exprs.LambdaExpression): T;
-    visitParenthesizedExpression(exp: exprs.ParenthesizedExpression): T;
-    visitStructLiteral(lit: exprs.StructLiteral): T;
-    visitTupleLiteral(lit: exprs.TupleLiteral): T;
-    visitUnaryExpression(exp: exprs.UnaryExpression): T;
-    visitVarDeclaration(decl: exprs.VarDeclaration): T;
+    visitBoolLiteral(lit: ast.BoolLiteral): T;
+    visitCharLiteral(lit: ast.CharLiteral): T;
+    visitFloatLiteral(lit: ast.FloatLiteral): T;
+    visitIntegerLiteral(lit: ast.IntegerLiteral): T;
+    visitStringLiteral(lit: ast.StringLiteral): T;
+    visitIdentifierExpression(exp: ast.IdentifierExpression): T;
+    visitArrayAccess(acc: ast.ArrayAccess): T;
+    visitArrayLiteral(lit: ast.ArrayLiteral): T;
+    visitBinaryExpression(exp: ast.BinaryExpression): T;
+    visitFieldAccess(acc: ast.FieldAccess): T;
+    visitFunctionApplication(app: ast.FunctionApplication): T;
+    visitIfElseExpression(exp: ast.IfElseExpression): T;
+    visitLambdaExpression(exp: ast.BaseLambdaExpression): T;
+    visitParenthesizedExpression(exp: ast.ParenthesizedExpression): T;
+    visitStructLiteral(lit: ast.StructLiteral): T;
+    visitTupleLiteral(lit: ast.TupleLiteral): T;
+    visitUnaryExpression(exp: ast.UnaryExpression): T;
+    visitVarDeclaration(decl: ast.VarDeclaration): T;
 }

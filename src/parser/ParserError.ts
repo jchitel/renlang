@@ -1,27 +1,15 @@
 export default class ParserError extends Error {
     baseMessage: string;
-    startLine: number;
-    startColumn: number;
-    endLine: number;
-    endColumn: number;
+    line: number;
+    column: number;
 
-    constructor(message: string, startLine: number, startColumn: number, endLine = startLine, endColumn = startColumn) {
-        super(ParserError.getMessage(message, startLine, startColumn, endLine, endColumn));
-        Object.assign<ParserError>(this, {
-            baseMessage: message,
-            startLine,
-            startColumn,
-            endLine,
-            endColumn,
-        });
+    constructor(message: string, line: number, column: number) {
+        super(ParserError.getMessage(message, line, column));
+        Object.assign<ParserError>(this, { baseMessage: message, line, column });
     }
 
-    static getMessage(message: string, startLine: number, startColumn: number, endLine: number, endColumn: number) {
+    static getMessage(message: string, line: number, column: number) {
         const formatted = message.charAt(0).toUpperCase() + message.substring(1);
-        if (startLine === endLine && startColumn === endColumn) {
-            return `${formatted} (Line ${startLine}, Column ${startColumn})`;
-        } else {
-            return `${formatted} (Line ${startLine}, Column ${startColumn})-(Line ${endLine}, Column ${endColumn})`;
-        }
+        return `${formatted} (Line ${line}, Column ${column})`;
     }
 }

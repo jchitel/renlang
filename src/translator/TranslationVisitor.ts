@@ -1,8 +1,4 @@
 import INodeVisitor from '../syntax/INodeVisitor';
-import * as decls from '../syntax/declarations/ast';
-import * as types from '../syntax/types/ast';
-import * as stmts from '../syntax/statements/ast';
-import * as exprs from '../syntax/expressions/ast';
 import Translator from './Translator';
 import Func from './Func';
 import Instruction, {
@@ -12,6 +8,7 @@ import Instruction, {
     BinaryOperatorRef, FieldAccessRef, FunctionCallRef, CopyRef, SetStructRef, UnaryOperatorRef
 } from '../runtime/instructions';
 import { RBool, RInteger } from '../runtime/types';
+import * as ast from '~/syntax';
 
 
 export default class TranslationVisitor implements INodeVisitor<number | void> {
@@ -59,7 +56,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         return this.addRefInstruction(ref => this.translator.referenceIdentifier(ref, name, this.func.moduleId));
     }
 
-    lambda(exp: exprs.LambdaExpression) {
+    lambda(exp: ast.LambdaExpression) {
         return this.addRefInstruction(ref => this.translator.lambda(exp, ref, this.func.moduleId));
     }
 
@@ -75,16 +72,16 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
      */
 
     // NOTE: putting (number | void) as the type of at least one method makes inference work properly
-    visitProgram(_program: decls.Program): number | void { throw new Error("Method not implemented."); }
-    visitImportDeclaration(_decl: decls.ImportDeclaration): never { throw new Error("Method not implemented."); }
-    visitTypeDeclaration(_decl: decls.TypeDeclaration): never { throw new Error("Method not implemented."); }
-    visitTypeParam(_param: decls.TypeParam): never { throw new Error("Method not implemented."); }
-    visitFunctionDeclaration(_decl: decls.FunctionDeclaration): never { throw new Error("Method not implemented."); }
-    visitParam(_param: decls.Param): never { throw new Error("Method not implemented."); }
-    visitLambdaParam(_param: exprs.LambdaParam): never { throw new Error("Method not implemented."); }
-    visitConstantDeclaration(_delc: decls.ConstantDeclaration): never { throw new Error("Method not implemented."); }
-    visitExportDeclaration(_decl: decls.ExportDeclaration): never { throw new Error("Method not implemented."); }
-    visitExportForwardDeclaration(_decl: decls.ExportForwardDeclaration): never { throw new Error("Method not implemented."); }
+    visitProgram(_program: ast.Program): number | void { throw new Error("Method not implemented."); }
+    visitImportDeclaration(_decl: ast.ImportDeclaration): never { throw new Error("Method not implemented."); }
+    visitTypeDeclaration(_decl: ast.TypeDeclaration): never { throw new Error("Method not implemented."); }
+    visitTypeParam(_param: ast.TypeParam): never { throw new Error("Method not implemented."); }
+    visitFunctionDeclaration(_decl: ast.FunctionDeclaration): never { throw new Error("Method not implemented."); }
+    visitParam(_param: ast.Param): never { throw new Error("Method not implemented."); }
+    visitLambdaParam(_param: ast.LambdaParam): never { throw new Error("Method not implemented."); }
+    visitConstantDeclaration(_delc: ast.ConstantDeclaration): never { throw new Error("Method not implemented."); }
+    visitExportDeclaration(_decl: ast.ExportDeclaration): never { throw new Error("Method not implemented."); }
+    visitExportForwardDeclaration(_decl: ast.ExportForwardDeclaration): never { throw new Error("Method not implemented."); }
 
     /**
      * TYPES
@@ -94,22 +91,26 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
      * themselves do not have anything to do with execution.
      */
 
-    visitPrimitiveType(_type: types.PrimitiveType): never { throw new Error("Method not implemented."); }
-    visitIdentifierType(_type: types.IdentifierType): never { throw new Error("Method not implemented."); }
-    visitArrayType(_type: types.ArrayType): never { throw new Error("Method not implemented."); }
-    visitFunctionType(_type: types.FunctionType): never { throw new Error("Method not implemented."); }
-    visitParenthesizedType(_type: types.ParenthesizedType): never { throw new Error("Method not implemented."); }
-    visitSpecificType(_type: types.SpecificType): never { throw new Error("Method not implemented."); }
-    visitStructType(_type: types.StructType): never { throw new Error("Method not implemented."); }
-    visitTupleType(_type: types.TupleType): never { throw new Error("Method not implemented."); }
-    visitUnionType(_type: types.UnionType): never { throw new Error("Method not implemented."); }
-    visitNamespaceAccessType(_type: types.NamespaceAccessType): never { throw new Error("Method not implemented."); }
+    visitBuiltInType(_type: ast.BuiltInType): never { throw new Error("Method not implemented."); }
+    visitIdentifierType(_type: ast.IdentifierType): never { throw new Error("Method not implemented."); }
+    visitArrayType(_type: ast.ArrayType): never { throw new Error("Method not implemented."); }
+    visitFunctionType(_type: ast.FunctionType): never { throw new Error("Method not implemented."); }
+    visitParenthesizedType(_type: ast.ParenthesizedType): never { throw new Error("Method not implemented."); }
+    visitSpecificType(_type: ast.SpecificType): never { throw new Error("Method not implemented."); }
+    visitStructType(_type: ast.StructType): never { throw new Error("Method not implemented."); }
+    visitTupleType(_type: ast.TupleType): never { throw new Error("Method not implemented."); }
+    visitUnionType(_type: ast.UnionType): never { throw new Error("Method not implemented."); }
+    visitNamespaceAccessType(_type: ast.NamespaceAccessType): never { throw new Error("Method not implemented."); }
 
     /**************
      * STATEMENTS *
      **************/
 
-    visitBlock(block: stmts.Block): void {
+    visitBlock(block: ast.Block): void {
+        if (block.statements.length === 0) {
+            this.addInstruction(new Noop());
+            return;
+        }
         this.pushScope(new PushScopeFrame());
         for (const statement of block.statements) {
             statement.visit(this);
@@ -117,15 +118,19 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         this.popScope(new PopFrame());
     }
 
-    visitBreakStatement(stmt: stmts.BreakStatement): void {
+    visitExpressionStatement(exp: ast.ExpressionStatement): void {
+        exp.expression.visit(this);
+    }
+
+    visitBreakStatement(stmt: ast.BreakStatement): void {
         this.addInstruction(new Break(stmt.loopNumber));
     }
 
-    visitContinueStatement(stmt: stmts.ContinueStatement): void {
+    visitContinueStatement(stmt: ast.ContinueStatement): void {
         this.addInstruction(new Continue(stmt.loopNumber));
     }
 
-    visitDoWhileStatement(stmt: stmts.DoWhileStatement): void {
+    visitDoWhileStatement(stmt: ast.DoWhileStatement): void {
         const loopFrame = this.pushScope(new PushLoopFrame({ start: this.nextInstrNum() + 1 }));
         // save the branch location
         const startInstructionNumber = this.nextInstrNum();
@@ -139,7 +144,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         this.popScope(new PopFrame());
     }
 
-    visitForStatement(stmt: stmts.ForStatement): void {
+    visitForStatement(stmt: ast.ForStatement): void {
         // initialize iterable and i
         const iterableRef = stmt.iterableExp.visit(this) as number;
         const iRef = this.addRefInstruction(ref => new SetIntegerRef(ref, 0));
@@ -169,11 +174,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         this.popScope(new PopFrame());
     }
 
-    visitNoop(_stmt: stmts.Noop): void {
-        this.addInstruction(new Noop());
-    }
-
-    visitReturnStatement(stmt: stmts.ReturnStatement): void {
+    visitReturnStatement(stmt: ast.ReturnStatement): void {
         // save expression to ref
         let returnRef;
         if (stmt.exp) {
@@ -185,14 +186,14 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         this.addInstruction(new Return(returnRef));
     }
 
-    visitThrowStatement(stmt: stmts.ThrowStatement): void {
+    visitThrowStatement(stmt: ast.ThrowStatement): void {
         // save expression to ref
         const throwRef = stmt.exp.visit(this) as number;
         // add throw instruction
         this.addInstruction(new Throw(throwRef));
     }
 
-    visitTryCatchStatement(stmt: stmts.TryCatchStatement): void {
+    visitTryCatchStatement(stmt: ast.TryCatchStatement): void {
         // insert a try frame
         const tryFrame = this.pushScope(new PushTryFrame({ catches: [] }));
         // insert try body
@@ -233,7 +234,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         }
     }
 
-    visitWhileStatement(stmt: stmts.WhileStatement): void {
+    visitWhileStatement(stmt: ast.WhileStatement): void {
         const loopFrame = this.pushScope(new PushLoopFrame({ start: this.nextInstrNum() + 1 }));
         // store the condition value into a reference
         const conditionInstructionNumber = this.nextInstrNum();
@@ -254,40 +255,40 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
      * EXPRESSIONS *
      ***************/
 
-    visitBoolLiteral(lit: exprs.BoolLiteral): number {
+    visitBoolLiteral(lit: ast.BoolLiteral): number {
         return this.addRefInstruction(ref => new SetBoolRef(ref, lit.value));
     }
 
-    visitCharLiteral(lit: exprs.CharLiteral): number {
+    visitCharLiteral(lit: ast.CharLiteral): number {
         return this.addRefInstruction(ref => new SetCharRef(ref, lit.value));
     }
 
-    visitFloatLiteral(lit: exprs.FloatLiteral): number {
+    visitFloatLiteral(lit: ast.FloatLiteral): number {
         return this.addRefInstruction(ref => new SetFloatRef(ref, lit.value));
     }
 
-    visitIntegerLiteral(lit: exprs.IntegerLiteral): number {
+    visitIntegerLiteral(lit: ast.IntegerLiteral): number {
         return this.addRefInstruction(ref => new SetIntegerRef(ref, lit.value));
     }
 
-    visitStringLiteral(lit: exprs.StringLiteral): number {
+    visitStringLiteral(lit: ast.StringLiteral): number {
         return this.addRefInstruction(ref => new SetStringRef(ref, lit.value));
     }
 
-    visitIdentifierExpression(exp: exprs.IdentifierExpression): number {
+    visitIdentifierExpression(exp: ast.IdentifierExpression): number {
         // check to see if the name matches a variable in the current scope
         if (this.getFromScope(exp.name) !== undefined) return this.getFromScope(exp.name);
         // otherwise we need the translator to resolve a module-scope reference
         return this.referenceIdentifier(exp.name);
     }
 
-    visitArrayAccess(acc: exprs.ArrayAccess): number {
+    visitArrayAccess(acc: ast.ArrayAccess): number {
         const targetRef = acc.target.visit(this) as number;
         const indexRef = acc.indexExp.visit(this) as number;
         return this.addRefInstruction(ref => new ArrayAccessRef(ref, targetRef, indexRef));
     }
 
-    visitArrayLiteral(lit: exprs.ArrayLiteral): number {
+    visitArrayLiteral(lit: ast.ArrayLiteral): number {
         const refs: number[] = [];
         for (const item of lit.items) {
             refs.push(item.visit(this) as number);
@@ -295,24 +296,24 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         return this.addRefInstruction(ref => new SetArrayRef(ref, refs));
     }
 
-    visitBinaryExpression(exp: exprs.BinaryExpression): number {
+    visitBinaryExpression(exp: ast.BinaryExpression): number {
         const leftRef = exp.left.visit(this) as number;
         const rightRef = exp.right.visit(this) as number;
         return this.addRefInstruction(ref => new BinaryOperatorRef(ref, leftRef, exp.operator, rightRef));
     }
 
-    visitFieldAccess(acc: exprs.FieldAccess): number {
+    visitFieldAccess(acc: ast.FieldAccess): number {
         const targetRef = acc.target.visit(this) as number;
         return this.addRefInstruction(ref => new FieldAccessRef(ref, targetRef, acc.field));
     }
 
-    visitFunctionApplication(app: exprs.FunctionApplication): number {
+    visitFunctionApplication(app: ast.FunctionApplication): number {
         const targetRef = app.target.visit(this) as number;
         const argRefs = app.args.map(p => p.visit(this) as number);
         return this.addRefInstruction(ref => new FunctionCallRef(ref, targetRef, argRefs));
     }
 
-    visitIfElseExpression(exp: exprs.IfElseExpression): number {
+    visitIfElseExpression(exp: ast.IfElseExpression): number {
         // get new reference id for result of expression
         const ref = this.newReference();
         // if condition
@@ -332,15 +333,15 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         return ref;
     }
 
-    visitLambdaExpression(exp: exprs.LambdaExpression): number {
+    visitLambdaExpression(exp: ast.LambdaExpression): number {
         return this.lambda(exp);
     }
 
-    visitParenthesizedExpression(exp: exprs.ParenthesizedExpression): number {
+    visitParenthesizedExpression(exp: ast.ParenthesizedExpression): number {
         return exp.inner.visit(this) as number;
     }
 
-    visitStructLiteral(lit: exprs.StructLiteral): number {
+    visitStructLiteral(lit: ast.StructLiteral): number {
         const refs: { [key: string]: number } = {};
         for (const { key, value } of lit.entries) {
             refs[key] = value.visit(this) as number;
@@ -348,7 +349,7 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         return this.addRefInstruction(ref => new SetStructRef(ref, refs));
     }
 
-    visitTupleLiteral(lit: exprs.TupleLiteral): number {
+    visitTupleLiteral(lit: ast.TupleLiteral): number {
         const refs: number[] = [];
         for (const item of lit.items) {
             refs.push(item.visit(this) as number);
@@ -356,12 +357,12 @@ export default class TranslationVisitor implements INodeVisitor<number | void> {
         return this.addRefInstruction(ref => new SetTupleRef(ref, refs));
     }
 
-    visitUnaryExpression(exp: exprs.UnaryExpression): number {
+    visitUnaryExpression(exp: ast.UnaryExpression): number {
         const targetRef = exp.target.visit(this) as number;
         return this.addRefInstruction(ref => new UnaryOperatorRef(ref, exp.operator, targetRef));
     }
 
-    visitVarDeclaration(decl: exprs.VarDeclaration): number {
+    visitVarDeclaration(decl: ast.VarDeclaration): number {
         const initRef = decl.initExp.visit(this) as number;
         this.addToScope(decl.name, initRef, new AddToScope(decl.name, initRef));
         return initRef;

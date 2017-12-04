@@ -8,9 +8,8 @@ import { ParamRef, AddToScope, SetIntegerRef, BinaryOperatorRef, Return, ConstBr
 import { TFunction, TArray, TChar, TInteger, TTuple } from '../../src/typecheck/types';
 import parse from '../../src/parser';
 import typecheck from '../../src/typecheck';
-import { reduceFunctionDeclaration } from '~/syntax/declarations/reduce';
-import { STFunctionDeclaration } from '~/syntax/cst';
 import { BinaryOperator } from '~/runtime/operators';
+import { FunctionDeclaration } from '~/syntax';
 
 
 describe('Translator', () => {
@@ -37,7 +36,7 @@ describe('Translator', () => {
 
     it('should translate a function', () => {
         const src = 'func int add(int a, int b) => a + b';
-        const ast = reduceFunctionDeclaration(parse(src).declarations[0].choice.choice as STFunctionDeclaration);
+        const ast = parse(src).declarations[0] as FunctionDeclaration;
         const func = new FunctionFunc(0, { ast }, 0);
         const tr = new Translator();
         func.translate(tr);
@@ -66,13 +65,13 @@ describe('Translator', () => {
 
     it('should translate a module with a constant', () => {
         const src = 'func int main(string[] args) => myConst + 1\n'
-                  + 'export myConst = -1';
+                  + 'const myConst = 1';
         const mods = typecheck(parse(src), '/index.ren');
         const funcs = new Translator().translate(mods);
         expect(funcs.length).to.eql(2);
         expect(funcs[1].instructions).to.eql([
             new ConstBranch({ constRef: 0, target: 3 }),    // if const 0 is set, jump to ic 3
-            new SetIntegerRef(2, -1), // store the integer -1 into ref 2
+            new SetIntegerRef(2, 1), // store the integer -1 into ref 2
             new ConstSet(0, 2),       // set const 0 to the value in ref 2
             new ConstRef(3, 0),       // ic 3: set ref 3 to const 0
             new Return(3),            // return ref 3
