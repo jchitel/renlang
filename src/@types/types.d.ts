@@ -24,12 +24,20 @@ interface ObjectConstructor {
  * constraint and just say that it must be any kind of
  * function, with a prototype of the specified type.
  */
-interface Class<T> extends Function {
+interface Class<T extends Object> extends Function {
     prototype: T;
 }
 
 type Optional<T> = T | null;
 
-type bool = boolean;
-
-type ArrayOrSingle<T> = T | T[];
+/**
+ * A read-only version of Map.
+ * This is backed by a regular Map, but only exposes APIs that
+ * don't mutate the map. To mutate the map, use `mapSet()`
+ * from `~/utils/utils`.
+ */
+interface ReadonlyMap<K, V> extends Iterable<[K, V]> {
+    get(key: K): V | undefined;
+    has(key: K): boolean;
+    readonly size: number;
+}
