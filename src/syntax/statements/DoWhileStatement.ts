@@ -1,39 +1,28 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Statement, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Statement })
-export class DoWhileStatement extends Statement {
-    @parser('do', { definite: true })
-    setDoToken(token: Token) {
-        this.registerLocation('do', token.getLocation());
-    }
-
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setBody(stmt: Statement) {
-        this.body = stmt;
-    }
-
-    @parser('while', { err: 'DO_WHILE_MISSING_WHILE' }) setWhileToken() {}
-    @parser(TokenType.LPAREN, { err: 'WHILE_MISSING_OPEN_PAREN' }) setOpenParen() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.conditionExp = exp;
-    }
-
-    @parser(TokenType.RPAREN, { err: 'WHILE_MISSING_CLOSE_PAREN' })
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.do, token.getLocation());
-    }
-
+export interface DoWhileStatement extends NodeBase {
+    syntaxType: SyntaxType.DoWhileStatement;
     body: Statement;
-    conditionExp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitDoWhileStatement(this);
-    }
+    condition: Expression;
+}
+
+export function register(Expression: ParseFunc<Expression>, Statement: ParseFunc<Statement>) {
+    const DoWhileStatement: ParseFunc<DoWhileStatement> = seq(
+        tok('do'),
+        Statement,
+        tok('while'),
+        tok('('),
+        Expression,
+        tok(')'),
+        ([_1, body, _2, _3, condition, _4], location) => ({
+            syntaxType: SyntaxType.DoWhileStatement as SyntaxType.DoWhileStatement,
+            location,
+            body,
+            condition
+        })
+    );
+
+    return { DoWhileStatement };
 }

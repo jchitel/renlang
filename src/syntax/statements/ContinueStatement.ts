@@ -1,25 +1,19 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Statement })
-export class ContinueStatement extends Statement {
-    @parser('continue', { definite: true })
-    setContinueToken(token: Token) {
-        this.registerLocation('self', token.getLocation());
-    }
-
-    @parser(TokenType.INTEGER_LITERAL, { optional: true })
-    setLoopNumber(token: Token) {
-        this.loopNumber = token.value;
-        this.createAndRegisterLocation('self', this.locations.self, token.getLocation());
-    }
-
-    loopNumber: number = 0;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitContinueStatement(this);
-    }
+export interface ContinueStatement extends NodeBase {
+    syntaxType: SyntaxType.ContinueStatement;
+    loopNumber: Optional<Token>;
 }
+
+export const ContinueStatement: ParseFunc<ContinueStatement> = seq(
+    tok('continue'),
+    optional(tok(TokenType.INTEGER_LITERAL)),
+    ([_, loopNumber], location) => ({
+        syntaxType: SyntaxType.ContinueStatement as SyntaxType.ContinueStatement,
+        location,
+        loopNumber
+    })
+);

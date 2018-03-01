@@ -1,29 +1,24 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Type })
-export class TupleType extends Type {
-    @parser(TokenType.LPAREN, { definite: true })
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
-    }
 
-    @parser(Type, { repeat: '*', sep: TokenType.COMMA })
-    setTypes(types: Type[]) {
-        this.types = types;
-    }
+export interface TupleType extends NodeBase {
+    syntaxType: SyntaxType.TupleType;
+    types: ReadonlyArray<TypeNode>;
+}
 
-    @parser(TokenType.RPAREN)
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
+export function register(TypeNode: ParseFunc<TypeNode>) {
+    const TupleType: ParseFunc<TupleType> = seq(
+        tok('('),
+        repeat(TypeNode, '*', tok(',')),
+        tok(')'),
+        ([_1, types, _2], location) => ({
+            syntaxType: SyntaxType.TupleType as SyntaxType.TupleType,
+            location,
+            types
+        })
+    );
 
-    types: Type[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitTupleType(this);
-    }
+    return { TupleType };
 }

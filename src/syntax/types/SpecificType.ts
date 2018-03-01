@@ -1,31 +1,42 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, ParseResult, parser, exp } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { ParseFunc, seq, repeat, tok } from '~/parser/parser';
 
 
-export const TypeArgList = {
-    '<': exp('<', { definite: true }),
-    types: exp(Type, { repeat: '*', sep: TokenType.COMMA, err: 'INVALID_TYPE_ARG' }),
-    '>': exp('>', { err: 'INVALID_TYPE_ARG_LIST' })
+export interface SpecificType extends NodeBase {
+    syntaxType: SyntaxType.SpecificType;
+    typeNode: TypeNode;
+    typeArgs: ReadonlyArray<TypeNode>;
 }
 
-@nonTerminal({ implements: Type, leftRecursive: 'setGenericType' })
-export class SpecificType extends Type {
-    setGenericType(type: Type) {
-        this.typeNode = type;
-    }
+export interface SpecificTypeSuffix extends NodeBase {
+    syntaxType: SyntaxType.SpecificType;
+    typeArgs: ReadonlyArray<TypeNode>;
+    setBase(typeNode: TypeNode): SpecificType;
+}
 
-    @parser(TypeArgList, { definite: true })
-    setTypeArgs(result: ParseResult) {
-        this.typeArgs = result.types as Type[];
-        this.createAndRegisterLocation('self', this.typeNode.locations.self, (result['>'] as Token).getLocation());
-    }
+export function register(TypeNode: ParseFunc<TypeNode>) {
+    const TypeArgList: ParseFunc<TypeNode[]> = seq(
+        tok('<'),
+        repeat(TypeNode, '*', tok(',')),
+        tok('>'),
+        ([_1, types, _2]) => types
+    );
 
-    typeNode: Type;
-    typeArgs: Type[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitSpecificType(this);
-    }
+    const SpecificTypeSuffix: ParseFunc<SpecificTypeSuffix> = seq(
+        TypeArgList,
+        (typeArgs, location) => ({
+            syntaxType: SyntaxType.SpecificType as SyntaxType.SpecificType,
+            location,
+            typeArgs,
+            setBase(typeNode: TypeNode) {
+                return {
+                    ...this,
+                    typeNode,
+                    location: this.location.merge(typeNode.location)
+                }
+            }
+        })
+    );
+
+    return { SpecificTypeSuffix, TypeArgList };
 }

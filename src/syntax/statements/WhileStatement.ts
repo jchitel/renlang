@@ -1,36 +1,27 @@
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { Statement } from '~/syntax/statements/Statement';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression, Statement } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Statement })
-export class WhileStatement extends Statement {
-    @parser('while', { definite: true })
-    setWhileToken(token: Token) {
-        this.registerLocation('while', token.getLocation());
-    }
-
-    @parser(TokenType.LPAREN, { err: 'WHILE_MISSING_OPEN_PAREN' }) setOpenParen() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.conditionExp = exp;
-    }
-
-    @parser(TokenType.RPAREN, { err: 'WHILE_MISSING_CLOSE_PAREN' }) setCloseParen() {}
-
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setBody(stmt: Statement) {
-        this.body = stmt;
-        this.createAndRegisterLocation('self', this.locations.while, stmt.locations.self);
-    }
-
-    conditionExp: Expression;
+export interface WhileStatement extends NodeBase {
+    syntaxType: SyntaxType.WhileStatement;
+    condition: Expression;
     body: Statement;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitWhileStatement(this);
-    }
+}
+
+export function register(Expression: ParseFunc<Expression>, Statement: ParseFunc<Statement>) {
+    const WhileStatement: ParseFunc<WhileStatement> = seq(
+        tok('while'),
+        tok('('),
+        Expression,
+        tok(')'),
+        Statement,
+        ([_1, _2, condition, _3, body], location) => ({
+            syntaxType: SyntaxType.WhileStatement as SyntaxType.WhileStatement,
+            location,
+            condition,
+            body
+        })
+    );
+
+    return { WhileStatement };
 }

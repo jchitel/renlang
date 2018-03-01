@@ -1,20 +1,18 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression })
-export class StringLiteral extends Expression {
-    @parser(TokenType.STRING_LITERAL, { definite: true })
-    setValue(token: Token) {
-        this.value = token.value;
-        this.registerLocation('self', token.getLocation());
-    }
-
-    value: string;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitStringLiteral(this);
-    }
+export interface StringLiteral extends NodeBase {
+    syntaxType: SyntaxType.StringLiteral;
+    value: Token;
 }
+
+export const StringLiteral: ParseFunc<StringLiteral> = seq(
+    tok(TokenType.STRING_LITERAL),
+    (value, location) => ({
+        syntaxType: SyntaxType.StringLiteral as SyntaxType.StringLiteral,
+        location,
+        value
+    })
+);

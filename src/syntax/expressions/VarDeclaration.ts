@@ -1,31 +1,26 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { ShorthandLambdaExpression } from '~/syntax/expressions/LambdaExpression';
-import { IdentifierExpression } from '~/syntax/expressions/IdentifierExpression';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression, before: [ShorthandLambdaExpression, IdentifierExpression] })
-export class VarDeclaration extends Expression {
-    @parser(TokenType.IDENT)
-    setName(token: Token) {
-        this.name = token.image;
-        this.registerLocation('name', token.getLocation());
-    }
+export interface VarDeclaration extends NodeBase {
+    syntaxType: SyntaxType.VarDeclaration;
+    name: Token;
+    init: Expression;
+}
 
-    @parser(TokenType.EQUALS, { definite: true }) setEquals() {}
+export function register(Expression: ParseFunc<Expression>) {
+    const VarDeclaration: ParseFunc<VarDeclaration> = seq(
+        tok(TokenType.IDENT),
+        tok('='),
+        Expression,
+        ([name, _, init], location) => ({
+            syntaxType: SyntaxType.VarDeclaration as SyntaxType.VarDeclaration,
+            location,
+            name,
+            init
+        })
+    );
 
-    @parser(Expression, { err: 'INVALID_INITIAL_VALUE' })
-    setInitExp(exp: Expression) {
-        this.initExp = exp;
-        this.createAndRegisterLocation('self', this.locations.name, exp.locations.self);
-    }
-
-    name: string;
-    initExp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitVarDeclaration(this);
-    }
+    return { VarDeclaration };
 }

@@ -1,39 +1,34 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, exp, parser, ParseResult } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-export const StructEntry = {
-    key: exp(TokenType.IDENT, { definite: true }),
-    ':': exp(TokenType.COLON, { err: 'STRUCT_LITERAL_MISSING_COLON' }),
-    value: exp(Expression, { err: 'INVALID_EXPRESSION' }),
-};
+interface StructEntry {
+    key: Token;
+    value: Expression;
+}
 
-@nonTerminal({ implements: Expression })
-export class StructLiteral extends Expression {
-    @parser(TokenType.LBRACE, { definite: true })
-    setOpenBrace(token: Token) {
-        this.registerLocation('openBrace', token.getLocation());
-    }
+export interface StructLiteral extends NodeBase {
+    syntaxType: SyntaxType.StructLiteral;
+    entries: ReadonlyArray<StructEntry>;
+}
 
-    @parser(StructEntry, { repeat: '*', sep: TokenType.COMMA })
-    setEntries(result: ParseResult[]) {
-        this.entries = result.map(e => {
-            const key = e.key as Token;
-            this.registerLocation(`key_${key.image}`, key.getLocation());
-            return { key: key.image, value: e.value as Expression };
-        });
-    }
+export function register(Expression: ParseFunc<Expression>) {
+    const StructLiteral: ParseFunc<StructLiteral> = seq(
+        tok('{'),
+        repeat(seq(
+            tok(TokenType.IDENT),
+            tok(':'),
+            Expression,
+            ([key, _, value]) => ({ key, value })
+        ), '*', tok(',')),
+        tok('}'),
+        ([_1, entries, _2], location) => ({
+            syntaxType: SyntaxType.StructLiteral as SyntaxType.StructLiteral,
+            location,
+            entries
+        })
+    );
 
-    @parser(TokenType.RBRACE)
-    setCloseBrace(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBrace, token.getLocation());
-    }
-
-    entries: { key: string, value: Expression }[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitStructLiteral(this);
-    }
+    return { StructLiteral };
 }

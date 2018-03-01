@@ -1,93 +1,57 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TFunction } from '~/typecheck/types';
-import ASTNode from '~/syntax/ASTNode';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { ParenthesizedExpression } from '~/syntax/expressions/ParenthesizedExpression';
-import { TupleLiteral } from '~/syntax/expressions/TupleLiteral';
-import { Param, FunctionBody } from '~/syntax/declarations/FunctionDeclaration';
-import { Statement } from '~/syntax/statements/Statement';
-import { IdentifierExpression } from '~/syntax/expressions/IdentifierExpression';
+import { NodeBase, SyntaxType, Statement, Expression } from '~/syntax/environment';
+import { Param } from '~/syntax';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat, select } from '~/parser/parser';
 
 
-export class LambdaParam extends ASTNode {
-    @parser(TokenType.IDENT, { definite: true })
-    setName(token: Token) {
-        this.name = token.image;
-        this.registerLocation('name', token.getLocation());
-    }
-
-    name: string;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitLambdaParam(this);
-    }
-
-    prettyName() {
-        return this.name;
-    }
-}
-
-export abstract class BaseLambdaExpression extends Expression {
-    params: (Param | LambdaParam)[];
+export interface LambdaExpression extends NodeBase {
+    syntaxType: SyntaxType.LambdaExpression;
+    params: ReadonlyArray<Param>;
     body: Expression | Statement;
-    type: TFunction;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitLambdaExpression(this);
-    }
-
-    prettyName() {
-        return `<lambda>(${this.params.map(p => p.prettyName()).join(', ')})`;
-    }
 }
 
-/**
- * LambdaExpression ::= LPAREN (Param | LambdaParam)(* sep COMMA) RPAREN FAT_ARROW FunctionBody
- */
-@nonTerminal({ implements: Expression, before: [ParenthesizedExpression, TupleLiteral] })
-export class LambdaExpression extends BaseLambdaExpression {
-    @parser(TokenType.LPAREN)
-    setOpenParenToken(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
-    }
+export function register(Param: ParseFunc<Param>, FunctionBody: ParseFunc<Expression | Statement>) {
+    /**
+     * LambdaExpression ::= '(' (Param | IDENT)(* sep ',') ')' '=>' FunctionBody
+     */
+    const LambdaExpression: ParseFunc<LambdaExpression> = seq(
+        tok('('),
+        repeat(select<Param | Token>(
+            Param,
+            tok(TokenType.IDENT)
+        ), '*', tok(',')),
+        tok(')'),
+        tok('=>'),
+        FunctionBody,
+        ([_1, params, _2, _3, body], location) => ({
+            syntaxType: SyntaxType.LambdaExpression as SyntaxType.LambdaExpression,
+            location,
+            params: params.map(p => Token.isToken(p) ? lambdaParam(p) : p),
+            body
+        })
+    );
 
-    @parser([Param, LambdaParam], { repeat: '*', sep: TokenType.COMMA })
-    setParams(params: (Param | LambdaParam)[]) {
-        this.params = params;
-    }
+    /**
+     * ShorthandLambdaExpression ::= IDENT '=>' FunctionBody
+     */
+    const ShorthandLambdaExpression: ParseFunc<LambdaExpression> = seq(
+        tok(TokenType.IDENT),
+        tok('=>'),
+        FunctionBody,
+        ([param, _, body], location) => ({
+            syntaxType: SyntaxType.LambdaExpression as SyntaxType.LambdaExpression,
+            location,
+            params: [lambdaParam(param)],
+            body
+        })
+    );
 
-    @parser(TokenType.RPAREN) setCloseParen() {}
-    @parser(TokenType.FAT_ARROW, { definite: true }) setFatArrow() {}
-
-    @parser(FunctionBody, { err: 'INVALID_FUNCTION_BODY' })
-    setBody(body: Statement | Expression) {
-        this.body = body;
-        this.createAndRegisterLocation('self', this.locations.openParen, body.locations.self);
-    }
+    return { LambdaExpression, ShorthandLambdaExpression };
 }
 
-/**
- * ShorthandLambdaExpression ::= IDENT FAT_ARROW FunctionBody
- * 
- * This is a special version that only applies when you have a single
- * parameter whose type is implicit, so that no parentheses are required.
- */
-@nonTerminal({ implements: Expression, before: [IdentifierExpression] })
-export class ShorthandLambdaExpression extends BaseLambdaExpression {
-    @parser(TokenType.IDENT)
-    setParamName(token: Token) {
-        const param = new LambdaParam();
-        param.setName(token);
-        this.params = [param];
-    }
-
-    @parser(TokenType.FAT_ARROW, { definite: true }) setFatArrow() {}
-
-    @parser(FunctionBody)
-    setBody(body: Statement | Expression) {
-        this.body = body;
-        this.createAndRegisterLocation('self', this.params[0].locations.name, body.locations.self);
-    }
-}
+const lambdaParam = (p: Token): Param => ({
+    syntaxType: SyntaxType.Param as SyntaxType.Param,
+    location: p.location,
+    name: p,
+    typeNode: null
+});

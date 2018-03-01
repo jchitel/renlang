@@ -1,26 +1,36 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
+import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Type, leftRecursive: 'setLeft' })
-export class UnionType extends Type {
-    setLeft(left: Type) {
-        this.types = [left];
-    }
+export interface UnionType extends NodeBase {
+    syntaxType: SyntaxType.UnionType;
+    left: TypeNode;
+    right: TypeNode;
+}
 
-    @parser('|', { definite: true }) setVbarToken() {}
+export interface UnionTypeSuffix extends NodeBase {
+    syntaxType: SyntaxType.UnionType;
+    right: TypeNode;
+    setBase(left: TypeNode): UnionType;
+}
 
-    @parser(Type, { err: 'INVALID_UNION_TYPE' })
-    setRight(right: Type) {
-        if (right instanceof UnionType) this.types.push(...right.types);
-        else this.types.push(right);
-        this.createAndRegisterLocation('self', this.types[0].locations.self, this.types[this.types.length - 1].locations.self);
-    }
+export function register(TypeNode: ParseFunc<TypeNode>) {
+    const UnionTypeSuffix: ParseFunc<UnionTypeSuffix> = seq(
+        tok('|'),
+        TypeNode,
+        ([_1, right], location) => ({
+            syntaxType: SyntaxType.UnionType as SyntaxType.UnionType,
+            location,
+            right,
+            setBase(left: TypeNode) {
+                return {
+                    ...this,
+                    left,
+                    location: this.location.merge(left.location)
+                }; 
+            }
+        })
+    );
 
-    types: Type[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitUnionType(this);
-    }
+    return { UnionTypeSuffix };
 }

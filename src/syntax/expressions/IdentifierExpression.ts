@@ -1,20 +1,18 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression })
-export class IdentifierExpression extends Expression {
-    @parser(TokenType.IDENT, { definite: true })
-    setName(token: Token) {
-        this.name = token.image;
-        this.registerLocation('self', token.getLocation());
-    }
-
-    name: string;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitIdentifierExpression(this);
-    }
+export interface IdentifierExpression extends NodeBase {
+    syntaxType: SyntaxType.IdentifierExpression;
+    name: Token;
 }
+
+export const IdentifierExpression: ParseFunc<IdentifierExpression> = seq(
+    tok(TokenType.IDENT),
+    (name, location) => ({
+        syntaxType: SyntaxType.IdentifierExpression as SyntaxType.IdentifierExpression,
+        location,
+        name
+    })
+);

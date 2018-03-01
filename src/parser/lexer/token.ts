@@ -16,7 +16,7 @@ export enum TokenType {
     OPER,              // operators
     SYMBOL,            // any special syntactic symbols
     WHITESPACE,        // any non-new-line whitespace (spaces, tabs, etc.)
-    NEWLINE,           // any character sequence that produces a new line (inluding ;)
+    NEWLINE,           // \r\n and \n, has syntactic significance
     SEMI,              // semicolon, special delimiter that behaves as a new line
     EOF                // special end-of-file token
 }
@@ -34,6 +34,7 @@ export interface Token {
     readonly image: string;
     readonly value?: any;
     toString(): string;
+    with(props: Partial<Token>): Token;
 }
 
 /** Creates a new token */
@@ -42,12 +43,16 @@ export function Token(type: TokenType, position: FilePosition, image: string, va
 }
 
 export namespace Token {
+    const tokenSymbol = Symbol('Token');
+
     /** Creates a new token */
     export function create(type: TokenType, position: FilePosition, image: string, value?: any): Token {
-        return {
+        const token: Token = {
             type, image, value, location: position.computeRange(image),
-            toString,
+            toString, with: _with,
         };
+        // separate symbol assignment so that we catch excessive property errors above
+        return { ...token, [tokenSymbol]: tokenSymbol } as Token;
     }
 
     /**
@@ -58,7 +63,18 @@ export namespace Token {
         return create(TokenType.NONE, position, image);
     }
 
+    /**
+     * Determines if an object is a token.
+     */
+    export function isToken(token: {}): token is Token {
+        return tokenSymbol in token;
+    }
+
     function toString(this: Token) {
         return this.image;
+    }
+
+    function _with(this: Token, props: Partial<Token>) {
+        return { ...this, ...props };
     }
 }

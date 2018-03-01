@@ -1,36 +1,29 @@
-import { Type } from './Type';
-import { Token } from '~/parser/Tokenizer';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { parser, nonTerminal } from '~/parser/Parser';
-import { IdentifierType } from '~/syntax/types/IdentifierType';
+import { ParseFunc, tok, select, seq } from '~/parser/parser';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token } from '~/parser/lexer';
 
 
-export const builtInTypes = [
-    'u8', 'i8', 'byte',
-    'u16', 'i16', 'short',
-    'u32', 'i32', 'integer',
-    'u64', 'i64', 'long',
-    'int',
-    'f32', 'float',
-    'f64', 'double',
-    'string',
-    'char',
-    'bool',
-    'void',
-    'any',
-];
-
-@nonTerminal({ implements: Type, before: [IdentifierType] })
-export class BuiltInType extends Type {
-    @parser(builtInTypes, { definite: true })
-    setType(token: Token) {
-        this.typeNode = token.image;
-        this.registerLocation('self', token.getLocation());
-    }
-
-    typeNode: string;
-
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitBuiltInType(this);
-    }
+export interface BuiltInType extends NodeBase {
+    syntaxType: SyntaxType.BuiltInType;
+    name: Token;
 }
+
+export const BuiltInType: ParseFunc<BuiltInType> = seq(select(
+    tok('u8'), tok('i8'), tok('byte'),
+    tok('u16'), tok('i16'), tok('short'),
+    tok('u32'), tok('i32'), tok('integer'),
+    tok('u64'), tok('i64'), tok('long'),
+    tok('int'),
+    tok('f32'), tok('float'),
+    tok('f64'), tok('double'),
+    tok('string'),
+    tok('char'),
+    tok('bool'),
+    tok('void'),
+    tok('any'),
+    tok('never')
+), (name, location) => ({
+    location,
+    syntaxType: SyntaxType.BuiltInType as SyntaxType.BuiltInType,
+    name
+}));

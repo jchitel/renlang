@@ -1,7 +1,6 @@
-export * from './ImportDeclaration';
-export * from './Program';
-export * from './ConstantDeclaration';
-export * from './ExportDeclaration';
-export * from './ExportForwardDeclaration';
-export * from './TypeDeclaration';
-export * from './FunctionDeclaration';
+export { ImportDeclaration } from './ImportDeclaration';
+export { ConstantDeclaration } from './ConstantDeclaration';
+export { ExportDeclaration } from './ExportDeclaration';
+export { ExportForwardDeclaration } from './ExportForwardDeclaration';
+export { TypeDeclaration, TypeParam } from './TypeDeclaration';
+export { FunctionDeclaration, Param } from './FunctionDeclaration';

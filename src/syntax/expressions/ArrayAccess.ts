@@ -1,31 +1,37 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression, leftRecursive: 'setTarget' })
-export class ArrayAccess extends Expression {
-    setTarget(exp: Expression) {
-        this.target = exp;
-    }
-
-    @parser(TokenType.LBRACK, { definite: true }) setOpenBracket() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setIndexExp(exp: Expression) {
-        this.indexExp = exp;
-    }
-
-    @parser(TokenType.RBRACK, { err: 'ARRAY_ACCESS_MISSING_CLOSE_BRACKET' })
-    setCloseBracket(token: Token) {
-        this.createAndRegisterLocation('self', this.target.locations.self, token.getLocation());
-    }
-
+export interface ArrayAccess extends NodeBase {
+    syntaxType: SyntaxType.ArrayAccess;
     target: Expression;
-    indexExp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitArrayAccess(this);
-    }
+    index: Expression;
+}
+
+export interface ArrayAccessSuffix extends NodeBase {
+    syntaxType: SyntaxType.ArrayAccess;
+    index: Expression;
+    setBase(target: Expression): ArrayAccess;
+}
+
+export function register(Expression: ParseFunc<Expression>) {
+    const ArrayAccessSuffix: ParseFunc<ArrayAccessSuffix> = seq(
+        tok('['),
+        Expression,
+        tok(']'),
+        ([_1, index, _2], location) => ({
+            syntaxType: SyntaxType.ArrayAccess as SyntaxType.ArrayAccess,
+            location,
+            index,
+            setBase(target: Expression) {
+                return {
+                    ...this,
+                    target,
+                    location: this.location.merge(target.location)
+                }
+            }
+        })
+    );
+
+    return { ArrayAccessSuffix };
 }

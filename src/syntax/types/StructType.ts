@@ -1,38 +1,34 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser, exp, ParseResult } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-const Field = {
-    typeNode: exp(Type, { definite: true }),
-    name: exp(TokenType.IDENT, { err: 'INVALID_FIELD_NAME' }),
-};
 
-@nonTerminal({ implements: Type })
-export class StructType extends Type {
-    @parser(TokenType.LBRACE, { definite: true })
-    setOpenBrace(token: Token) {
-        this.registerLocation('openBrace', token.getLocation());
-    }
+interface Field {
+    typeNode: TypeNode;
+    name: Token;
+}
 
-    @parser(Field, { repeat: '*' })
-    setFields(fields: ParseResult[]) {
-        for (const field of fields) {
-            const name = field.name as Token;
-            this.fields.push({ type: field.typeNode as Type, name: name.image });
-            this.registerLocation(`field_${name}`, name.getLocation());
-        }
-    }
+export interface StructType extends NodeBase {
+    syntaxType: SyntaxType.StructType;
+    fields: ReadonlyArray<Field>;
+}
 
-    @parser(TokenType.RBRACE, { err: 'INVALID_STRUCT_NO_CLOSE_BRACE' })
-    setCloseBrace(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBrace, token.getLocation());
-    }
+export function register(TypeNode: ParseFunc<TypeNode>) {
+    const StructType: ParseFunc<StructType> = seq(
+        tok('{'),
+        repeat(seq(
+            TypeNode,
+            tok(TokenType.IDENT),
+            ([typeNode, name]) => ({ typeNode, name })
+        ), '*'),
+        tok('}'),
+        ([_1, fields, _2], location) => ({
+            syntaxType: SyntaxType.StructType as SyntaxType.StructType,
+            location,
+            fields
+        })
+    );
 
-    fields: { type: Type, name: string }[] = [];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitStructType(this);
-    }
+    return { StructType };
 }

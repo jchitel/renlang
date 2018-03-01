@@ -1,30 +1,23 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { TupleType } from '~/syntax/types/TupleType';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
 
 
-@nonTerminal({ implements: Type, before: [TupleType] })
-export class ParenthesizedType extends Type {
-    @parser(TokenType.LPAREN)
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
-    }
+export interface ParenthesizedType extends NodeBase {
+    syntaxType: SyntaxType.ParenthesizedType;
+    inner: TypeNode;
+}
 
-    @parser(Type)
-    setInnerType(type: Type) {
-        this.inner = type;
-    }
+export function register(TypeNode: ParseFunc<TypeNode>) {
+    const ParenthesizedType: ParseFunc<ParenthesizedType> = seq(
+        tok('('),
+        TypeNode,
+        tok(')'),
+        ([_1, inner, _2], location) => ({
+            syntaxType: SyntaxType.ParenthesizedType as SyntaxType.ParenthesizedType,
+            location,
+            inner
+        })
+    );
 
-    @parser(TokenType.RPAREN, { definite: true })
-    setCloseParen(token: Token){
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
-
-    inner: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitParenthesizedType(this);
-    }
+    return { ParenthesizedType };
 }

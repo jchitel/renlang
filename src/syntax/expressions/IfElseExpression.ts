@@ -1,43 +1,31 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression })
-export class IfElseExpression extends Expression {
-    @parser('if', { definite: true })
-    setIfToken(token: Token) {
-        this.registerLocation('if', token.getLocation());
-    }
-
-    @parser(TokenType.LPAREN, { err: 'IF_MISSING_OPEN_PAREN' }) setOpenParen() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.condition = exp;
-    }
-
-    @parser(TokenType.RPAREN, { err: 'IF_MISSING_CLOSE_PAREN' }) setCloseParen() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setConsequent(exp: Expression) {
-        this.consequent = exp;
-    }
-
-    @parser('else', { err: 'IF_MISSING_ELSE' }) setElse() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setAlternate(exp: Expression) {
-        this.alternate = exp;
-        this.createAndRegisterLocation('self', this.locations.if, exp.locations.self);
-    }
-
+export interface IfElseExpression extends NodeBase {
+    syntaxType: SyntaxType.IfElseExpression;
     condition: Expression;
     consequent: Expression;
     alternate: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitIfElseExpression(this);
-    }
+}
+
+export function register(Expression: ParseFunc<Expression>) {
+    const IfElseExpression: ParseFunc<IfElseExpression> = seq(
+        tok('if'),
+        tok('('),
+        Expression,
+        tok(')'),
+        Expression,
+        tok('else'),
+        Expression,
+        ([_1, _2, condition, _3, consequent, _4, alternate], location) => ({
+            syntaxType: SyntaxType.IfElseExpression as SyntaxType.IfElseExpression,
+            location,
+            condition,
+            consequent,
+            alternate
+        })
+    );
+
+    return { IfElseExpression };
 }

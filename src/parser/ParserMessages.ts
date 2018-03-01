@@ -1,4 +1,4 @@
-import { Token } from './Tokenizer';
+import { Token } from './lexer';
 
 
 const _messages = {

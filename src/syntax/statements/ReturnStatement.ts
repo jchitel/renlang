@@ -1,26 +1,22 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Statement })
-export class ReturnStatement extends Statement {
-    @parser('return', { definite: true })
-    setReturnToken(token: Token) {
-        this.registerLocation('self', token.getLocation());
-    }
+export interface ReturnStatement extends NodeBase {
+    syntaxType: SyntaxType.ReturnStatement;
+    exp: Optional<Expression>;
+}
 
-    @parser(Expression, { optional: true })
-    setExpression(exp: Expression) {
-        this.exp = exp;
-        this.createAndRegisterLocation('self', this.locations.self, exp.locations.self);
-    }
+export function register(Expression: ParseFunc<Expression>) {
+    const ReturnStatement: ParseFunc<ReturnStatement> = seq(
+        tok('return'),
+        optional(Expression),
+        ([_, exp], location) => ({
+            syntaxType: SyntaxType.ReturnStatement as SyntaxType.ReturnStatement,
+            location,
+            exp
+        })
+    );
 
-    exp?: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitReturnStatement(this);
-    }
+    return { ReturnStatement };
 }

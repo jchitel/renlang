@@ -1,7 +1,11 @@
-import { Program } from '~/syntax';
-import Parser from './Parser';
+import { ModuleRoot } from '~/syntax';
+import { createTokenStream } from './lexer';
+import { Parser } from './parser';
+import { SyntaxEnvironment } from '~/syntax/environment';
 
 
-export default function parse(source: string) {
-    return new Parser(source).parse(Program) as Program;
+export function parseModule(path: string): ModuleRoot {
+    const parser = Parser(createTokenStream(path));
+    const env = SyntaxEnvironment();
+    return parser.parse(env.ModuleRoot);
 }

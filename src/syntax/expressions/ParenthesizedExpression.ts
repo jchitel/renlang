@@ -1,30 +1,23 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { TupleLiteral } from '~/syntax/expressions/TupleLiteral';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression, before: [TupleLiteral] })
-export class ParenthesizedExpression extends Expression {
-    @parser(TokenType.LPAREN)
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
-    }
-
-    @parser(Expression)
-    setInner(exp: Expression) {
-        this.inner = exp;
-    }
-
-    @parser(TokenType.RPAREN, { definite: true })
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
-
+export interface ParenthesizedExpression extends NodeBase {
+    syntaxType: SyntaxType.ParenthesizedExpression;
     inner: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitParenthesizedExpression(this);
-    }
+}
+
+export function register(Expression: ParseFunc<Expression>) {
+    const ParenthesizedExpression: ParseFunc<ParenthesizedExpression> = seq(
+        tok('('),
+        Expression,
+        tok(')'),
+        ([_1, inner, _2], location) => ({
+            syntaxType: SyntaxType.ParenthesizedExpression as SyntaxType.ParenthesizedExpression,
+            location,
+            inner
+        })
+    );
+
+    return { ParenthesizedExpression };
 }

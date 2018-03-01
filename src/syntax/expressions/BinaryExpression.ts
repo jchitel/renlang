@@ -1,41 +1,45 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { BinaryOperator, getOperatorMetadata, verifyMultiOperator } from '~/runtime/operators';
-import { TokenType, Token, Location } from '~/parser/Tokenizer';
-import { PostfixExpression } from '~/syntax/expressions/UnaryExpression';
+import { verifyMultiOperator, getOperatorMetadata } from '~/runtime/operators';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, repeat, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Expression, before: [PostfixExpression], leftRecursive: 'setLeft' })
-export class BinaryExpression extends Expression {
-    setLeft(exp: Expression) {
-        this.left = exp;
-    }
-
-    // operators have to be parsed as oneOrMore because < and > screw everything up
-    @parser(TokenType.OPER, { repeat: '+' })
-    setOperator(tokens: Token[]) {
-        const oper = verifyMultiOperator(tokens);
-        this.symbol = oper.image;
-        this.registerLocation('oper', oper.getLocation());
-    }
-
-    @parser(Expression, { definite: true })
-    setRight(exp: Expression) {
-        this.right = exp;
-        this.createAndRegisterLocation('self', this.left.locations.self, this.right.locations.self);
-        // TODO: find a more performant way to do this so that it doesn't happen on every recursion
-        resolvePrecedence(this);
-    }
-
+export interface BinaryExpression extends NodeBase {
+    syntaxType: SyntaxType.BinaryExpression;
     left: Expression;
+    symbol: Token;
     right: Expression;
-    symbol: string;
-    operator: BinaryOperator;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitBinaryExpression(this);
-    }
+}
+
+export interface BinaryExpressionSuffix extends NodeBase {
+    syntaxType: SyntaxType.BinaryExpression;
+    symbol: Token;
+    right: Expression;
+    setBase(left: Expression): BinaryExpression;
+}
+
+export function register(Expression: ParseFunc<Expression>) {
+    const BinaryExpressionSuffix: ParseFunc<BinaryExpressionSuffix> = seq(
+        repeat(tok(TokenType.OPER), '+'),
+        Expression,
+        ([symbol, right], location) => ({
+            syntaxType: SyntaxType.BinaryExpression as SyntaxType.BinaryExpression,
+            location,
+            symbol: verifyMultiOperator(symbol), // TODO: make sure this works
+            right,
+            setBase(left: Expression) {
+                return resolvePrecedence({ // TODO: this will get run more than necessary
+                    syntaxType: this.syntaxType,
+                    symbol: this.symbol,
+                    right: this.right,
+                    left,
+                    location: this.location.merge(left.location)
+                })
+            }
+        })
+    );
+
+    return { BinaryExpressionSuffix };
 }
 
 /**
@@ -52,7 +56,7 @@ function resolvePrecedence(exp: BinaryExpression) {
     const operStack: Token[] = [];
     while (items.length) {
         const item = items.shift() as (Expression | Token);
-        if (item instanceof Expression) {
+        if (!Token.isToken(item)) {
             expStack.push(item);
         } else {
             while (operStack.length && shouldPopOperator(item, operStack[operStack.length - 1])) {
@@ -66,12 +70,7 @@ function resolvePrecedence(exp: BinaryExpression) {
         expStack.push(createNewBinExpression(expStack.pop()!, expStack.pop()!, operStack.pop()!));
     }
     // final expression tree is the only element left on the exp stack
-    const result = expStack[0] as BinaryExpression;
-    // apply the resulting properties onto the target expression
-    exp.left = result.left;
-    exp.right = result.right;
-    exp.symbol = result.symbol;
-    exp.locations = result.locations;
+    return expStack[0] as BinaryExpression;
 }
 
 function shouldPopOperator(nextToken: Token, stackToken: Token) {
@@ -83,14 +82,14 @@ function shouldPopOperator(nextToken: Token, stackToken: Token) {
 function binaryExpressionToList(exp: BinaryExpression) {
     const items: (Token | Expression)[] = [];
     // the tree is left-associative, so we assemble the list from right to left
-    let operToken = createNewOperToken(exp.locations.oper, exp.symbol);
+    let operToken = createNewOperToken(exp.symbol);
     let left = exp.left, right = exp.right;
     while (true) {
         items.unshift(right);
         items.unshift(operToken);
-        if (left instanceof BinaryExpression) {
+        if (left.syntaxType === SyntaxType.BinaryExpression) {
             right = left.right;
-            operToken = createNewOperToken(left.locations.oper, left.symbol);
+            operToken = createNewOperToken(left.symbol);
             left = left.left;
         } else {
             items.unshift(left);
@@ -100,16 +99,16 @@ function binaryExpressionToList(exp: BinaryExpression) {
     return items;
 }
 
-function createNewOperToken(loc: Location, symbol: string) {
-    return new Token(TokenType.OPER, loc.startLine, loc.startColumn, symbol);
+function createNewOperToken(tok: Token) {
+    return tok.with({});
 }
 
 function createNewBinExpression(right: Expression, left: Expression, oper: Token) {
-    const exp = new BinaryExpression();
-    exp.right = right;
-    exp.left = left;
-    exp.symbol = oper.image;
-    exp.registerLocation('oper', oper.getLocation());
-    exp.createAndRegisterLocation('self', exp.left.locations.self, exp.right.locations.self);
-    return exp;
+    return {
+        syntaxType: SyntaxType.BinaryExpression as SyntaxType.BinaryExpression,
+        location: left.location.merge(right.location),
+        left,
+        symbol: oper,
+        right
+    };
 }

@@ -1,19 +1,21 @@
-import { Statement } from '~/syntax/statements/Statement';
-import { parser, nonTerminal } from '~/parser/Parser';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Statement })
-export class ExpressionStatement extends Statement {
-    @parser(Expression, { definite: true })
-    setExpression(exp: Expression) {
-        this.expression = exp;
-    }
-
+export interface ExpressionStatement extends NodeBase {
+    syntaxType: SyntaxType.ExpressionStatement;
     expression: Expression;
+}
 
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitExpressionStatement(this);
-    }
+export function register(Expression: ParseFunc<Expression>) {
+    const ExpressionStatement: ParseFunc<ExpressionStatement> = seq(
+        Expression,
+        (expression, location) => ({
+            syntaxType: SyntaxType.ExpressionStatement as SyntaxType.ExpressionStatement,
+            location,
+            expression
+        })
+    );
+
+    return { ExpressionStatement };
 }

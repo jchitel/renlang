@@ -1,27 +1,33 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-@nonTerminal({ implements: Type, leftRecursive: 'setBaseType' })
-export class NamespaceAccessType extends Type {
-    setBaseType(type: Type) {
-        this.baseType = type;
-    }
-
-    @parser(TokenType.DOT, { definite: true }) setDot() {}
-
-    @parser(TokenType.IDENT)
-    setTypeName(token: Token) {
-        this.typeName = token.image;
-        this.createAndRegisterLocation('self', this.baseType.locations.self, token.getLocation());
-    }
-
-    baseType: Type;
-    typeName: string;
-
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitNamespaceAccessType(this);
-    }
+export interface NamespaceAccessType extends NodeBase {
+    syntaxType: SyntaxType.NamespaceAccessType;
+    baseType: TypeNode;
+    typeName: Token;
 }
+
+export interface NamespaceAccessTypeSuffix extends NodeBase {
+    syntaxType: SyntaxType.NamespaceAccessType;
+    typeName: Token;
+    setBase(baseType: TypeNode): NamespaceAccessType;
+}
+
+export const NamespaceAccessTypeSuffix: ParseFunc<NamespaceAccessTypeSuffix> = seq(
+    tok('.'),
+    tok(TokenType.IDENT),
+    ([_1, typeName], location) => ({
+        syntaxType: SyntaxType.NamespaceAccessType as SyntaxType.NamespaceAccessType,
+        location,
+        typeName,
+        setBase(baseType: TypeNode) {
+            return {
+                ...this, 
+                baseType,
+                location: this.location.merge(baseType.location)
+            }
+        }
+    })
+);
