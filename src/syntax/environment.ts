@@ -4,7 +4,7 @@ import {
     // module
     ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration,
     // declaration
-    TypeDeclaration, FunctionDeclaration, ConstantDeclaration,
+    TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration,
     // type
     BuiltInType, StructType, TupleType, ArrayType, FunctionType, UnionType, IdentifierType, ParenthesizedType,
     SpecificType, NamespaceAccessType,
@@ -52,6 +52,7 @@ import { register as register_ExportDeclaration } from './declarations/ExportDec
 import { register as register_TypeDeclaration } from './declarations/TypeDeclaration';
 import { register as register_FunctionDeclaration } from './declarations/FunctionDeclaration';
 import { register as register_ConstantDeclaration } from './declarations/ConstantDeclaration';
+import { register as register_NamespaceDeclaration } from './declarations/NamespaceDeclaration';
 import { register as register_ModuleRoot } from './ModuleRoot';
 
 /**
@@ -68,6 +69,7 @@ export enum SyntaxType {
     TypeDeclaration = 'TypeDeclaration',
     FunctionDeclaration = 'FunctionDeclaration',
     ConstantDeclaration = 'ConstantDeclaration',
+    NamespaceDeclaration = 'NamespaceDeclaration',
     // #endregion
     // #region types
     BuiltInType = 'BuiltInType',
@@ -189,13 +191,15 @@ export function SyntaxEnvironment() {
 
     // module
     const { ExportDeclaration } = register_ExportDeclaration(Declaration);
+    const { NamespaceDeclaration } = register_NamespaceDeclaration(Declaration, ExportDeclaration);
     const { ModuleRoot } = register_ModuleRoot(Declaration, ExportDeclaration);
 
     function Declaration(parser: Parser): ParseResult<Declaration> {
         const fn: ParseFunc<Declaration> = select<Declaration>(
             TypeDeclaration,
             FunctionDeclaration,
-            ConstantDeclaration
+            ConstantDeclaration,
+            NamespaceDeclaration
         );
         return fn(parser);
     }
@@ -290,7 +294,8 @@ export interface NodeBase<K extends SyntaxType> {
 export type Declaration =
     | TypeDeclaration
     | FunctionDeclaration
-    | ConstantDeclaration;
+    | ConstantDeclaration
+    | NamespaceDeclaration;
 
 /**
  * The discriminated union of all type nodes

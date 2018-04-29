@@ -4,3 +4,4 @@ export { ExportDeclaration } from './ExportDeclaration';
 export { ExportForwardDeclaration } from './ExportForwardDeclaration';
 export { TypeDeclaration, TypeParam } from './TypeDeclaration';
 export { FunctionDeclaration, Param } from './FunctionDeclaration';
+export { NamespaceDeclaration } from './NamespaceDeclaration';
