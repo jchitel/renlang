@@ -1,5 +1,0 @@
-{
-    "instrumentation": {
-        "excludes": ["scripts/*.js", "dist/src/require-hook.js"]
-    }
-}
