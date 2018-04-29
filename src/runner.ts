@@ -1,19 +1,14 @@
-import { mapSet } from '~/utils/utils';
-import { parseModule } from '~/parser';
-import { Diagnostic, DiagnosticLevel } from '~/core';
+import { DiagnosticLevel } from '~/core';
+import typecheck from '~/typecheck';
+import { Program } from '~/typecheck/program';
 
 
 /**
  * Runs the program at the given (absolute) path with the provided arguments.
  */
 export function runProgram(path: string, args: string[]) {
-    let program: Program = {
-        modules: new Map<string, Module>(),
-        diagnostics: [],
-        addModule,
-    };
-    // add the main module (this will be a recursive operation for any imported modules)
-    program = program.addModule(path);
+    // perform type checking on the specified path, which will enumerate all modules in the Program
+    const program = typecheck(path);
     // we will eventually provide a verbosity option, but for now just set it to Message
     const diags = program.diagnostics.filter(d => d.level >= DiagnosticLevel.Message);
     const errCount = diags.count(d => d.level >= DiagnosticLevel.Error);
@@ -31,27 +26,12 @@ export function runProgram(path: string, args: string[]) {
         const suffix = warnCount > 0 ? ' with warnings' : '';
         process.stderr.write(`\nCompilation succeeded${suffix}\n\n`);
     }
-    // compiled successfully, run the main module
-    return runModule(program, path, args);
+    // semantically good, translate the program
+    const executable = translate(program);
+    // compiled successfully, run the program
+    return interpret(executable, args);
 }
 
-export function addModule(this: Program, path: string): Program {
-    const { module, diagnostics } = parseModule(path);
-    return {
-        ...this,
-        modules: mapSet(this.modules, path, module),
-        diagnostics: [...this.diagnostics, ...diagnostics],
-    }
-}
-
-export function runModule(program: Program, path: string, args: string[]): number {
-    const module = program.modules.get(path);
-}
-
-export interface Program {
-    readonly modules: ReadonlyMap<string, Module>;
-    readonly diagnostics: ReadonlyArray<Diagnostic>;
-    readonly addModule: typeof addModule;
-}
-
-export interface Module {}
+// TODO
+const translate = (_program: Program) => ({});
+const interpret = (_executable: {}, _args: string[]) => 0;

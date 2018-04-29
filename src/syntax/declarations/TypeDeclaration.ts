@@ -3,8 +3,7 @@ import { ParseFunc, seq, optional, select, tok, repeat } from '~/parser/parser';
 import { TokenType, Token } from '~/parser/lexer';
 
 
-export interface TypeParam extends NodeBase {
-    readonly syntaxType: SyntaxType.TypeParam;
+export interface TypeParam extends NodeBase<SyntaxType.TypeParam> {
     readonly name: Token;
     readonly varianceOp: Optional<Token>;
     readonly typeConstraint: Optional<TypeNode>;
@@ -14,8 +13,7 @@ export interface TypeParamList {
     readonly params: ReadonlyArray<TypeParam>;
 }
 
-export interface TypeDeclaration extends NodeBase {
-    readonly syntaxType: SyntaxType.TypeDeclaration;
+export interface TypeDeclaration extends NodeBase<SyntaxType.TypeDeclaration> {
     readonly name: Optional<Token>;
     readonly typeParams: ReadonlyArray<TypeParam>;
     readonly typeNode: TypeNode;

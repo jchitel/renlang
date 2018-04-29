@@ -3,14 +3,12 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface FieldAccess extends NodeBase {
-    syntaxType: SyntaxType.FieldAccess;
+export interface FieldAccess extends NodeBase<SyntaxType.FieldAccess> {
     target: Expression;
     field: Token;
 }
 
-export interface FieldAccessSuffix extends NodeBase {
-    syntaxType: SyntaxType.FieldAccess;
+export interface FieldAccessSuffix extends NodeBase<SyntaxType.FieldAccess> {
     field: Token;
     setBase(target: Expression): FieldAccess;
 }

@@ -4,8 +4,7 @@ import { seq, tok, ParseFunc } from '~/parser/parser';
 
 
 
-export interface IdentifierType extends NodeBase {
-    syntaxType: SyntaxType.IdentifierType;
+export interface IdentifierType extends NodeBase<SyntaxType.IdentifierType> {
     name: Token;
 }
 

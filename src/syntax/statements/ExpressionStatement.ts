@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq } from '~/parser/parser';
 
 
-export interface ExpressionStatement extends NodeBase {
-    syntaxType: SyntaxType.ExpressionStatement;
+export interface ExpressionStatement extends NodeBase<SyntaxType.ExpressionStatement> {
     expression: Expression;
 }
 

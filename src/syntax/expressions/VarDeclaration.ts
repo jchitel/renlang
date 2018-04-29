@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface VarDeclaration extends NodeBase {
-    syntaxType: SyntaxType.VarDeclaration;
+export interface VarDeclaration extends NodeBase<SyntaxType.VarDeclaration> {
     name: Token;
     init: Expression;
 }

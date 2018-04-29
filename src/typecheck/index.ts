@@ -1,7 +1,7 @@
-import TypeChecker from './TypeChecker';
-import { Program } from '~/syntax';
+import { TypeChecker } from './checker';
 
 
-export default function typecheck(ast: Program, path: string) {
-    return new TypeChecker().check(ast, path);
+export default function typecheck(path: string) {
+    const checker = TypeChecker();
+    return checker.check(path);
 }

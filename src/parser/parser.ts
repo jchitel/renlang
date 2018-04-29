@@ -1,4 +1,4 @@
-import { FileRange } from '~/core';
+import { FileRange, Diagnostic, CoreObject } from '~/core';
 import { Token, TokenType } from '~/parser/lexer';
 import { LazyList, NonEmptyLazyList, EmptyLazyList } from '~/utils/lazy-list';
 
@@ -14,68 +14,66 @@ export interface ParseResult<T> {
 
 interface ParseResultInternal<T> {
     result: Optional<T>;
-    remaining: ParserInternal;
+    remaining: Parser;
 }
 
 // #region Parser
 
-export interface Parser {
-    parse<T>(fn: ParseFunc<T>): T;
-}
+abstract class ParserBase extends CoreObject<ParserBase> {
+    abstract readonly empty: boolean;
+    abstract readonly tokens: LazyList<Token>;
 
-interface BaseParserInternal extends Parser {
-    readonly failToken: Optional<Token>;
-    readonly successLocation: Optional<FileRange>;
-    fail(token: Optional<Token>): ParserInternal;
-    succeed(location: Optional<FileRange>): ParserInternal;
-}
+    readonly failToken: Optional<Token> = null;
+    readonly successLocation: Optional<FileRange> = null;
 
-interface NonEmptyParserInternal extends BaseParserInternal {
-    readonly empty: false;
-    readonly tokens: NonEmptyLazyList<Token>;
-    next(): { token: Token, remaining: ParserInternal };
-}
-
-interface EmptyParserInternal extends BaseParserInternal {
-    readonly empty: true;
-    readonly tokens: EmptyLazyList<Token>;
-}
-
-type ParserInternal = NonEmptyParserInternal | EmptyParserInternal;
-
-export function Parser(tokenStream: LazyList<Token>): Parser {
-    return Parser.init(tokenStream);
-}
-
-export namespace Parser {
-    export function init(tokenStream: LazyList<Token>): Parser {
-        const common = { parse, succeed, fail, successLocation: null, failToken: null };
-        if (tokenStream.empty) {
-            const parser: EmptyParserInternal = { ...common, empty: true, tokens: tokenStream };
-            return parser;
-        } else {
-            const parser: NonEmptyParserInternal = { ...common, empty: false, tokens: tokenStream, next };
-            return parser;
-        }
+    fail(token: Optional<Token>): Parser {
+        return this.clone({ failToken: token, successLocation: null }) as Parser;
     }
 
-    function parse<T>(this: ParserInternal, fn: ParseFunc<T>): T {
-        const { result, remaining } = fn(this) as ParseResultInternal<T>;
-        if (!result) throw new Error('FAIL: unable to parse'); // TODO this is not how this should work
-        if (!remaining.empty) throw new Error('FAIL: unprocessed input remains'); // TODO pass token
-        return result;
+    succeed(location: Optional<FileRange>): Parser {
+        return this.clone({ successLocation: location, failToken: null }) as Parser;
     }
 
-    function next(this: NonEmptyParserInternal): { token: Token, remaining: ParserInternal } {
-        return { token: this.tokens.head, remaining: init(this.tokens.tail) as ParserInternal };
+    parse<T>(fn: ParseFunc<T>): { result: Optional<T>, diagnostics: ReadonlyArray<Diagnostic> } {
+        const { result, remaining } = fn(this as Parser) as ParseResultInternal<T>;
+        if (!remaining.empty) throw new Error('Unprocessed input remains, you likely need to include an EOF in your syntax definition');
+        return {
+            result,
+            // TODO: proper error system
+            diagnostics: remaining.failToken
+                ? [new Diagnostic(`Unexpected "${remaining.failToken.image}" token`, remaining.failToken.location)]
+                : []
+        };
+    }
+}
+
+class NonEmptyParser extends ParserBase {
+    readonly empty: false = false;
+
+    constructor(readonly tokens: NonEmptyLazyList<Token>) {
+        super();
     }
 
-    function succeed(this: ParserInternal, location: Optional<FileRange>): ParserInternal {
-        return { ...this, successLocation: location, failToken: null };
+    next(): { token: Token, remaining: Parser } {
+        return { token: this.tokens.head, remaining: createParser(this.tokens.tail) };
     }
+}
 
-    function fail(this: ParserInternal, token: Optional<Token>): ParserInternal {
-        return { ...this, failToken: token, successLocation: null };
+class EmptyParser extends ParserBase {
+    readonly empty: true = true;
+
+    constructor(readonly tokens: EmptyLazyList<Token>) {
+        super();
+    }
+}
+
+export type Parser = NonEmptyParser | EmptyParser;
+
+export function createParser(tokenStream: LazyList<Token>): Parser {
+    if (tokenStream.empty) {
+        return new EmptyParser(tokenStream);
+    } else {
+        return new NonEmptyParser(tokenStream);
     }
 }
 
@@ -117,7 +115,7 @@ export function repeat<T>(fn: ParseFunc<T>, key: RepeatKey, sep?: ParseFunc<Toke
         // base case, collect successful results repeatedly until first failure
         return parser => {
             const results: T[] = [];
-            let next = parser as ParserInternal;
+            let next = parser;
             let location: Optional<FileRange> = null;
             while (true) {
                 const { result, remaining } = fn(next) as ParseResultInternal<T>;
@@ -144,7 +142,7 @@ export function seq<T>(...args: any[]): ParseFunc<T> {
     const fns = args.slice(0, args.length - 1) as ParseFunc<{}>[];
     const toResult = args[args.length - 1] as (s: Array<Optional<{}>>, location: FileRange) => T;
 
-    return (parser: ParserInternal) => {
+    return (parser) => {
         let next = parser;
         const results: Array<Optional<{}>> = [];
         let location: Optional<FileRange> = null;
@@ -161,7 +159,7 @@ export function seq<T>(...args: any[]): ParseFunc<T> {
 export function tok(image: string): ParseFunc<Token>;
 export function tok(type: TokenType): ParseFunc<Token>;
 export function tok(t: string | TokenType): ParseFunc<Token> {
-    return (parser: ParserInternal) => {
+    return (parser) => {
         if (parser.empty) throw new Error('token stream was empty');
         const { token, remaining } = parser.next();
         if (typeof t === 'string') {
@@ -174,7 +172,7 @@ export function tok(t: string | TokenType): ParseFunc<Token> {
 }
 
 export function select<T>(...fns: ParseFunc<T>[]): ParseFunc<T> {
-    return (parser: ParserInternal) => {
+    return (parser) => {
         for (const fn of fns) {
             const { result, remaining } = fn(parser) as ParseResultInternal<T>;
             if (remaining.failToken) continue;

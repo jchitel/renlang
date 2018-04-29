@@ -6,4 +6,6 @@ export * from './statements';
 export * from './declarations';
 export { ModuleRoot } from './ModuleRoot';
 
-export { default as INodeVisitor } from './visitors/interfaces/INodeVisitor';
+export { Declaration, TypeNode, Expression, Statement } from './environment';
+
+export * from './visitor';

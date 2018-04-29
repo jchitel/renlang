@@ -4,15 +4,13 @@ import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 import { verifyMultiOperator } from '~/runtime/operators';
 
 
-export interface UnaryExpression extends NodeBase {
-    syntaxType: SyntaxType.UnaryExpression;
+export interface UnaryExpression extends NodeBase<SyntaxType.UnaryExpression> {
     target: Expression;
     symbol: Token;
     prefix: boolean;
 }
 
-export interface PostfixExpressionSuffix extends NodeBase {
-    syntaxType: SyntaxType.UnaryExpression;
+export interface PostfixExpressionSuffix extends NodeBase<SyntaxType.UnaryExpression> {
     symbol: Token;
     prefix: false;
     setBase(target: Expression): UnaryExpression;

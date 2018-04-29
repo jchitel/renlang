@@ -8,8 +8,7 @@ interface Catch {
     body: Statement;
 }
 
-export interface TryCatchStatement extends NodeBase {
-    syntaxType: SyntaxType.TryCatchStatement;
+export interface TryCatchStatement extends NodeBase<SyntaxType.TryCatchStatement> {
     try: Statement;
     catches: ReadonlyArray<Catch>;
     finally: Optional<Statement>;

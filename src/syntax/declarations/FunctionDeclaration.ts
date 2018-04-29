@@ -5,14 +5,12 @@ import { Token, TokenType } from '~/parser/lexer';
 import { Block } from '~/syntax';
 
 
-export interface Param extends NodeBase {
-    readonly syntaxType: SyntaxType.Param;
+export interface Param extends NodeBase<SyntaxType.Param> {
     readonly name: Token;
     readonly typeNode: Optional<TypeNode>; // optional to support lambda params
 }
 
-export interface FunctionDeclaration extends NodeBase {
-    readonly syntaxType: SyntaxType.FunctionDeclaration;
+export interface FunctionDeclaration extends NodeBase<SyntaxType.FunctionDeclaration> {
     readonly returnType: TypeNode;
     readonly name: Optional<Token>;
     readonly typeParams: ReadonlyArray<TypeParam>;

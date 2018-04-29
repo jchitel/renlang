@@ -3,14 +3,12 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface NamespaceAccessType extends NodeBase {
-    syntaxType: SyntaxType.NamespaceAccessType;
+export interface NamespaceAccessType extends NodeBase<SyntaxType.NamespaceAccessType> {
     baseType: TypeNode;
     typeName: Token;
 }
 
-export interface NamespaceAccessTypeSuffix extends NodeBase {
-    syntaxType: SyntaxType.NamespaceAccessType;
+export interface NamespaceAccessTypeSuffix extends NodeBase<SyntaxType.NamespaceAccessType> {
     typeName: Token;
     setBase(baseType: TypeNode): NamespaceAccessType;
 }

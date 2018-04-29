@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface IfElseExpression extends NodeBase {
-    syntaxType: SyntaxType.IfElseExpression;
+export interface IfElseExpression extends NodeBase<SyntaxType.IfElseExpression> {
     condition: Expression;
     consequent: Expression;
     alternate: Expression;

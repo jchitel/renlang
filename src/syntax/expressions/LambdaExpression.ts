@@ -4,8 +4,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, repeat, select } from '~/parser/parser';
 
 
-export interface LambdaExpression extends NodeBase {
-    syntaxType: SyntaxType.LambdaExpression;
+export interface LambdaExpression extends NodeBase<SyntaxType.LambdaExpression> {
     params: ReadonlyArray<Param>;
     body: Expression | Statement;
 }
@@ -26,7 +25,7 @@ export function register(Param: ParseFunc<Param>, FunctionBody: ParseFunc<Expres
         ([_1, params, _2, _3, body], location) => ({
             syntaxType: SyntaxType.LambdaExpression as SyntaxType.LambdaExpression,
             location,
-            params: params.map(p => Token.isToken(p) ? lambdaParam(p) : p),
+            params: params.map(p => p instanceof Token ? lambdaParam(p) : p),
             body
         })
     );

@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface CharLiteral extends NodeBase {
-    syntaxType: SyntaxType.CharLiteral;
+export interface CharLiteral extends NodeBase<SyntaxType.CharLiteral> {
     value: Token;
 }
 

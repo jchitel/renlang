@@ -2,14 +2,12 @@ import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface UnionType extends NodeBase {
-    syntaxType: SyntaxType.UnionType;
+export interface UnionType extends NodeBase<SyntaxType.UnionType> {
     left: TypeNode;
     right: TypeNode;
 }
 
-export interface UnionTypeSuffix extends NodeBase {
-    syntaxType: SyntaxType.UnionType;
+export interface UnionTypeSuffix extends NodeBase<SyntaxType.UnionType> {
     right: TypeNode;
     setBase(left: TypeNode): UnionType;
 }

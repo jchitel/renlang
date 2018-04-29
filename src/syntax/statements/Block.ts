@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Statement } from '~/syntax/environment';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-export interface Block extends NodeBase {
-    syntaxType: SyntaxType.Block;
+export interface Block extends NodeBase<SyntaxType.Block> {
     statements: ReadonlyArray<Statement>;
 }
 

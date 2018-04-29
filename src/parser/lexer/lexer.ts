@@ -98,10 +98,15 @@ const IGNORED_TYPES = [TokenType.COMMENT, TokenType.WHITESPACE];
  * Reads a stream of characters from the file at the specified path and performs lexical analysis on the stream,
  * returning a stream of tokens.
  */
-export function createTokenStream(path: string, ignoreMode = true): LazyList<Token> {
-    const list = consumeTokens(createCharStream(path));
-    if (!ignoreMode) return list;
-    return list.filter(t => !IGNORED_TYPES.includes(t.type));
+export function createTokenStream(path: string, ignoreMode = true): { tokens: LazyList<Token>, diagnostics: ReadonlyArray<Diagnostic> } {
+    try {
+        const list = consumeTokens(createCharStream(path));
+        if (!ignoreMode) return { tokens: list, diagnostics: [] };
+        return { tokens: list.filter(t => !IGNORED_TYPES.includes(t.type)), diagnostics: [] };
+    } catch (err) {
+        if (!(err instanceof BoxError)) throw err;
+        return { tokens: empty(), diagnostics: [err.value] };
+    }
 }
 
 /**
@@ -118,7 +123,7 @@ function consumeTokens(charStream: CharStream): LazyList<Token> {
  */
 function consumeToken(charStream: CharStream): TokenResult {
     // stream is empty, return the final EOF token
-    if (charStream.empty) return { final: Token(TokenType.EOF, charStream.position, ''), remaining: charStream };
+    if (charStream.empty) return { final: new Token(TokenType.EOF, charStream.position, ''), remaining: charStream };
     // read a single character from the stream
     const { char, stream } = charStream.read();
 
@@ -143,7 +148,7 @@ function consumeToken(charStream: CharStream): TokenResult {
             state => consumeWhitespace(state.setType(TokenType.WHITESPACE)))
         .else(() => {
             // otherwise it is not a valid character (for now)
-            throw new BoxError(Diagnostic(`Invalid character '${char}'`, charStream.position));
+            throw new BoxError(new Diagnostic(`Invalid character '${char}'`, charStream.position));
         })
         .finish();
 }
@@ -175,7 +180,7 @@ enum MutliLineCommentState {
  */
 function consumeMultiLineComment(pending: LexerState, state = MutliLineCommentState.START): LexerState {
     // we can't use ifHasNext() here because a) we need tail recursion b) we have a state parameter
-    if (pending.empty) throw new BoxError(Diagnostic('Unterminated comment', pending.stream.position));
+    if (pending.empty) throw new BoxError(new Diagnostic('Unterminated comment', pending.stream.position));
     const first = pending.stream.first();
     let nextState = state;
     if (state === MutliLineCommentState.START) {
@@ -272,7 +277,7 @@ const ESCAPE: { readonly [key: string]: string } = { n: '\n', r: '\r', t: '\t', 
  * Literals of character sequences
  */
 function consumeStringLiteral(pending: LexerState): LexerState {
-    if (pending.empty) throw new BoxError(Diagnostic('Unterminated string', pending.stream.position));
+    if (pending.empty) throw new BoxError(new Diagnostic('Unterminated string', pending.stream.position));
     const next = pending
         // end of string
         .ifHasNext(1, ([c]) => c === '"', state => state)
@@ -306,10 +311,10 @@ function consumeStringLiteral(pending: LexerState): LexerState {
  * Literals of single characters
  */
 function consumeCharLiteral(pending: LexerState): LexerState {
-    if (pending.empty) throw new BoxError(Diagnostic('Unterminated character', pending.stream.position));
+    if (pending.empty) throw new BoxError(new Diagnostic('Unterminated character', pending.stream.position));
     const next = pending
         .ifHasNext(1, ([c]) => c === "'",
-            () => { throw new BoxError(Diagnostic('Empty character', pending.stream.position)) })
+            () => { throw new BoxError(new Diagnostic('Empty character', pending.stream.position)) })
         // basic escape codes
         .elseIf(2, ([c1, c2]) => c1 === '\\' && 'nrtfbv'.includes(c2),
             (state, cs) => state.setValue(() => ESCAPE[cs[1]]))
@@ -334,7 +339,7 @@ function consumeCharLiteral(pending: LexerState): LexerState {
     // the next character must absolutely be a ' and nothing else
     return next
         .ifHasNext(1, ([c]) => c == "'", state => state)
-        .else(() => { throw new BoxError(Diagnostic('Unterminated character', next.stream.position)) });
+        .else(() => { throw new BoxError(new Diagnostic('Unterminated character', next.stream.position)) });
 }
 
 function consumeSymbol(pending: LexerState): LexerState {

@@ -9,8 +9,7 @@ export interface Forward {
     readonly exportName: Token;
 }
 
-export interface ExportForwardDeclaration extends NodeBase {
-    readonly syntaxType: SyntaxType.ExportForwardDeclaration;
+export interface ExportForwardDeclaration extends NodeBase<SyntaxType.ExportForwardDeclaration> {
     readonly moduleName: Token;
     readonly forwards: ReadonlyArray<Forward>;
 }

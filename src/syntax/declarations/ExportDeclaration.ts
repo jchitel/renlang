@@ -21,8 +21,7 @@ interface Export {
     readonly value?: Declaration;
 }
 
-export interface ExportDeclaration extends NodeBase {
-    readonly syntaxType: SyntaxType.ExportDeclaration;
+export interface ExportDeclaration extends NodeBase<SyntaxType.ExportDeclaration> {
     readonly exports: ReadonlyArray<Export>;
 }
 
@@ -37,7 +36,7 @@ export function register(Declaration: ParseFunc<Declaration>) {
         ([_, def, value], location) => ({
             location,
             syntaxType: SyntaxType.ExportDeclaration as SyntaxType.ExportDeclaration,
-            exports: Token.isToken(value)
+            exports: value instanceof Token
                 ? [{ exportName: def, valueName: value }]
                 : [{ exportName: def, valueName: value.name, value }]
         })

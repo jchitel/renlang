@@ -3,8 +3,7 @@ import { Token } from '~/parser/lexer';
 import { ParseFunc, seq, select, tok } from '~/parser/parser';
 
 
-export interface BoolLiteral extends NodeBase {
-    syntaxType: SyntaxType.BoolLiteral;
+export interface BoolLiteral extends NodeBase<SyntaxType.BoolLiteral> {
     value: Token;
 }
 

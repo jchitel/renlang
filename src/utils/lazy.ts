@@ -1,3 +1,6 @@
+import { CoreObject } from '~/core';
+
+
 /**
  * This is a simple interface for lazy evaluation in TS.
  * 
@@ -16,9 +19,16 @@ export default interface Lazy<T> {
     readonly value: T;
 }
 
-interface SimpleLazy<T> extends Lazy<T> {
-    readonly _evaluator: () => T;
-    _value?: T;
+class SimpleLazy<T> extends CoreObject<SimpleLazy<T>> implements Lazy<T> {
+    private _value?: T;
+
+    constructor(private evaluator: () => T) {
+        super();
+    }
+
+    get value(): T {
+        return !('_value' in this) ? (this._value = this.evaluator()) : this._value as T;
+    }
 }
 
 /**
@@ -33,11 +43,5 @@ interface SimpleLazy<T> extends Lazy<T> {
  * mechanism.
  */
 export function lazy<T>(evaluator: () => T): Lazy<T> {
-    const obj: SimpleLazy<T> = {
-        _evaluator: evaluator,
-        get value(): T {
-            return !('_value' in this) ? (this._value = this._evaluator()) : this._value as T;
-        },
-    };
-    return obj;
+    return new SimpleLazy(evaluator);
 }

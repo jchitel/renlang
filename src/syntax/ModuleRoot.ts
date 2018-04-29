@@ -5,8 +5,7 @@ import { ExportDeclaration, ExportForwardDeclaration } from '~/syntax';
 import { ParseFunc, seq, repeat, select, tok } from '~/parser/parser';
 
 
-export interface ModuleRoot extends NodeBase {
-    readonly syntaxType: SyntaxType.ModuleRoot;
+export interface ModuleRoot extends NodeBase<SyntaxType.ModuleRoot> {
     readonly imports: ReadonlyArray<ImportDeclaration>;
     readonly declarations: ReadonlyArray<Declaration | ExportDeclaration | ExportForwardDeclaration>;
 }

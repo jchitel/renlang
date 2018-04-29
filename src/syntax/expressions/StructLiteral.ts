@@ -8,8 +8,7 @@ interface StructEntry {
     value: Expression;
 }
 
-export interface StructLiteral extends NodeBase {
-    syntaxType: SyntaxType.StructLiteral;
+export interface StructLiteral extends NodeBase<SyntaxType.StructLiteral> {
     entries: ReadonlyArray<StructEntry>;
 }
 

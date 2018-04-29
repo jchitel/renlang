@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 
 
-export interface BreakStatement extends NodeBase {
-    syntaxType: SyntaxType.BreakStatement;
+export interface BreakStatement extends NodeBase<SyntaxType.BreakStatement> {
     loopNumber: Optional<Token>;
 }
 

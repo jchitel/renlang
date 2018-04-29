@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 
 
-export interface ContinueStatement extends NodeBase {
-    syntaxType: SyntaxType.ContinueStatement;
+export interface ContinueStatement extends NodeBase<SyntaxType.ContinueStatement> {
     loopNumber: Optional<Token>;
 }
 

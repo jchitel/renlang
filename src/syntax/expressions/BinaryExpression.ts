@@ -4,15 +4,13 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, repeat, tok } from '~/parser/parser';
 
 
-export interface BinaryExpression extends NodeBase {
-    syntaxType: SyntaxType.BinaryExpression;
+export interface BinaryExpression extends NodeBase<SyntaxType.BinaryExpression> {
     left: Expression;
     symbol: Token;
     right: Expression;
 }
 
-export interface BinaryExpressionSuffix extends NodeBase {
-    syntaxType: SyntaxType.BinaryExpression;
+export interface BinaryExpressionSuffix extends NodeBase<SyntaxType.BinaryExpression> {
     symbol: Token;
     right: Expression;
     setBase(left: Expression): BinaryExpression;
@@ -56,7 +54,7 @@ function resolvePrecedence(exp: BinaryExpression) {
     const operStack: Token[] = [];
     while (items.length) {
         const item = items.shift() as (Expression | Token);
-        if (!Token.isToken(item)) {
+        if (!(item instanceof Token)) {
             expStack.push(item);
         } else {
             while (operStack.length && shouldPopOperator(item, operStack[operStack.length - 1])) {
@@ -82,14 +80,14 @@ function shouldPopOperator(nextToken: Token, stackToken: Token) {
 function binaryExpressionToList(exp: BinaryExpression) {
     const items: (Token | Expression)[] = [];
     // the tree is left-associative, so we assemble the list from right to left
-    let operToken = createNewOperToken(exp.symbol);
+    let operToken = exp.symbol.clone();
     let left = exp.left, right = exp.right;
     while (true) {
         items.unshift(right);
         items.unshift(operToken);
         if (left.syntaxType === SyntaxType.BinaryExpression) {
             right = left.right;
-            operToken = createNewOperToken(left.symbol);
+            operToken = left.symbol.clone();
             left = left.left;
         } else {
             items.unshift(left);
@@ -97,10 +95,6 @@ function binaryExpressionToList(exp: BinaryExpression) {
         }
     }
     return items;
-}
-
-function createNewOperToken(tok: Token) {
-    return tok.with({});
 }
 
 function createNewBinExpression(right: Expression, left: Expression, oper: Token) {

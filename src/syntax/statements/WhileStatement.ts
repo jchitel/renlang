@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression, Statement } from '~/syntax/environmen
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface WhileStatement extends NodeBase {
-    syntaxType: SyntaxType.WhileStatement;
+export interface WhileStatement extends NodeBase<SyntaxType.WhileStatement> {
     condition: Expression;
     body: Statement;
 }

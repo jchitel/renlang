@@ -3,8 +3,7 @@ import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
 
-export interface TupleType extends NodeBase {
-    syntaxType: SyntaxType.TupleType;
+export interface TupleType extends NodeBase<SyntaxType.TupleType> {
     types: ReadonlyArray<TypeNode>;
 }
 

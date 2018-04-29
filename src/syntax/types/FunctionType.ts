@@ -2,8 +2,7 @@ import { seq, tok, ParseFunc, repeat } from '~/parser/parser';
 import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
 
 
-export interface FunctionType extends NodeBase {
-    syntaxType: SyntaxType.FunctionType;
+export interface FunctionType extends NodeBase<SyntaxType.FunctionType> {
     paramTypes: TypeNode[];
     returnType: TypeNode;
 }

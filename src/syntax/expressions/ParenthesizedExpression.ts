@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface ParenthesizedExpression extends NodeBase {
-    syntaxType: SyntaxType.ParenthesizedExpression;
+export interface ParenthesizedExpression extends NodeBase<SyntaxType.ParenthesizedExpression> {
     inner: Expression;
 }
 

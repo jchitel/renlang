@@ -3,14 +3,12 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-
 interface Field {
     typeNode: TypeNode;
     name: Token;
 }
 
-export interface StructType extends NodeBase {
-    syntaxType: SyntaxType.StructType;
+export interface StructType extends NodeBase<SyntaxType.StructType> {
     fields: ReadonlyArray<Field>;
 }
 

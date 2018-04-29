@@ -3,8 +3,7 @@ import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token } from '~/parser/lexer';
 
 
-export interface BuiltInType extends NodeBase {
-    syntaxType: SyntaxType.BuiltInType;
+export interface BuiltInType extends NodeBase<SyntaxType.BuiltInType> {
     name: Token;
 }
 

@@ -2,14 +2,12 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface ArrayAccess extends NodeBase {
-    syntaxType: SyntaxType.ArrayAccess;
+export interface ArrayAccess extends NodeBase<SyntaxType.ArrayAccess> {
     target: Expression;
     index: Expression;
 }
 
-export interface ArrayAccessSuffix extends NodeBase {
-    syntaxType: SyntaxType.ArrayAccess;
+export interface ArrayAccessSuffix extends NodeBase<SyntaxType.ArrayAccess> {
     index: Expression;
     setBase(target: Expression): ArrayAccess;
 }

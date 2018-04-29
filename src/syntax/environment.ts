@@ -59,61 +59,63 @@ import { register as register_ModuleRoot } from './ModuleRoot';
  */
 export enum SyntaxType {
     // #region module
-    ModuleRoot,
-    ImportDeclaration,
-    ExportDeclaration,
-    ExportForwardDeclaration,
+    ModuleRoot = 'ModuleRoot',
+    ImportDeclaration = 'ImportDeclaration',
+    ExportDeclaration = 'ExportDeclaration',
+    ExportForwardDeclaration = 'ExportForwardDeclaration',
     // #endregion
     // #region declarations
-    TypeDeclaration,
-    TypeParam,
-    FunctionDeclaration,
-    Param,
-    ConstantDeclaration,
+    TypeDeclaration = 'TypeDeclaration',
+    FunctionDeclaration = 'FunctionDeclaration',
+    ConstantDeclaration = 'ConstantDeclaration',
     // #endregion
     // #region types
-    BuiltInType,
-    StructType,
-    TupleType,
-    ArrayType,
-    FunctionType,
-    UnionType,
-    IdentifierType,
-    ParenthesizedType,
-    SpecificType,
-    NamespaceAccessType,
+    BuiltInType = 'BuiltInType',
+    StructType = 'StructType',
+    TupleType = 'TupleType',
+    ArrayType = 'ArrayType',
+    FunctionType = 'FunctionType',
+    UnionType = 'UnionType',
+    IdentifierType = 'IdentifierType',
+    ParenthesizedType = 'ParenthesizedType',
+    SpecificType = 'SpecificType',
+    NamespaceAccessType = 'NamespaceAccessType',
     // #endregion
     // #region expressions
-    IntegerLiteral,
-    FloatLiteral,
-    CharLiteral,
-    BoolLiteral,
-    StringLiteral,
-    StructLiteral,
-    TupleLiteral,
-    ArrayLiteral,
-    IdentifierExpression,
-    ParenthesizedExpression,
-    VarDeclaration,
-    UnaryExpression,
-    BinaryExpression,
-    FunctionApplication,
-    ArrayAccess,
-    FieldAccess,
-    IfElseExpression,
-    LambdaExpression,
+    IntegerLiteral = 'IntegerLiteral',
+    FloatLiteral = 'FloatLiteral',
+    CharLiteral = 'CharLiteral',
+    BoolLiteral = 'BoolLiteral',
+    StringLiteral = 'StringLiteral',
+    StructLiteral = 'StructLiteral',
+    TupleLiteral = 'TupleLiteral',
+    ArrayLiteral = 'ArrayLiteral',
+    IdentifierExpression = 'IdentifierExpression',
+    ParenthesizedExpression = 'ParenthesizedExpression',
+    VarDeclaration = 'VarDeclaration',
+    UnaryExpression = 'UnaryExpression',
+    BinaryExpression = 'BinaryExpression',
+    FunctionApplication = 'FunctionApplication',
+    ArrayAccess = 'ArrayAccess',
+    FieldAccess = 'FieldAccess',
+    IfElseExpression = 'IfElseExpression',
+    LambdaExpression = 'LambdaExpression',
     // #endregion
     // #region statements
-    Block,
-    ExpressionStatement,
-    ForStatement,
-    WhileStatement,
-    DoWhileStatement,
-    TryCatchStatement,
-    ReturnStatement,
-    ThrowStatement,
-    BreakStatement,
-    ContinueStatement,
+    Block = 'Block',
+    ExpressionStatement = 'ExpressionStatement',
+    ForStatement = 'ForStatement',
+    WhileStatement = 'WhileStatement',
+    DoWhileStatement = 'DoWhileStatement',
+    TryCatchStatement = 'TryCatchStatement',
+    ReturnStatement = 'ReturnStatement',
+    ThrowStatement = 'ThrowStatement',
+    BreakStatement = 'BreakStatement',
+    ContinueStatement = 'ContinueStatement',
+    // #endregion
+    // #region other
+    TypeParam = 'TypeParam',
+    Param = 'Param',
     // #endregion
 }
 
@@ -275,15 +277,11 @@ export function SyntaxEnvironment() {
  * The base type of all syntax nodes.
  * All nodes have:
  * - a location (range of text in a file)
- * 
- * All nodes also have a node type (of type SyntaxType).
- * However, specifying that here does nothing and is actually
- * more likely to hide errors than reveal them. The Node type
- * expects every node type to have a 'nodeType' field defined,
- * so it will be very clear if one doesn't.
+ * - a syntax type (the discriminant for the various node union types)
  */
-export interface NodeBase {
+export interface NodeBase<K extends SyntaxType> {
     readonly location: FileRange;
+    readonly syntaxType: K;
 }
 
 /** 

@@ -2,15 +2,13 @@ import { NodeBase, SyntaxType, Expression, TypeNode } from '~/syntax/environment
 import { ParseFunc, seq, tok, optional, repeat } from '~/parser/parser';
 
 
-export interface FunctionApplication extends NodeBase {
-    syntaxType: SyntaxType.FunctionApplication;
+export interface FunctionApplication extends NodeBase<SyntaxType.FunctionApplication> {
     target: Expression;
     typeArgs: TypeNode[];
     args: Expression[];
 }
 
-export interface FunctionApplicationSuffix extends NodeBase {
-    syntaxType: SyntaxType.FunctionApplication;
+export interface FunctionApplicationSuffix extends NodeBase<SyntaxType.FunctionApplication> {
     typeArgs: TypeNode[];
     args: Expression[];
     setBase(target: Expression): FunctionApplication;

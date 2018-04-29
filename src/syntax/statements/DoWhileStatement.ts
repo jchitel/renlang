@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Statement, Expression } from '~/syntax/environmen
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface DoWhileStatement extends NodeBase {
-    syntaxType: SyntaxType.DoWhileStatement;
+export interface DoWhileStatement extends NodeBase<SyntaxType.DoWhileStatement> {
     body: Statement;
     condition: Expression;
 }

@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 
 
-export interface ReturnStatement extends NodeBase {
-    syntaxType: SyntaxType.ReturnStatement;
+export interface ReturnStatement extends NodeBase<SyntaxType.ReturnStatement> {
     exp: Optional<Expression>;
 }
 

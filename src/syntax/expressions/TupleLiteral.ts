@@ -2,8 +2,7 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 
 
-export interface TupleLiteral extends NodeBase {
-    syntaxType: SyntaxType.TupleLiteral;
+export interface TupleLiteral extends NodeBase<SyntaxType.TupleLiteral> {
     items: ReadonlyArray<Expression>;
 }
 

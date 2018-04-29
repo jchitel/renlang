@@ -2,13 +2,11 @@ import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface ArrayType extends NodeBase {
-    syntaxType: SyntaxType.ArrayType;
+export interface ArrayType extends NodeBase<SyntaxType.ArrayType> {
     baseType: TypeNode;
 }
 
-export interface ArrayTypeSuffix extends NodeBase {
-    syntaxType: SyntaxType.ArrayType;
+export interface ArrayTypeSuffix extends NodeBase<SyntaxType.ArrayType> {
     setBase(baseType: TypeNode): ArrayType;
 }
 

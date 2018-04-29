@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface IdentifierExpression extends NodeBase {
-    syntaxType: SyntaxType.IdentifierExpression;
+export interface IdentifierExpression extends NodeBase<SyntaxType.IdentifierExpression> {
     name: Token;
 }
 

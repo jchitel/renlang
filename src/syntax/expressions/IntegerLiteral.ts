@@ -3,8 +3,7 @@ import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
 
 
-export interface IntegerLiteral extends NodeBase {
-    syntaxType: SyntaxType.IntegerLiteral;
+export interface IntegerLiteral extends NodeBase<SyntaxType.IntegerLiteral> {
     value: Token;
 }
 

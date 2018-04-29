@@ -3,8 +3,7 @@ import { ParseFunc, seq, tok, optional } from '~/parser/parser';
 import { TokenType, Token } from '~/parser/lexer';
 
 
-export interface ConstantDeclaration extends NodeBase {
-    syntaxType: SyntaxType.ConstantDeclaration;
+export interface ConstantDeclaration extends NodeBase<SyntaxType.ConstantDeclaration> {
     name: Optional<Token>;
     value: Expression;
 }

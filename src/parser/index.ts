@@ -1,11 +1,15 @@
 import { ModuleRoot } from '~/syntax';
 import { createTokenStream } from './lexer';
-import { Parser } from './parser';
+import { createParser } from './parser';
 import { SyntaxEnvironment } from '~/syntax/environment';
+import { Diagnostic } from '~/core';
 
 
-export function parseModule(path: string): ModuleRoot {
-    const parser = Parser(createTokenStream(path));
+export function parseModule(path: string): { module: Optional<ModuleRoot>, diagnostics: ReadonlyArray<Diagnostic> } {
+    const { tokens, diagnostics: _diags } = createTokenStream(path);
+    if (_diags.length) return { module: null, diagnostics: _diags };
+    const parser = createParser(tokens);
     const env = SyntaxEnvironment();
-    return parser.parse(env.ModuleRoot);
+    const { result: module, diagnostics } = parser.parse(env.ModuleRoot);
+    return { module, diagnostics };
 }

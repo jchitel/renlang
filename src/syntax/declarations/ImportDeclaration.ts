@@ -34,7 +34,7 @@ const NamedImports: ParseFunc<Import[]> = seq(
         WildcardImport
     ), '+', tok(',')),
     tok('}'),
-    ([_1, names, _2]) => names.map(n => Token.isToken(n) ? { importName: n, aliasName: n } : n)
+    ([_1, names, _2]) => names.map(n => n instanceof Token ? { importName: n, aliasName: n } : n)
 );
 
 /**
@@ -67,8 +67,7 @@ interface Import {
     aliasName: Token;
 }
 
-export interface ImportDeclaration extends NodeBase {
-    readonly syntaxType: SyntaxType.ImportDeclaration;
+export interface ImportDeclaration extends NodeBase<SyntaxType.ImportDeclaration> {
     readonly moduleName: Token;
     readonly imports: ReadonlyArray<Import>;
 }
@@ -90,4 +89,4 @@ export const ImportDeclaration: ParseFunc<ImportDeclaration> = seq(
     })
 );
 
-const defaultImport = (token: Token) => ({ importName: token.with({ image: 'default' }), aliasName: token });
+const defaultImport = (token: Token) => ({ importName: token.clone({ image: 'default' }), aliasName: token });

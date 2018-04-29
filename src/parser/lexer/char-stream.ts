@@ -1,31 +1,63 @@
 import { openSync as open, readSync as read } from 'fs';
 import { StringDecoder } from 'string_decoder';
 import { LazyList, NonEmptyLazyList, fromIterable, infList } from '~/utils/lazy-list';
-import { FilePosition } from '~/core';
+import { FilePosition, CoreObject } from '~/core';
 
 
 export type CharStream = EmptyCharStream | NonEmptyCharStream;
 
-export interface EmptyCharStream {
-    readonly empty: true;
-    /** The file position of the end of the file */
-    readonly position: FilePosition;
+export class EmptyCharStream extends CoreObject<EmptyCharStream> {
+    readonly empty = true;
+
+    constructor(
+        /** The file position of the end of the file */
+        readonly position: FilePosition
+    ) {
+        super();
+    }
 }
 
-export interface NonEmptyCharStream {
-    readonly empty: false;
-    /** The file position of the next character in the stream */
-    readonly position: FilePosition;
+export class NonEmptyCharStream extends CoreObject<NonEmptyCharStream> {
+    readonly empty = false;
+
+    constructor(
+        /** The file position of the next character in the stream */
+        readonly position: FilePosition,
+        private readonly list: NonEmptyLazyList<string>
+    ) {
+        super();
+    }
+
     /** Reads one character from the stream and returns it */
-    readonly first: () => string;
-    /** Reads one character from the stream, and returns it with the remaining stream */
-    readonly read: () => { char: string, stream: CharStream };
-    /** Reads as many characters from the stream as possible, up to {count} */
-    readonly forceRead: (count: number) => { chars: string, stream: CharStream };
-}
+    first(): string {
+        return this.list.head;
+    }
 
-interface InternalCharStream extends NonEmptyCharStream {
-    readonly list: NonEmptyLazyList<string>;
+    /** Reads one character from the stream, and returns it with the remaining stream */
+    read(): { char: string, stream: CharStream } {
+        const char = this.list.head;
+        const empty = this.list.tail.empty;
+        const position = char === '\n' ? this.position.nextLine() : this.position.nextColumn();
+        if (empty) return { char, stream: new EmptyCharStream(position) };
+        return {
+            char,
+            stream: this.clone({ list: this.list.tail, position }),
+        }
+    }
+
+    /** Reads as many characters from the stream as possible, up to {count} */
+    forceRead(count: number): { chars: string, stream: CharStream } {
+        // if we don't need any more, return the base of the recursion
+        if (count === 0) return { chars: '', stream: this };
+        // read one from the front
+        const { char, stream } = this.read();
+        // if it's now empty, just return that
+        if (stream.empty) return { chars: char, stream };
+        // otherwise we've reached the recursion state, descend one level
+        const { chars, stream: stream1 } = stream.forceRead(count - 1);
+        // prepend the current character
+        return { chars: char + chars, stream: stream1 };
+    }
 }
 
 /**
@@ -57,41 +89,6 @@ export default function createCharStream(path: string): CharStream {
     const list = createByteStream(path)
         .flatMap(byte => decoder.write(byte))
         .concat(fromIterable(decoder.end()));
-    if (list.empty) return { empty: true, position: FilePosition(path, [1, 1]) };
-    return {
-        empty: false,
-        list,
-        position: FilePosition(path, [1, 1]),
-        read: readChar,
-        first: readFirst,
-        forceRead,
-    } as InternalCharStream;
-}
-
-function readChar(this: InternalCharStream): { char: string, stream: CharStream } {
-    const char = this.list.head;
-    const empty = this.list.tail.empty;
-    const position = char === '\n' ? this.position.nextLine() : this.position.nextColumn();
-    if (empty) return { char, stream: { empty: true, position } };
-    return {
-        char,
-        stream: { ...this, list: this.list.tail, position } as InternalCharStream,
-    }
-}
-
-function readFirst(this: InternalCharStream): string {
-    return this.list.head;
-}
-
-function forceRead(this: InternalCharStream, count: number): { chars: string, stream: CharStream } {
-    // if we don't need any more, return the base of the recursion
-    if (count === 0) return { chars: '', stream: this };
-    // read one from the front
-    const { char, stream } = this.read();
-    // if it's now empty, just return that
-    if (stream.empty) return { chars: char, stream };
-    // otherwise we've reached the recursion state, descend one level
-    const { chars, stream: stream1 } = stream.forceRead(count - 1);
-    // prepend the current character
-    return { chars: char + chars, stream: stream1 };
+    if (list.empty) return new EmptyCharStream(new FilePosition(path, [1, 1]));
+    return new NonEmptyCharStream(new FilePosition(path, [1, 1]), list);
 }
