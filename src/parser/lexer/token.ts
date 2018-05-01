@@ -28,7 +28,7 @@ export enum TokenType {
  * 'image' is an exact copy of the token from the original source string.
  * 'value' is an optional value that represents the parsed value of the token, if it makes sense for the token type (numbers, strings, etc.).
  */
-export class Token extends CoreObject<Token> {
+export class Token extends CoreObject {
     readonly location: FileRange;
 
     constructor(

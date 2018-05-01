@@ -1,9 +1,10 @@
-import { resolve } from 'path';
-
 /** Allows us to use require path aliases (~, ~test) */
 import './require-hook';
 /** Injects extensions into built-in APIs */
 import './extensions';
+
+
+import { resolve } from 'path';
 import { runProgram } from './runner';
 
 

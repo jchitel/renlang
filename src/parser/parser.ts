@@ -19,7 +19,7 @@ interface ParseResultInternal<T> {
 
 // #region Parser
 
-abstract class ParserBase extends CoreObject<ParserBase> {
+abstract class ParserBase extends CoreObject {
     abstract readonly empty: boolean;
     abstract readonly tokens: LazyList<Token>;
 

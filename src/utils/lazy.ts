@@ -19,7 +19,7 @@ export default interface Lazy<T> {
     readonly value: T;
 }
 
-class SimpleLazy<T> extends CoreObject<SimpleLazy<T>> implements Lazy<T> {
+class SimpleLazy<T> extends CoreObject implements Lazy<T> {
     private _value?: T;
 
     constructor(private evaluator: () => T) {

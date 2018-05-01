@@ -6,7 +6,7 @@ import { FilePosition, CoreObject } from '~/core';
 
 export type CharStream = EmptyCharStream | NonEmptyCharStream;
 
-export class EmptyCharStream extends CoreObject<EmptyCharStream> {
+export class EmptyCharStream extends CoreObject {
     readonly empty = true;
 
     constructor(
@@ -17,7 +17,7 @@ export class EmptyCharStream extends CoreObject<EmptyCharStream> {
     }
 }
 
-export class NonEmptyCharStream extends CoreObject<NonEmptyCharStream> {
+export class NonEmptyCharStream extends CoreObject {
     readonly empty = false;
 
     constructor(

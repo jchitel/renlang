@@ -8,7 +8,7 @@ export interface TokenResult {
     remaining: CharStream;
 }
 
-class IfHasNextOperation extends CoreObject<IfHasNextOperation> {
+class IfHasNextOperation extends CoreObject {
     constructor(
         private readonly previous: LexerState,
         readonly result: Optional<LexerState> = null
@@ -51,7 +51,7 @@ export function LexerState(position: FilePosition, char: string, stream: CharStr
     return new NonEmptyLexerState(position, char, stream);
 }
 
-abstract class LexerStateBase extends CoreObject<LexerStateBase> {
+abstract class LexerStateBase extends CoreObject {
     abstract readonly empty: boolean;
     abstract readonly stream: CharStream;
 

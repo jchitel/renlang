@@ -1,5 +1,5 @@
 import { Visitor } from '~/syntax/visitor';
-import { ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration } from '~/syntax';
+import { ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration } from '~/syntax';
 import { TypeChecker } from '~/typecheck/checker';
 import { SyntaxType, Declaration } from '~/syntax/environment';
 import resolveModule from '~/typecheck/resolver';
@@ -13,6 +13,7 @@ const isDeclaration = (node: ExportDeclaration | ExportForwardDeclaration | Decl
 /**
  * This visitor is responsible for enumerating all modules and declarations in the program
  * to prepare for import and export resolution in the next pass.
+ * No dependencies or name linkages are resolved here.
  */
 export const ModuleVisitor: Visitor<ModuleNode, TypeChecker> = {
     [SyntaxType.ModuleRoot]: (node: ModuleRoot, checker: TypeChecker) => {
@@ -73,6 +74,9 @@ export const ModuleVisitor: Visitor<ModuleNode, TypeChecker> = {
         //
     },
     [SyntaxType.ConstantDeclaration]: (node: ConstantDeclaration, checker: TypeChecker) => {
+        //
+    },
+    [SyntaxType.NamespaceDeclaration]: (node: NamespaceDeclaration, checker: TypeChecker) => {
         //
     }
 };

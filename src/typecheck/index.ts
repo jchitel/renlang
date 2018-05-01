@@ -2,6 +2,6 @@ import { TypeChecker } from './checker';
 
 
 export default function typecheck(path: string) {
-    const checker = TypeChecker();
+    const checker = new TypeChecker();
     return checker.check(path);
 }

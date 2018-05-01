@@ -5,20 +5,20 @@
  * The type parameter must be the same type, because TS doesn't handle
  * 'this' type properly for some reason.
  */
-export class CoreObject<T extends CoreObject<T>> {
+export class CoreObject {
     /**
      * Creates a clone of 'this', applying an optional set of properties to the new object.
      * Note that the type parameter is to allow private properties to be added.
      * There will be an error if invalid types are provided for public properties.
      */
-    clone<C extends Partial<T>>(props: C = {} as C): T {
+    clone<T, C extends Partial<T>>(props: C = {} as C): T {
         // TS does not know how to properly handle spreads
         const _props = { ...(this as any), ...(props as any) };
         return Object.assign(Object.create(Object.getPrototypeOf(this)), _props);
     }
 }
 
-export class FilePosition extends CoreObject<FilePosition> {
+export class FilePosition extends CoreObject {
     constructor(
         readonly path: string,
         readonly position: [number, number]
@@ -53,7 +53,7 @@ export class FilePosition extends CoreObject<FilePosition> {
  * - the start line/column of the range
  * - the end line/column of the range
  */
-export class FileRange extends CoreObject<FileRange> {
+export class FileRange extends CoreObject {
     constructor(
         readonly path: string,
         readonly start: [number, number],
@@ -97,7 +97,7 @@ export enum DiagnosticLevel {
 /**
  * Represents a message to report to the user as an output of compilation.
  */
-export class Diagnostic extends CoreObject<Diagnostic> {
+export class Diagnostic extends CoreObject {
     readonly location: FileRange;
 
     constructor(
