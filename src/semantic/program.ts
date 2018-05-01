@@ -106,6 +106,9 @@ export class LocalDeclaration extends CoreObject {
  */
 export type Declaration = DeclaredFunction | DeclaredType | DeclaredConstant | DeclaredNamespace;
 
+/**
+ * A semantic function entity, identified by a name.
+ */
 export class DeclaredFunction extends CoreObject {
     constructor(
         readonly name: string,
@@ -113,6 +116,10 @@ export class DeclaredFunction extends CoreObject {
     ) { super() }
 }
 
+/**
+ * A semantic type entity, identified by a name.
+ * NOTE: this is different from the concept of a "type" in type checking TODO then what is?
+ */
 export class DeclaredType extends CoreObject {
     constructor(
         readonly name: string,
@@ -120,6 +127,9 @@ export class DeclaredType extends CoreObject {
     ) { super() }
 }
 
+/**
+ * A semantic constant entity, identified by a name.
+ */
 export class DeclaredConstant extends CoreObject {
     constructor(
         readonly name: string,
