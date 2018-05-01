@@ -1,8 +1,8 @@
 import { Visitor } from '~/syntax/visitor';
 import { ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration } from '~/syntax';
-import { TypeChecker } from '~/typecheck/checker';
+import { TypeChecker } from '~/semantic/checker';
 import { SyntaxType, Declaration } from '~/syntax/environment';
-import resolveModule from '~/typecheck/resolver';
+import resolveModule from '~/semantic/resolver';
 
 
 type ModuleNode = ModuleRoot | ImportDeclaration | ExportDeclaration | ExportForwardDeclaration | Declaration;

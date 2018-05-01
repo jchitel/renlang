@@ -1,6 +1,6 @@
 import { DiagnosticLevel } from '~/core';
-import typecheck from '~/typecheck';
-import { Program } from '~/typecheck/program';
+import typecheck from '~/semantic';
+import { Program } from '~/semantic/program';
 
 
 /**
