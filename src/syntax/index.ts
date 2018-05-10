@@ -6,6 +6,6 @@ export * from './statements';
 export * from './declarations';
 export { ModuleRoot } from './ModuleRoot';
 
-export { Declaration, TypeNode, Expression, Statement } from './environment';
+export { Declaration, Type, Expression, Statement } from './environment';
 
 export * from './visitor';

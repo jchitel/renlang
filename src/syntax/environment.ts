@@ -1,59 +1,7 @@
-import { FileRange } from '~/core';
+import { FileRange, CoreObject } from '~/core';
 import { ParseFunc, Parser, ParseResult, select, seq, repeat } from '~/parser/parser';
-import {
-    // module
-    ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration,
-    // declaration
-    TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration,
-    // type
-    BuiltInType, StructType, TupleType, ArrayType, FunctionType, UnionType, IdentifierType, ParenthesizedType,
-    SpecificType, NamespaceAccessType,
-    // expression
-    IntegerLiteral, FloatLiteral, CharLiteral, BoolLiteral, StringLiteral, StructLiteral,
-    LambdaExpression, ParenthesizedExpression, TupleLiteral, IdentifierExpression, UnaryExpression, IfElseExpression,
-    FunctionApplication, BinaryExpression, ArrayAccess, FieldAccess, ArrayLiteral, VarDeclaration,
-    // statement
-    Block, ExpressionStatement, ForStatement, WhileStatement, DoWhileStatement, TryCatchStatement, ReturnStatement,
-    ThrowStatement, BreakStatement, ContinueStatement,
-    // other
-    Param, TypeParam
-} from '.';
-
-// all of the imports below are "internal" and required only for parsing
-import { register as register_FunctionType } from './types/FunctionType';
-import { register as register_ParenthesizedType } from './types/ParenthesizedType';
-import { register as register_StructType } from './types/StructType';
-import { register as register_TupleType } from './types/TupleType';
-import { ArrayTypeSuffix } from './types/ArrayType';
-import { UnionTypeSuffix, register as register_UnionType } from './types/UnionType';
-import { NamespaceAccessTypeSuffix } from './types/NamespaceAccessType';
-import { SpecificTypeSuffix, register as register_SpecificTypeSuffix } from './types/SpecificType';
-import { register as register_StructLiteral } from './expressions/StructLiteral';
-import { register as register_LambdaExpression } from './expressions/LambdaExpression';
-import { register as register_ParenthesizedExpression } from './expressions/ParenthesizedExpression';
-import { register as register_TupleLiteral } from './expressions/TupleLiteral';
-import { register as register_ArrayLiteral } from './expressions/ArrayLiteral';
-import { register as register_VarDeclaration } from './expressions/VarDeclaration';
-import { PostfixExpressionSuffix, register as register_UnaryExpression } from './expressions/UnaryExpression';
-import { register as register_IfElseExpression } from './expressions/IfElseExpression';
-import { FunctionApplicationSuffix, register as register_FunctionApplication } from './expressions/FunctionApplication';
-import { BinaryExpressionSuffix, register as register_BinaryExpression } from './expressions/BinaryExpression';
-import { ArrayAccessSuffix, register as register_ArrayAccess } from './expressions/ArrayAccess';
-import { FieldAccessSuffix } from './expressions/FieldAccess';
-import { register as register_Block } from './statements/Block';
-import { register as register_ExpressionStatement } from './statements/ExpressionStatement';
-import { register as register_ForStatement } from './statements/ForStatement';
-import { register as register_WhileStatement } from './statements/WhileStatement';
-import { register as register_DoWhileStatement } from './statements/DoWhileStatement';
-import { register as register_TryCatchStatement } from './statements/TryCatchStatement';
-import { register as register_ReturnStatement } from './statements/ReturnStatement';
-import { register as register_ThrowStatement } from './statements/ThrowStatement';
-import { register as register_ExportDeclaration } from './declarations/ExportDeclaration';
-import { register as register_TypeDeclaration } from './declarations/TypeDeclaration';
-import { register as register_FunctionDeclaration } from './declarations/FunctionDeclaration';
-import { register as register_ConstantDeclaration } from './declarations/ConstantDeclaration';
-import { register as register_NamespaceDeclaration } from './declarations/NamespaceDeclaration';
-import { register as register_ModuleRoot } from './ModuleRoot';
+import * as syntax from '.';
+import * as parsing from './parsing';
 
 /**
  * The full enumeration of types of syntax nodes in the language.
@@ -67,9 +15,13 @@ export enum SyntaxType {
     // #endregion
     // #region declarations
     TypeDeclaration = 'TypeDeclaration',
+    AnonymousTypeDeclaration = 'AnonymousTypeDeclaration',
     FunctionDeclaration = 'FunctionDeclaration',
+    AnonymousFunctionDeclaration = 'AnonymousFunctionDeclaration',
     ConstantDeclaration = 'ConstantDeclaration',
+    AnonymousConstantDeclaration = 'AnonymousConstantDeclaration',
     NamespaceDeclaration = 'NamespaceDeclaration',
+    AnonymousNamespaceDeclaration = 'AnonymousNamespaceDeclaration',
     // #endregion
     // #region types
     BuiltInType = 'BuiltInType',
@@ -152,128 +104,138 @@ export enum SyntaxType {
  */
 export function SyntaxEnvironment() {
     // types
-    const { FunctionType } = register_FunctionType(TypeNode);
-    const { ParenthesizedType } = register_ParenthesizedType(TypeNode);
-    const { StructType } = register_StructType(TypeNode);
-    const { TupleType } = register_TupleType(TypeNode);
-    const { UnionTypeSuffix } = register_UnionType(TypeNode);
-    const { SpecificTypeSuffix, TypeArgList } = register_SpecificTypeSuffix(TypeNode);
+    const { parseFunctionType } = parsing.registerFunctionType(parseType);
+    const { parseParenthesizedType } = parsing.registerParenthesizedType(parseType);
+    const { parseStructType } = parsing.registerStructType(parseType);
+    const { parseTupleType } = parsing.registerTupleType(parseType);
+    const { parseUnionTypeSuffix } = parsing.registerUnionType(parseType);
+    const { parseSpecificTypeSuffix, parseTypeArgList } = parsing.registerSpecificType(parseType);
 
     // expressions
-    const { StructLiteral } = register_StructLiteral(Expression);
-    const { ParenthesizedExpression } = register_ParenthesizedExpression(Expression);
-    const { TupleLiteral } = register_TupleLiteral(Expression);
-    const { ArrayLiteral } = register_ArrayLiteral(Expression);
-    const { VarDeclaration } = register_VarDeclaration(Expression);
-    const { PrefixExpression, PostfixExpressionSuffix } = register_UnaryExpression(Expression);
-    const { IfElseExpression } = register_IfElseExpression(Expression);
-    const { FunctionApplicationSuffix } = register_FunctionApplication(Expression, TypeArgList);
-    const { BinaryExpressionSuffix } = register_BinaryExpression(Expression);
-    const { ArrayAccessSuffix } = register_ArrayAccess(Expression);
+    const { parseStructLiteral } = parsing.registerStructLiteral(parseExpression);
+    const { parseParenthesizedExpression } = parsing.registerParenthesizedExpression(parseExpression);
+    const { parseTupleLiteral } = parsing.registerTupleLiteral(parseExpression);
+    const { parseArrayLiteral } = parsing.registerArrayLiteral(parseExpression);
+    const { parseVarDeclaration } = parsing.registerVarDeclaration(parseExpression);
+    const { parsePrefixExpression, parsePostfixExpressionSuffix } = parsing.registerUnaryExpression(parseExpression);
+    const { parseIfElseExpression } = parsing.registerIfElseExpression(parseExpression);
+    const { parseFunctionApplicationSuffix } = parsing.registerFunctionApplication(parseExpression, parseTypeArgList);
+    const { parseBinaryExpressionSuffix } = parsing.registerBinaryExpression(parseExpression);
+    const { parseArrayAccessSuffix } = parsing.registerArrayAccess(parseExpression);
 
     // statements
-    const { Block } = register_Block(Statement);
-    const { ExpressionStatement } = register_ExpressionStatement(Expression);
-    const { ForStatement } = register_ForStatement(Expression, Statement);
-    const { WhileStatement } = register_WhileStatement(Expression, Statement);
-    const { DoWhileStatement } = register_DoWhileStatement(Expression, Statement);
-    const { ReturnStatement } = register_ReturnStatement(Expression);
-    const { ThrowStatement } = register_ThrowStatement(Expression);
+    const { parseBlock } = parsing.registerBlock(parseStatement);
+    const { parseExpressionStatement } = parsing.registerExpressionStatement(parseExpression);
+    const { parseForStatement } = parsing.registerForStatement(parseExpression, parseStatement);
+    const { parseWhileStatement } = parsing.registerWhileStatement(parseExpression, parseStatement);
+    const { parseDoWhileStatement } = parsing.registerDoWhileStatement(parseExpression, parseStatement);
+    const { parseReturnStatement } = parsing.registerReturnStatement(parseExpression);
+    const { parseThrowStatement } = parsing.registerThrowStatement(parseExpression);
 
     // declarations
-    const { TypeDeclaration, TypeParamList } = register_TypeDeclaration(TypeNode);
-    const { FunctionDeclaration, Param, FunctionBody } = register_FunctionDeclaration(TypeNode, Expression, Statement, Block, TypeParamList);
-    const { ConstantDeclaration } = register_ConstantDeclaration(Expression);
+    const { parseTypeDeclaration, parseAnonymousTypeDeclaration, parseTypeParamList } = parsing.registerTypeDeclaration(parseType);
+    const { parseFunctionDeclaration, parseAnonymousFunctionDeclaration, parseParam, parseFunctionBody } = parsing.registerFunctionDeclaration(parseType, parseExpression, parseStatement, parseBlock, parseTypeParamList);
+    const { parseConstantDeclaration, parseAnonymousConstantDeclaration } = parsing.registerConstantDeclaration(parseExpression);
 
     // requires Param/FunctionBody from FunctionDeclaration
-    const { LambdaExpression, ShorthandLambdaExpression } = register_LambdaExpression(Param, FunctionBody);
-    const { TryCatchStatement } = register_TryCatchStatement(Statement, Param);
+    const { parseLambdaExpression, parseShorthandLambdaExpression } = parsing.registerLambdaExpression(parseParam, parseFunctionBody);
+    const { parseTryCatchStatement } = parsing.registerTryCatchStatement(parseStatement, parseParam);
 
     // module
-    const { ExportDeclaration } = register_ExportDeclaration(Declaration);
-    const { NamespaceDeclaration } = register_NamespaceDeclaration(Declaration, ExportDeclaration);
-    const { ModuleRoot } = register_ModuleRoot(Declaration, ExportDeclaration);
+    const { parseExportDeclaration } = parsing.registerExportDeclaration(parseDeclaration, parseAnonymousDeclaration);
+    const { parseNamespaceDeclaration, parseAnonymousNamespaceDeclaration } = parsing.registerNamespaceDeclaration(parseDeclaration, parseExportDeclaration);
+    const { parseModuleRoot } = parsing.registerModuleRoot(parseDeclaration, parseExportDeclaration);
 
-    function Declaration(parser: Parser): ParseResult<Declaration> {
+    function parseDeclaration(parser: Parser): ParseResult<Declaration> {
         const fn: ParseFunc<Declaration> = select<Declaration>(
-            TypeDeclaration,
-            FunctionDeclaration,
-            ConstantDeclaration,
-            NamespaceDeclaration
+            parseTypeDeclaration,
+            parseFunctionDeclaration,
+            parseConstantDeclaration,
+            parseNamespaceDeclaration
         );
         return fn(parser);
     }
 
-    function TypeNode(parser: Parser): ParseResult<TypeNode> {
-        const fn: ParseFunc<TypeNode> = seq(
-            select<TypeNode>(
-                BuiltInType, // must be before IdentifierType
-                FunctionType, // must be before IdentifierType, ParenthesizedType, TupleType
-                ParenthesizedType, // must be before TupleType
-                StructType,
-                TupleType,
-                IdentifierType
+    function parseAnonymousDeclaration(parser: Parser): ParseResult<AnonymousDeclaration> {
+        const fn: ParseFunc<AnonymousDeclaration> = select<AnonymousDeclaration>(
+            parseAnonymousTypeDeclaration,
+            parseAnonymousFunctionDeclaration,
+            parseAnonymousConstantDeclaration,
+            parseAnonymousNamespaceDeclaration
+        );
+        return fn(parser);
+    }
+
+    function parseType(parser: Parser): ParseResult<Type> {
+        const fn: ParseFunc<Type> = seq(
+            select<Type>(
+                parsing.parseBuiltInType, // must be before IdentifierType
+                parseFunctionType, // must be before IdentifierType, ParenthesizedType, TupleType
+                parseParenthesizedType, // must be before TupleType
+                parseStructType,
+                parseTupleType,
+                parsing.parseIdentifierType
             ),
-            repeat(select<TypeNode_LeftRecursive>(
-                ArrayTypeSuffix,
-                UnionTypeSuffix,
-                SpecificTypeSuffix,
-                NamespaceAccessTypeSuffix
+            repeat(select<Type_LeftRecursive>(
+                parsing.parseArrayTypeSuffix,
+                parseUnionTypeSuffix,
+                parseSpecificTypeSuffix,
+                parsing.parseNamespaceAccessTypeSuffix
             ), '*'),
-            ([base, suffixes]) => suffixes.reduce<TypeNode>((base, suffix) => suffix.setBase(base), base)
+            ([base, suffixes]) => suffixes.reduce<Type>((base, suffix) => suffix.setBase(base), base)
         );
         return fn(parser);
     }
 
-    function Expression(parser: Parser): ParseResult<Expression> {
+    function parseExpression(parser: Parser): ParseResult<Expression> {
         const fn: ParseFunc<Expression> = seq(
             select<Expression>(
-                IntegerLiteral,
-                FloatLiteral,
-                CharLiteral,
-                BoolLiteral, // must be before IdentifierExpression
-                StringLiteral,
-                StructLiteral,
-                LambdaExpression, // must be before TupleLiteral, ParenthesizedExpression
-                ParenthesizedExpression, // must be before TupleLiteral
-                TupleLiteral,
-                ArrayLiteral,
-                VarDeclaration, // must be before ShorthandLambdaExpression, IdentifierExpression
-                ShorthandLambdaExpression, // must be before IdentifierExpression
-                IdentifierExpression,
-                PrefixExpression,
-                IfElseExpression
+                parsing.parseIntegerLiteral,
+                parsing.parseFloatLiteral,
+                parsing.parseCharLiteral,
+                parsing.parseBoolLiteral, // must be before IdentifierExpression
+                parsing.parseStringLiteral,
+                parseStructLiteral,
+                parseLambdaExpression, // must be before TupleLiteral, ParenthesizedExpression
+                parseParenthesizedExpression, // must be before TupleLiteral
+                parseTupleLiteral,
+                parseArrayLiteral,
+                parseVarDeclaration, // must be before ShorthandLambdaExpression, IdentifierExpression
+                parseShorthandLambdaExpression, // must be before IdentifierExpression
+                parsing.parseIdentifierExpression,
+                parsePrefixExpression,
+                parseIfElseExpression
             ),
             repeat(select<Expression_LeftRecursive>(
-                FunctionApplicationSuffix, // must be before BinaryExpression, PostfixExpression
-                BinaryExpressionSuffix, // must be before PostfixExpression
-                PostfixExpressionSuffix,
-                ArrayAccessSuffix,
-                FieldAccessSuffix
+                parseFunctionApplicationSuffix, // must be before BinaryExpression, PostfixExpression
+                parseBinaryExpressionSuffix, // must be before PostfixExpression
+                parsePostfixExpressionSuffix,
+                parseArrayAccessSuffix,
+                parsing.parseFieldAccessSuffix
             ), '*'),
             ([base, suffixes]) => suffixes.reduce<Expression>((base, suffix) => suffix.setBase(base), base)
         );
         return fn(parser);
     }
 
-    function Statement(parser: Parser): ParseResult<Statement> {
+    function parseStatement(parser: Parser): ParseResult<Statement> {
         const fn: ParseFunc<Statement> = select<Statement>(
-            Block, // must be before ExpressionStatement
-            ExpressionStatement,
-            ForStatement,
-            WhileStatement,
-            DoWhileStatement,
-            TryCatchStatement,
-            ReturnStatement,
-            ThrowStatement,
-            BreakStatement,
-            ContinueStatement
+            parseBlock, // must be before ExpressionStatement
+            parseExpressionStatement,
+            parseForStatement,
+            parseWhileStatement,
+            parseDoWhileStatement,
+            parseTryCatchStatement,
+            parseReturnStatement,
+            parseThrowStatement,
+            parsing.parseBreakStatement,
+            parsing.parseContinueStatement
         );
         return fn(parser);
     }
 
     return {
-        ModuleRoot
+        parseModuleRoot
     };
 }
 
@@ -281,103 +243,123 @@ export function SyntaxEnvironment() {
  * The base type of all syntax nodes.
  * All nodes have:
  * - a location (range of text in a file)
- * - a syntax type (the discriminant for the various node union types)
  */
-export interface NodeBase<K extends SyntaxType> {
-    readonly location: FileRange;
-    readonly syntaxType: K;
+export abstract class NodeBase<K extends SyntaxType> extends CoreObject {
+    constructor(
+        readonly location: FileRange,
+        readonly syntaxType: K
+    ) { super() }
 }
 
 /** 
  * The discriminated union of all declaration nodes
  */
 export type Declaration =
-    | TypeDeclaration
-    | FunctionDeclaration
-    | ConstantDeclaration
-    | NamespaceDeclaration;
+    | syntax.TypeDeclaration
+    | syntax.FunctionDeclaration
+    | syntax.ConstantDeclaration
+    | syntax.NamespaceDeclaration;
+
+export function isDeclaration(node: NodeBase<SyntaxType>): node is Declaration {
+    return [
+        SyntaxType.TypeDeclaration,
+        SyntaxType.ConstantDeclaration,
+        SyntaxType.FunctionDeclaration,
+        SyntaxType.NamespaceDeclaration
+    ].includes(node.syntaxType);
+}
+
+/** 
+ * The discriminated union of all anonymous declaration nodes
+ */
+export type AnonymousDeclaration =
+    | syntax.AnonymousTypeDeclaration
+    | syntax.AnonymousFunctionDeclaration
+    | syntax.AnonymousConstantDeclaration
+    | syntax.AnonymousNamespaceDeclaration;
 
 /**
  * The discriminated union of all type nodes
  */
-export type TypeNode =
-    | BuiltInType
-    | StructType
-    | TupleType
-    | ArrayType
-    | FunctionType
-    | UnionType
-    | IdentifierType
-    | ParenthesizedType
-    | SpecificType
-    | NamespaceAccessType;
+export type Type =
+    | syntax.BuiltInType
+    | syntax.StructType
+    | syntax.TupleType
+    | syntax.ArrayType
+    | syntax.FunctionType
+    | syntax.UnionType
+    | syntax.IdentifierType
+    | syntax.ParenthesizedType
+    | syntax.SpecificType
+    | syntax.NamespaceAccessType;
 
-type TypeNode_LeftRecursive =
-    | ArrayTypeSuffix
-    | UnionTypeSuffix
-    | NamespaceAccessTypeSuffix
-    | SpecificTypeSuffix;
+type Type_LeftRecursive =
+    | parsing.ArrayTypeSuffix
+    | parsing.UnionTypeSuffix
+    | parsing.NamespaceAccessTypeSuffix
+    | parsing.SpecificTypeSuffix;
 
 /**
  * The discriminated union of all expression nodes
  */
 export type Expression =
-    | IntegerLiteral
-    | FloatLiteral
-    | CharLiteral
-    | BoolLiteral
-    | StringLiteral
-    | StructLiteral
-    | TupleLiteral
-    | ArrayLiteral
-    | IdentifierExpression
-    | ParenthesizedExpression
-    | VarDeclaration
-    | UnaryExpression
-    | BinaryExpression
-    | FunctionApplication
-    | ArrayAccess
-    | FieldAccess
-    | IfElseExpression
-    | LambdaExpression;
+    | syntax.IntegerLiteral
+    | syntax.FloatLiteral
+    | syntax.CharLiteral
+    | syntax.BoolLiteral
+    | syntax.StringLiteral
+    | syntax.StructLiteral
+    | syntax.TupleLiteral
+    | syntax.ArrayLiteral
+    | syntax.IdentifierExpression
+    | syntax.ParenthesizedExpression
+    | syntax.VarDeclaration
+    | syntax.UnaryExpression
+    | syntax.BinaryExpression
+    | syntax.FunctionApplication
+    | syntax.ArrayAccess
+    | syntax.FieldAccess
+    | syntax.IfElseExpression
+    | syntax.LambdaExpression;
 
 type Expression_LeftRecursive =
-    | FunctionApplicationSuffix
-    | BinaryExpressionSuffix
-    | PostfixExpressionSuffix
-    | ArrayAccessSuffix
-    | FieldAccessSuffix;
+    | parsing.FunctionApplicationSuffix
+    | parsing.BinaryExpressionSuffix
+    | parsing.PostfixExpressionSuffix
+    | parsing.ArrayAccessSuffix
+    | parsing.FieldAccessSuffix;
 
 /**
  * The discriminated union of all statement nodes
  */
 export type Statement =
-    | Block
-    | ExpressionStatement
-    | ForStatement
-    | WhileStatement
-    | DoWhileStatement
-    | TryCatchStatement
-    | ReturnStatement
-    | ThrowStatement
-    | BreakStatement
-    | ContinueStatement;
+    | syntax.Block
+    | syntax.ExpressionStatement
+    | syntax.ForStatement
+    | syntax.WhileStatement
+    | syntax.DoWhileStatement
+    | syntax.TryCatchStatement
+    | syntax.ReturnStatement
+    | syntax.ThrowStatement
+    | syntax.BreakStatement
+    | syntax.ContinueStatement;
 
 /**
  * The discriminated union of all syntax nodes
  */
 export type Node =
     // module root is a special node type
-    | ModuleRoot
+    | syntax.ModuleRoot
     // types related to the module system
-    | ImportDeclaration
-    | ExportDeclaration
-    | ExportForwardDeclaration
+    | syntax.ImportDeclaration
+    | syntax.ExportDeclaration
+    | syntax.ExportForwardDeclaration
+    | AnonymousDeclaration
     // types that do not fit into any of the general categories
-    | TypeParam
-    | Param
+    | syntax.TypeParam
+    | syntax.Param
     // the general categories
     | Declaration
-    | TypeNode
+    | Type
     | Expression
     | Statement;

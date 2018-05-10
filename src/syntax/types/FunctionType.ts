@@ -1,26 +1,33 @@
 import { seq, tok, ParseFunc, repeat } from '~/parser/parser';
-import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
+import { Type, NodeBase, SyntaxType } from '~/syntax/environment';
+import { FileRange } from '~/core';
 
 
-export interface FunctionType extends NodeBase<SyntaxType.FunctionType> {
-    paramTypes: TypeNode[];
-    returnType: TypeNode;
+export class FunctionType extends NodeBase<SyntaxType.FunctionType> {
+    constructor(
+        location: FileRange,
+        readonly paramTypes: Type[],
+        readonly returnType: Type
+    ) { super(location, SyntaxType.FunctionType) }
+
+    accept<P, R = P>(visitor: FunctionTypeVisitor<P, R>, param: P) {
+        return visitor.visitFunctionType(this, param);
+    }
 }
 
-export function register(TypeNode: ParseFunc<TypeNode>) {
-    const FunctionType: ParseFunc<FunctionType> = seq(
+export interface FunctionTypeVisitor<P, R = P> {
+    visitFunctionType(node: FunctionType, param: P): R;
+}
+
+export function register(parseType: ParseFunc<Type>) {
+    const parseFunctionType: ParseFunc<FunctionType> = seq(
         tok('('),
-        repeat(TypeNode, '*', tok(',')),
+        repeat(parseType, '*', tok(',')),
         tok(')'),
         tok('=>'),
-        TypeNode,
-        ([_1, paramTypes, _2, _3, returnType], location) => ({
-            syntaxType: SyntaxType.FunctionType as SyntaxType.FunctionType,
-            location,
-            paramTypes,
-            returnType
-        })
+        parseType,
+        ([_1, paramTypes, _2, _3, returnType], location) => new FunctionType(location, paramTypes, returnType)
     );
 
-    return { FunctionType };
+    return { parseFunctionType };
 }

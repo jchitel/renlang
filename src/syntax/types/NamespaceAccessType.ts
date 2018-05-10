@@ -1,31 +1,36 @@
-import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { NodeBase, SyntaxType, Type } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface NamespaceAccessType extends NodeBase<SyntaxType.NamespaceAccessType> {
-    baseType: TypeNode;
-    typeName: Token;
+export class NamespaceAccessType extends NodeBase<SyntaxType.NamespaceAccessType> {
+    constructor(
+        location: FileRange,
+        readonly baseType: Type,
+        readonly typeName: Token
+    ) { super(location, SyntaxType.NamespaceAccessType) }
+
+    accept<P, R = P>(visitor: NamespaceAccessTypeVisitor<P, R>, param: P) {
+        return visitor.visitNamespaceAccessType(this, param);
+    }
 }
 
-export interface NamespaceAccessTypeSuffix extends NodeBase<SyntaxType.NamespaceAccessType> {
-    typeName: Token;
-    setBase(baseType: TypeNode): NamespaceAccessType;
+export interface NamespaceAccessTypeVisitor<P, R = P> {
+    visitNamespaceAccessType(node: NamespaceAccessType, param: P): R;
 }
 
-export const NamespaceAccessTypeSuffix: ParseFunc<NamespaceAccessTypeSuffix> = seq(
+export class NamespaceAccessTypeSuffix extends NodeBase<SyntaxType.NamespaceAccessType> {
+    constructor(
+        location: FileRange,
+        readonly typeName: Token
+    ) { super(location, SyntaxType.NamespaceAccessType) }
+
+    setBase = (baseType: Type) => new NamespaceAccessType(this.location.merge(baseType.location), baseType, this.typeName);
+}
+
+export const parseNamespaceAccessTypeSuffix: ParseFunc<NamespaceAccessTypeSuffix> = seq(
     tok('.'),
     tok(TokenType.IDENT),
-    ([_1, typeName], location) => ({
-        syntaxType: SyntaxType.NamespaceAccessType as SyntaxType.NamespaceAccessType,
-        location,
-        typeName,
-        setBase(baseType: TypeNode) {
-            return {
-                ...this, 
-                baseType,
-                location: this.location.merge(baseType.location)
-            }
-        }
-    })
+    ([_1, typeName], location) => new NamespaceAccessTypeSuffix(location, typeName)
 );

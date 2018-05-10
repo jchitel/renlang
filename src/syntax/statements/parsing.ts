@@ -1,0 +1,10 @@
+export { register as registerBlock } from './Block';
+export { parseBreakStatement } from './BreakStatement';
+export { parseContinueStatement } from './ContinueStatement';
+export { register as registerDoWhileStatement } from './DoWhileStatement';
+export { register as registerExpressionStatement } from './ExpressionStatement';
+export { register as registerForStatement } from './ForStatement';
+export { register as registerReturnStatement } from './ReturnStatement';
+export { register as registerThrowStatement } from './ThrowStatement';
+export { register as registerTryCatchStatement } from './TryCatchStatement';
+export { register as registerWhileStatement } from './WhileStatement';

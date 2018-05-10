@@ -1,22 +1,30 @@
 import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface TupleLiteral extends NodeBase<SyntaxType.TupleLiteral> {
-    items: ReadonlyArray<Expression>;
+export class TupleLiteral extends NodeBase<SyntaxType.TupleLiteral> {
+    constructor(
+        location: FileRange,
+        readonly items: ReadonlyArray<Expression>
+    ) { super(location, SyntaxType.TupleLiteral) }
+
+    accept<P, R = P>(visitor: TupleLiteralVisitor<P, R>, param: P) {
+        return visitor.visitTupleLiteral(this, param);
+    }
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const TupleLiteral: ParseFunc<TupleLiteral> = seq(
+export interface TupleLiteralVisitor<P, R = P> {
+    visitTupleLiteral(node: TupleLiteral, param: P): R;
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseTupleLiteral: ParseFunc<TupleLiteral> = seq(
         tok('('),
-        repeat(Expression, '*', tok(',')),
+        repeat(parseExpression, '*', tok(',')),
         tok(')'),
-        ([_1, items, _2], location) => ({
-            syntaxType: SyntaxType.TupleLiteral as SyntaxType.TupleLiteral,
-            location,
-            items
-        })
+        ([_1, items, _2], location) => new TupleLiteral(location, items)
     );
 
-    return { TupleLiteral };
+    return { parseTupleLiteral };
 }

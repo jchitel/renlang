@@ -1,39 +1,43 @@
-import { NodeBase, SyntaxType, Expression, TypeNode } from '~/syntax/environment';
+import { NodeBase, SyntaxType, Expression, Type } from '~/syntax/environment';
 import { ParseFunc, seq, tok, optional, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface FunctionApplication extends NodeBase<SyntaxType.FunctionApplication> {
-    target: Expression;
-    typeArgs: TypeNode[];
-    args: Expression[];
+export class FunctionApplication extends NodeBase<SyntaxType.FunctionApplication> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly typeArgs: Optional<Type[]>,
+        readonly args: Expression[]
+    ) { super(location, SyntaxType.FunctionApplication) }
+
+    accept<P, R = P>(visitor: FunctionApplicationVisitor<P, R>, param: P) {
+        return visitor.visitFunctionApplication(this, param);
+    }
 }
 
-export interface FunctionApplicationSuffix extends NodeBase<SyntaxType.FunctionApplication> {
-    typeArgs: TypeNode[];
-    args: Expression[];
-    setBase(target: Expression): FunctionApplication;
+export interface FunctionApplicationVisitor<P, R = P> {
+    visitFunctionApplication(node: FunctionApplication, param: P): R;
 }
 
-export function register(Expression: ParseFunc<Expression>, TypeArgList: ParseFunc<TypeNode[]>) {
-    const FunctionApplicationSuffix: ParseFunc<FunctionApplicationSuffix> = seq(
-        optional(TypeArgList),
+export class FunctionApplicationSuffix extends NodeBase<SyntaxType.FunctionApplication> {
+    constructor(
+        location: FileRange,
+        readonly typeArgs: Optional<Type[]>,
+        readonly args: Expression[]
+    ) { super(location, SyntaxType.FunctionApplication) }
+
+    setBase = (target: Expression) => new FunctionApplication(this.location.merge(target.location), target, this.typeArgs, this.args);
+}
+
+export function register(parseExpression: ParseFunc<Expression>, parseTypeArgList: ParseFunc<Type[]>) {
+    const parseFunctionApplicationSuffix: ParseFunc<FunctionApplicationSuffix> = seq(
+        optional(parseTypeArgList),
         tok('('),
-        repeat(Expression, '*', tok(',')),
+        repeat(parseExpression, '*', tok(',')),
         tok(')'),
-        ([typeArgs, _1, args, _2], location) => ({
-            syntaxType: SyntaxType.FunctionApplication as SyntaxType.FunctionApplication,
-            location,
-            typeArgs: typeArgs || [],
-            args,
-            setBase(target: Expression) {
-                return {
-                    ...this,
-                    target,
-                    location: this.location.merge(target.location)
-                }
-            }
-        })
+        ([typeArgs, _1, args, _2], location) => new FunctionApplicationSuffix(location, typeArgs, args)
     );
     
-    return { FunctionApplicationSuffix };
+    return { parseFunctionApplicationSuffix };
 }

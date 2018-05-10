@@ -2,42 +2,46 @@ import { verifyMultiOperator, getOperatorMetadata } from '~/runtime/operators';
 import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, repeat, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface BinaryExpression extends NodeBase<SyntaxType.BinaryExpression> {
-    left: Expression;
-    symbol: Token;
-    right: Expression;
+export class BinaryExpression extends NodeBase<SyntaxType.BinaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly left: Expression,
+        readonly symbol: Token,
+        readonly right: Expression
+    ) { super(location, SyntaxType.BinaryExpression) }
+
+    accept<P, R = P>(visitor: BinaryExpressionVisitor<P, R>, param: P) {
+        return visitor.visitBinaryExpression(this, param);
+    }
 }
 
-export interface BinaryExpressionSuffix extends NodeBase<SyntaxType.BinaryExpression> {
-    symbol: Token;
-    right: Expression;
-    setBase(left: Expression): BinaryExpression;
+export interface BinaryExpressionVisitor<P, R = P> {
+    visitBinaryExpression(node: BinaryExpression, param: P): R;
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const BinaryExpressionSuffix: ParseFunc<BinaryExpressionSuffix> = seq(
+export class BinaryExpressionSuffix extends NodeBase<SyntaxType.BinaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly symbol: Token,
+        readonly right: Expression
+    ) { super(location, SyntaxType.BinaryExpression) }
+
+    // TODO: this will get run more than necessary
+    setBase = (left: Expression) => resolvePrecedence(new BinaryExpression(this.location, left, this.symbol, this.right));
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseBinaryExpressionSuffix: ParseFunc<BinaryExpressionSuffix> = seq(
         repeat(tok(TokenType.OPER), '+'),
-        Expression,
-        ([symbol, right], location) => ({
-            syntaxType: SyntaxType.BinaryExpression as SyntaxType.BinaryExpression,
-            location,
-            symbol: verifyMultiOperator(symbol), // TODO: make sure this works
-            right,
-            setBase(left: Expression) {
-                return resolvePrecedence({ // TODO: this will get run more than necessary
-                    syntaxType: this.syntaxType,
-                    symbol: this.symbol,
-                    right: this.right,
-                    left,
-                    location: this.location.merge(left.location)
-                })
-            }
-        })
+        parseExpression,
+        // TODO: make sure this works
+        ([symbol, right], location) => new BinaryExpressionSuffix(location, verifyMultiOperator(symbol), right)
     );
 
-    return { BinaryExpressionSuffix };
+    return { parseBinaryExpressionSuffix };
 }
 
 /**
@@ -80,7 +84,7 @@ function shouldPopOperator(nextToken: Token, stackToken: Token) {
 function binaryExpressionToList(exp: BinaryExpression) {
     const items: (Token | Expression)[] = [];
     // the tree is left-associative, so we assemble the list from right to left
-    let operToken = exp.symbol.clone();
+    let operToken: Token = exp.symbol.clone();
     let left = exp.left, right = exp.right;
     while (true) {
         items.unshift(right);
@@ -98,11 +102,5 @@ function binaryExpressionToList(exp: BinaryExpression) {
 }
 
 function createNewBinExpression(right: Expression, left: Expression, oper: Token) {
-    return {
-        syntaxType: SyntaxType.BinaryExpression as SyntaxType.BinaryExpression,
-        location: left.location.merge(right.location),
-        left,
-        symbol: oper,
-        right
-    };
+    return new BinaryExpression(left.location.merge(right.location), left, oper, right);
 }

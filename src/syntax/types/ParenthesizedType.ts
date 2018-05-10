@@ -1,22 +1,30 @@
 import { ParseFunc, seq, tok } from '~/parser/parser';
-import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
+import { Type, NodeBase, SyntaxType } from '~/syntax/environment';
+import { FileRange } from '~/core';
 
 
-export interface ParenthesizedType extends NodeBase<SyntaxType.ParenthesizedType> {
-    inner: TypeNode;
+export class ParenthesizedType extends NodeBase<SyntaxType.ParenthesizedType> {
+    constructor(
+        location: FileRange,
+        readonly inner: Type
+    ) { super(location, SyntaxType.ParenthesizedType) }
+
+    accept<P, R = P>(visitor: ParenthesizedTypeVisitor<P, R>, param: P) {
+        return visitor.visitParenthesizedType(this, param);
+    }
 }
 
-export function register(TypeNode: ParseFunc<TypeNode>) {
-    const ParenthesizedType: ParseFunc<ParenthesizedType> = seq(
+export interface ParenthesizedTypeVisitor<P, R = P> {
+    visitParenthesizedType(node: ParenthesizedType, param: P): R;
+}
+
+export function register(parseTypeNode: ParseFunc<Type>) {
+    const parseParenthesizedType: ParseFunc<ParenthesizedType> = seq(
         tok('('),
-        TypeNode,
+        parseTypeNode,
         tok(')'),
-        ([_1, inner, _2], location) => ({
-            syntaxType: SyntaxType.ParenthesizedType as SyntaxType.ParenthesizedType,
-            location,
-            inner
-        })
+        ([_1, inner, _2], location) => new ParenthesizedType(location, inner)
     );
 
-    return { ParenthesizedType };
+    return { parseParenthesizedType };
 }

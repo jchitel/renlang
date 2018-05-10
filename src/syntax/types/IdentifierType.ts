@@ -1,18 +1,25 @@
 import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { seq, tok, ParseFunc } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
+export class IdentifierType extends NodeBase<SyntaxType.IdentifierType> {
+    constructor(
+        location: FileRange,
+        readonly name: Token
+    ) { super(location, SyntaxType.IdentifierType) }
 
-export interface IdentifierType extends NodeBase<SyntaxType.IdentifierType> {
-    name: Token;
+    accept<P, R = P>(visitor: IdentifierTypeVisitor<P, R>, param: P) {
+        return visitor.visitIdentifierType(this, param);
+    }
 }
 
-export const IdentifierType: ParseFunc<IdentifierType> = seq(
+export interface IdentifierTypeVisitor<P, R = P> {
+    visitIdentifierType(node: IdentifierType, param: P): R;
+}
+
+export const parseIdentifierType: ParseFunc<IdentifierType> = seq(
     tok(TokenType.IDENT),
-    (name, location) => ({
-        syntaxType: SyntaxType.IdentifierType as SyntaxType.IdentifierType,
-        location,
-        name
-    })
+    (name, location) => new IdentifierType(location, name)
 );

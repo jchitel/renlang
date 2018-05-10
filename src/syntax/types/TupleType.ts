@@ -1,23 +1,30 @@
-import { NodeBase, SyntaxType, TypeNode } from '~/syntax/environment';
+import { NodeBase, SyntaxType, Type } from '~/syntax/environment';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
+export class TupleType extends NodeBase<SyntaxType.TupleType> {
+    constructor(
+        location: FileRange,
+        readonly types: ReadonlyArray<Type>
+    ) { super(location, SyntaxType.TupleType) }
 
-export interface TupleType extends NodeBase<SyntaxType.TupleType> {
-    types: ReadonlyArray<TypeNode>;
+    accept<P, R = P>(visitor: TupleTypeVisitor<P, R>, param: P) {
+        return visitor.visitTupleType(this, param);
+    }
 }
 
-export function register(TypeNode: ParseFunc<TypeNode>) {
-    const TupleType: ParseFunc<TupleType> = seq(
+export interface TupleTypeVisitor<P, R = P> {
+    visitTupleType(node: TupleType, param: P): R;
+}
+
+export function register(parseType: ParseFunc<Type>) {
+    const parseTupleType: ParseFunc<TupleType> = seq(
         tok('('),
-        repeat(TypeNode, '*', tok(',')),
+        repeat(parseType, '*', tok(',')),
         tok(')'),
-        ([_1, types, _2], location) => ({
-            syntaxType: SyntaxType.TupleType as SyntaxType.TupleType,
-            location,
-            types
-        })
+        ([_1, types, _2], location) => new TupleType(location, types)
     );
 
-    return { TupleType };
+    return { parseTupleType };
 }

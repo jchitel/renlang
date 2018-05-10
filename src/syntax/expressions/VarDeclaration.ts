@@ -1,25 +1,32 @@
 import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface VarDeclaration extends NodeBase<SyntaxType.VarDeclaration> {
-    name: Token;
-    init: Expression;
+export class VarDeclaration extends NodeBase<SyntaxType.VarDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly name: Token,
+        readonly init: Expression
+    ) { super(location, SyntaxType.VarDeclaration) }
+
+    accept<P, R = P>(visitor: VarDeclarationVisitor<P, R>, param: P) {
+        return visitor.visitVarDeclaration(this, param);
+    }
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const VarDeclaration: ParseFunc<VarDeclaration> = seq(
+export interface VarDeclarationVisitor<P, R = P> {
+    visitVarDeclaration(node: VarDeclaration, param: P): R;
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseVarDeclaration: ParseFunc<VarDeclaration> = seq(
         tok(TokenType.IDENT),
         tok('='),
-        Expression,
-        ([name, _, init], location) => ({
-            syntaxType: SyntaxType.VarDeclaration as SyntaxType.VarDeclaration,
-            location,
-            name,
-            init
-        })
+        parseExpression,
+        ([name, _, init], location) => new VarDeclaration(location, name, init)
     );
 
-    return { VarDeclaration };
+    return { parseVarDeclaration };
 }

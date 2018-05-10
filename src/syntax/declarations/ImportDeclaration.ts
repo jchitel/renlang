@@ -1,12 +1,13 @@
 import { TokenType, Token } from '~/parser/lexer';
 import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { ParseFunc, seq, tok, select, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
 /**
  * NameAlias ::= IDENT 'as' IDENT
  */
-export const NameAlias: ParseFunc<Import> = seq(
+export const parseNameAlias: ParseFunc<Import> = seq(
     tok(TokenType.IDENT),
     tok('as'),
     tok(TokenType.IDENT),
@@ -16,7 +17,7 @@ export const NameAlias: ParseFunc<Import> = seq(
 /**
  * WildcardImport ::= '*' 'as' IDENT
  */
-const WildcardImport: ParseFunc<Import> = seq(
+const parseWildcardImport: ParseFunc<Import> = seq(
     tok('*'),
     tok('as'),
     tok(TokenType.IDENT),
@@ -26,12 +27,12 @@ const WildcardImport: ParseFunc<Import> = seq(
 /**
  * NamedImports ::= LBRACE (AliasImport | IDENT | WildcardImport)+(sep COMMA) RBRACE
  */
-const NamedImports: ParseFunc<Import[]> = seq(
+const parseNamedImports: ParseFunc<Import[]> = seq(
     tok('{'),
     repeat(select<Import | Token>(
-        NameAlias,
+        parseNameAlias,
         tok(TokenType.IDENT),
-        WildcardImport
+        parseWildcardImport
     ), '+', tok(',')),
     tok('}'),
     ([_1, names, _2]) => names.map(n => n instanceof Token ? { importName: n, aliasName: n } : n)
@@ -44,19 +45,19 @@ const NamedImports: ParseFunc<Import[]> = seq(
  *              | IDENT COMMA WildcardImport # default and wildcard import
  *              | IDENT                      # just default import
  */
-export const ImportList: ParseFunc<Import[]> = select<Import[]>(
-    NamedImports,
+export const parseImportList: ParseFunc<Import[]> = select<Import[]>(
+    parseNamedImports,
     seq(
         tok(TokenType.IDENT),
         tok(','),
-        NamedImports,
+        parseNamedImports,
         ([def, _, named]) => [defaultImport(def), ...named]
     ),
-    seq(WildcardImport, i => [i]),
+    seq(parseWildcardImport, i => [i]),
     seq(
         tok(TokenType.IDENT),
         tok(','),
-        WildcardImport,
+        parseWildcardImport,
         ([def, _, wildcard]) => [defaultImport(def), wildcard]
     ),
     seq(tok(TokenType.IDENT), i => [defaultImport(i)])
@@ -67,26 +68,32 @@ interface Import {
     aliasName: Token;
 }
 
-export interface ImportDeclaration extends NodeBase<SyntaxType.ImportDeclaration> {
-    readonly moduleName: Token;
-    readonly imports: ReadonlyArray<Import>;
+export class ImportDeclaration extends NodeBase<SyntaxType.ImportDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly moduleName: Token,
+        readonly imports: ReadonlyArray<Import>
+    ) { super(location, SyntaxType.ImportDeclaration) }
+
+    accept<T, R = T>(visitor: ImportDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitImportDeclaration(this, param);
+    }
+}
+
+export interface ImportDeclarationVisitor<T, R = T> {
+    visitImportDeclaration(node: ImportDeclaration, param: T): R;
 }
 
 /**
  * ImportDeclaration ::= 'import' 'from' STRING_LITERAL ':' ImportList
  */
-export const ImportDeclaration: ParseFunc<ImportDeclaration> = seq(
+export const parseImportDeclaration: ParseFunc<ImportDeclaration> = seq(
     tok('import'),
     tok('from'),
     tok(TokenType.STRING_LITERAL),
     tok(':'),
-    ImportList,
-    ([_1, _2, moduleName, _3, imports], location) => ({
-        syntaxType: SyntaxType.ImportDeclaration as SyntaxType.ImportDeclaration,
-        location,
-        moduleName,
-        imports
-    })
+    parseImportList,
+    ([_1, _2, moduleName, _3, imports], location) => new ImportDeclaration(location, moduleName, imports)
 );
 
-const defaultImport = (token: Token) => ({ importName: token.clone({ image: 'default' }), aliasName: token });
+const defaultImport = (token: Token): Import => ({ importName: token.clone({ image: 'default' }), aliasName: token });

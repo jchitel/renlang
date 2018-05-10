@@ -1,17 +1,25 @@
 import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface IntegerLiteral extends NodeBase<SyntaxType.IntegerLiteral> {
-    value: Token;
+export class IntegerLiteral extends NodeBase<SyntaxType.IntegerLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.IntegerLiteral) }
+
+    accept<P, R = P>(visitor: IntegerLiteralVisitor<P, R>, param: P) {
+        return visitor.visitIntegerLiteral(this, param);
+    }
 }
 
-export const IntegerLiteral: ParseFunc<IntegerLiteral> = seq(
+export interface IntegerLiteralVisitor<P, R = P> {
+    visitIntegerLiteral(node: IntegerLiteral, param: P): R;
+}
+
+export const parseIntegerLiteral: ParseFunc<IntegerLiteral> = seq(
     tok(TokenType.INTEGER_LITERAL),
-    (value, location) => ({
-        syntaxType: SyntaxType.IntegerLiteral as SyntaxType.IntegerLiteral,
-        location,
-        value
-    })
+    (value, location) => new IntegerLiteral(location, value)
 );

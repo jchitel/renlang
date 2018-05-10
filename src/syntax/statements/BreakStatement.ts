@@ -1,18 +1,26 @@
 import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, optional } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface BreakStatement extends NodeBase<SyntaxType.BreakStatement> {
-    loopNumber: Optional<Token>;
+export class BreakStatement extends NodeBase<SyntaxType.BreakStatement> {
+    constructor(
+        location: FileRange,
+        readonly loopNumber: Optional<Token>
+    ) { super(location, SyntaxType.BreakStatement) }
+
+    accept<P, R = P>(visitor: BreakStatementVisitor<P, R>, param: P) {
+        return visitor.visitBreakStatement(this, param);
+    }
 }
 
-export const BreakStatement: ParseFunc<BreakStatement> = seq(
+export interface BreakStatementVisitor<P, R = P> {
+    visitBreakStatement(node: BreakStatement, param: P): R;
+}
+
+export const parseBreakStatement: ParseFunc<BreakStatement> = seq(
     tok('break'),
     optional(tok(TokenType.INTEGER_LITERAL)),
-    ([_, loopNumber], location) => ({
-        syntaxType: SyntaxType.BreakStatement as SyntaxType.BreakStatement,
-        location,
-        loopNumber
-    })
+    ([_, loopNumber], location) => new BreakStatement(location, loopNumber)
 );

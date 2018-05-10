@@ -1,7 +1,7 @@
 export { ImportDeclaration } from './ImportDeclaration';
-export { ConstantDeclaration } from './ConstantDeclaration';
+export { ConstantDeclaration, AnonymousConstantDeclaration } from './ConstantDeclaration';
 export { ExportDeclaration } from './ExportDeclaration';
 export { ExportForwardDeclaration } from './ExportForwardDeclaration';
-export { TypeDeclaration, TypeParam } from './TypeDeclaration';
-export { FunctionDeclaration, Param } from './FunctionDeclaration';
-export { NamespaceDeclaration } from './NamespaceDeclaration';
+export { TypeDeclaration, TypeParam, AnonymousTypeDeclaration } from './TypeDeclaration';
+export { FunctionDeclaration, Param, AnonymousFunctionDeclaration } from './FunctionDeclaration';
+export { NamespaceDeclaration, AnonymousNamespaceDeclaration } from './NamespaceDeclaration';

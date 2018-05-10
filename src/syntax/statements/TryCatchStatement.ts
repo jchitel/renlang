@@ -1,6 +1,7 @@
 import { NodeBase, SyntaxType, Statement } from '~/syntax/environment';
 import { Param } from '~/syntax';
 import { ParseFunc, seq, tok, repeat, optional } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
 interface Catch {
@@ -8,41 +9,46 @@ interface Catch {
     body: Statement;
 }
 
-export interface TryCatchStatement extends NodeBase<SyntaxType.TryCatchStatement> {
-    try: Statement;
-    catches: ReadonlyArray<Catch>;
-    finally: Optional<Statement>;
+export class TryCatchStatement extends NodeBase<SyntaxType.TryCatchStatement> {
+    constructor(
+        location: FileRange,
+        readonly _try: Statement,
+        readonly catches: ReadonlyArray<Catch>,
+        readonly _finally: Optional<Statement>
+    ) { super(location, SyntaxType.TryCatchStatement) }
+
+    accept<P, R = P>(visitor: TryCatchStatementVisitor<P, R>, param: P) {
+        return visitor.visitTryCatchStatement(this, param);
+    }
 }
 
-export function register(Statement: ParseFunc<Statement>, Param: ParseFunc<Param>) {
-    const CatchClause: ParseFunc<Catch> = seq(
+export interface TryCatchStatementVisitor<P, R = P> {
+    visitTryCatchStatement(node: TryCatchStatement, param: P): R;
+}
+
+export function register(parseStatement: ParseFunc<Statement>, parseParam: ParseFunc<Param>) {
+    const parseCatchClause: ParseFunc<Catch> = seq(
         tok('catch'),
         tok('('),
-        Param,
+        parseParam,
         tok(')'),
-        Statement,
+        parseStatement,
         ([_1, _2, param, _3, body]) => ({ param, body })
     );
 
-    const FinallyClause: ParseFunc<Statement> = seq(
+    const parseFinallyClause: ParseFunc<Statement> = seq(
         tok('finally'),
-        Statement,
+        parseStatement,
         ([_, body]) => body
     );
 
-    const TryCatchStatement: ParseFunc<TryCatchStatement> = seq(
+    const parseTryCatchStatement: ParseFunc<TryCatchStatement> = seq(
         tok('try'),
-        Statement,
-        repeat(CatchClause, '+'),
-        optional(FinallyClause),
-        ([_, _try, catches, _finally], location) => ({
-            syntaxType: SyntaxType.TryCatchStatement as SyntaxType.TryCatchStatement,
-            location,
-            try: _try,
-            catches,
-            finally: _finally
-        })
+        parseStatement,
+        repeat(parseCatchClause, '+'),
+        optional(parseFinallyClause),
+        ([_, _try, catches, _finally], location) => new TryCatchStatement(location, _try, catches, _finally)
     );
 
-    return { TryCatchStatement };
+    return { parseTryCatchStatement };
 }

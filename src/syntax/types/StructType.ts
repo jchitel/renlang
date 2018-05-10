@@ -1,32 +1,40 @@
-import { TypeNode, NodeBase, SyntaxType } from '~/syntax/environment';
+import { Type, NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
 interface Field {
-    typeNode: TypeNode;
+    typeNode: Type;
     name: Token;
 }
 
-export interface StructType extends NodeBase<SyntaxType.StructType> {
-    fields: ReadonlyArray<Field>;
+export class StructType extends NodeBase<SyntaxType.StructType> {
+    constructor(
+        location: FileRange,
+        readonly fields: ReadonlyArray<Field>
+    ) { super(location, SyntaxType.StructType) }
+
+    accept<P, R = P>(visitor: StructTypeVisitor<P, R>, param: P) {
+        return visitor.visitStructType(this, param);
+    }
 }
 
-export function register(TypeNode: ParseFunc<TypeNode>) {
-    const StructType: ParseFunc<StructType> = seq(
+export interface StructTypeVisitor<P, R = P> {
+    visitStructType(node: StructType, param: P): R;
+}
+
+export function register(parseType: ParseFunc<Type>) {
+    const parseStructType: ParseFunc<StructType> = seq(
         tok('{'),
         repeat(seq(
-            TypeNode,
+            parseType,
             tok(TokenType.IDENT),
             ([typeNode, name]) => ({ typeNode, name })
         ), '*'),
         tok('}'),
-        ([_1, fields, _2], location) => ({
-            syntaxType: SyntaxType.StructType as SyntaxType.StructType,
-            location,
-            fields
-        })
+        ([_1, fields, _2], location) => new StructType(location, fields)
     );
 
-    return { StructType };
+    return { parseStructType };
 }

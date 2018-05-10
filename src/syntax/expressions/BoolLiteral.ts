@@ -1,17 +1,25 @@
 import { NodeBase, SyntaxType } from '~/syntax/environment';
 import { Token } from '~/parser/lexer';
 import { ParseFunc, seq, select, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface BoolLiteral extends NodeBase<SyntaxType.BoolLiteral> {
-    value: Token;
+export class BoolLiteral extends NodeBase<SyntaxType.BoolLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.BoolLiteral) }
+
+    accept<P, R = P>(visitor: BoolLiteralVisitor<P, R>, param: P) {
+        return visitor.visitBoolLiteral(this, param);
+    }
 }
 
-export const BoolLiteral: ParseFunc<BoolLiteral> = seq(
+export interface BoolLiteralVisitor<P, R = P> {
+    visitBoolLiteral(node: BoolLiteral, param: P): R;
+}
+
+export const parseBoolLiteral: ParseFunc<BoolLiteral> = seq(
     select(tok('true'), tok('false')),
-    (value, location) => ({
-        syntaxType: SyntaxType.BoolLiteral as SyntaxType.BoolLiteral,
-        location,
-        value
-    })
+    (value, location) =>  new BoolLiteral(location, value)
 );

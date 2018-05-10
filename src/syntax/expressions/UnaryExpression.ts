@@ -2,49 +2,48 @@ import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { Token, TokenType } from '~/parser/lexer';
 import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
 import { verifyMultiOperator } from '~/runtime/operators';
+import { FileRange } from '~/core';
 
 
-export interface UnaryExpression extends NodeBase<SyntaxType.UnaryExpression> {
-    target: Expression;
-    symbol: Token;
-    prefix: boolean;
+export class UnaryExpression extends NodeBase<SyntaxType.UnaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly symbol: Token,
+        readonly prefix: boolean
+    ) { super(location, SyntaxType.UnaryExpression) }
+
+    accept<P, R = P>(visitor: UnaryExpressionVisitor<P, R>, param: P) {
+        return visitor.visitUnaryExpression(this, param);
+    }
 }
 
-export interface PostfixExpressionSuffix extends NodeBase<SyntaxType.UnaryExpression> {
-    symbol: Token;
-    prefix: false;
-    setBase(target: Expression): UnaryExpression;
+export interface UnaryExpressionVisitor<P, R = P> {
+    visitUnaryExpression(node: UnaryExpression, param: P): R;
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const PrefixExpression: ParseFunc<UnaryExpression> = seq(
+export class PostfixExpressionSuffix extends NodeBase<SyntaxType.UnaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly symbol: Token
+    ) { super(location, SyntaxType.UnaryExpression) }
+
+    setBase = (target: Expression) => new UnaryExpression(this.location.merge(target.location), target, this.symbol, false)
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parsePrefixExpression: ParseFunc<UnaryExpression> = seq(
         repeat(tok(TokenType.OPER), '+'),
-        Expression,
-        ([symbol, target], location) => ({
-            syntaxType: SyntaxType.UnaryExpression as SyntaxType.UnaryExpression,
-            location,
-            target,
-            symbol: verifyMultiOperator(symbol), // TODO: make sure this works
-            prefix: true
-        })
+        parseExpression,
+        // TODO: make sure this works
+        ([symbol, target], location) => new UnaryExpression(location, target, verifyMultiOperator(symbol), true)
     );
 
-    const PostfixExpressionSuffix: ParseFunc<PostfixExpressionSuffix> = seq(
+    const parsePostfixExpressionSuffix: ParseFunc<PostfixExpressionSuffix> = seq(
         repeat(tok(TokenType.OPER), '+'),
-        (symbol, location) => ({
-            syntaxType: SyntaxType.UnaryExpression as SyntaxType.UnaryExpression,
-            location,
-            symbol: verifyMultiOperator(symbol), // TODO: make sure this works
-            prefix: false as false,
-            setBase(target: Expression) {
-                return {
-                    ...this,
-                    target,
-                    location: this.location.merge(target.location)
-                }
-            }
-        })
+        // TODO: make sure this works
+        (symbol, location) => new PostfixExpressionSuffix(location, verifyMultiOperator(symbol))
     );
 
-    return { PrefixExpression, PostfixExpressionSuffix };
+    return { parsePrefixExpression, parsePostfixExpressionSuffix };
 }

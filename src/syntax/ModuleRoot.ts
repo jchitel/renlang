@@ -2,30 +2,30 @@ import { TokenType } from '~/parser/lexer';
 import { ImportDeclaration } from './declarations/ImportDeclaration';
 import { NodeBase, SyntaxType, Declaration } from '~/syntax/environment';
 import { ExportDeclaration, ExportForwardDeclaration } from '~/syntax';
+import { parseImportDeclaration, parseExportForwardDeclaration } from './declarations/parsers';
 import { ParseFunc, seq, repeat, select, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface ModuleRoot extends NodeBase<SyntaxType.ModuleRoot> {
-    readonly imports: ReadonlyArray<ImportDeclaration>;
-    readonly declarations: ReadonlyArray<Declaration | ExportDeclaration | ExportForwardDeclaration>;
+export class ModuleRoot extends NodeBase<SyntaxType.ModuleRoot> {
+    constructor(
+        location: FileRange,
+        readonly imports: ReadonlyArray<ImportDeclaration>,
+        readonly declarations: ReadonlyArray<Declaration | ExportDeclaration | ExportForwardDeclaration>
+    ) { super(location, SyntaxType.ModuleRoot) }
 }
 
-export function register(Declaration: ParseFunc<Declaration>, ExportDeclaration: ParseFunc<ExportDeclaration>) {
-    const ModuleRoot: ParseFunc<ModuleRoot> = seq(
-        repeat(ImportDeclaration, '*'),
+export function register(parseDeclaration: ParseFunc<Declaration>, parseExportDeclaration: ParseFunc<ExportDeclaration>) {
+    const parseModuleRoot: ParseFunc<ModuleRoot> = seq(
+        repeat(parseImportDeclaration, '*'),
         repeat(select<Declaration | ExportDeclaration | ExportForwardDeclaration>(
-            Declaration,
-            ExportDeclaration,
-            ExportForwardDeclaration
+            parseDeclaration,
+            parseExportDeclaration,
+            parseExportForwardDeclaration
         ), '*'),
         tok(TokenType.EOF),
-        ([imports, declarations], location) => ({
-            syntaxType: SyntaxType.ModuleRoot as SyntaxType.ModuleRoot,
-            location,
-            imports,
-            declarations
-        })
+        ([imports, declarations], location) => new ModuleRoot(location, imports, declarations)
     );
 
-    return { ModuleRoot };
+    return { parseModuleRoot };
 }

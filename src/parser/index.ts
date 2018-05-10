@@ -10,6 +10,6 @@ export function parseModule(path: string): { module: Optional<ModuleRoot>, diagn
     if (_diags.length) return { module: null, diagnostics: _diags };
     const parser = createParser(tokens);
     const env = SyntaxEnvironment();
-    const { result: module, diagnostics } = parser.parse(env.ModuleRoot);
+    const { result: module, diagnostics } = parser.parse(env.parseModuleRoot);
     return { module, diagnostics };
 }

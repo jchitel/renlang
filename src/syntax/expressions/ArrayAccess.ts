@@ -1,35 +1,40 @@
 import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface ArrayAccess extends NodeBase<SyntaxType.ArrayAccess> {
-    target: Expression;
-    index: Expression;
+export class ArrayAccess extends NodeBase<SyntaxType.ArrayAccess> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly index: Expression
+    ) { super(location, SyntaxType.ArrayAccess) }
+
+    accept<P, R = P>(visitor: ArrayAccessVisitor<P, R>, param: P) {
+        return visitor.visitArrayAccess(this, param);
+    }
 }
 
-export interface ArrayAccessSuffix extends NodeBase<SyntaxType.ArrayAccess> {
-    index: Expression;
-    setBase(target: Expression): ArrayAccess;
+export interface ArrayAccessVisitor<P, R = P> {
+    visitArrayAccess(node: ArrayAccess, param: P): R;
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const ArrayAccessSuffix: ParseFunc<ArrayAccessSuffix> = seq(
+export class ArrayAccessSuffix extends NodeBase<SyntaxType.ArrayAccess> {
+    constructor(
+        location: FileRange,
+        readonly index: Expression
+    ) { super(location, SyntaxType.ArrayAccess) }
+
+    setBase = (target: Expression) => new ArrayAccess(this.location, target, this.index);
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseArrayAccessSuffix: ParseFunc<ArrayAccessSuffix> = seq(
         tok('['),
-        Expression,
+        parseExpression,
         tok(']'),
-        ([_1, index, _2], location) => ({
-            syntaxType: SyntaxType.ArrayAccess as SyntaxType.ArrayAccess,
-            location,
-            index,
-            setBase(target: Expression) {
-                return {
-                    ...this,
-                    target,
-                    location: this.location.merge(target.location)
-                }
-            }
-        })
+        ([_1, index, _2], location) => new ArrayAccessSuffix(location, index)
     );
 
-    return { ArrayAccessSuffix };
+    return { parseArrayAccessSuffix };
 }

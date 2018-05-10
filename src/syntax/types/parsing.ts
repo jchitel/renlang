@@ -1,0 +1,10 @@
+export { parseArrayTypeSuffix, ArrayTypeSuffix } from './ArrayType';
+export { parseBuiltInType } from './BuiltInType';
+export { register as registerFunctionType } from './FunctionType';
+export { parseIdentifierType } from './IdentifierType';
+export { parseNamespaceAccessTypeSuffix, NamespaceAccessTypeSuffix } from './NamespaceAccessType';
+export { register as registerParenthesizedType } from './ParenthesizedType';
+export { register as registerSpecificType, SpecificTypeSuffix } from './SpecificType';
+export { register as registerStructType } from './StructType';
+export { register as registerTupleType } from './TupleType';
+export { register as registerUnionType, UnionTypeSuffix } from './UnionType';

@@ -1,30 +1,36 @@
 import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
 import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export interface IfElseExpression extends NodeBase<SyntaxType.IfElseExpression> {
-    condition: Expression;
-    consequent: Expression;
-    alternate: Expression;
+export class IfElseExpression extends NodeBase<SyntaxType.IfElseExpression> {
+    constructor(
+        location: FileRange,
+        readonly condition: Expression,
+        readonly consequent: Expression,
+        readonly alternate: Expression
+    ) { super(location, SyntaxType.IfElseExpression) }
+
+    accept<P, R = P>(visitor: IfElseExpressionVisitor<P, R>, param: P) {
+        return visitor.visitIfElseExpression(this, param);
+    }
 }
 
-export function register(Expression: ParseFunc<Expression>) {
-    const IfElseExpression: ParseFunc<IfElseExpression> = seq(
+export interface IfElseExpressionVisitor<P, R = P> {
+    visitIfElseExpression(node: IfElseExpression, param: P): R;
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseIfElseExpression: ParseFunc<IfElseExpression> = seq(
         tok('if'),
         tok('('),
-        Expression,
+        parseExpression,
         tok(')'),
-        Expression,
+        parseExpression,
         tok('else'),
-        Expression,
-        ([_1, _2, condition, _3, consequent, _4, alternate], location) => ({
-            syntaxType: SyntaxType.IfElseExpression as SyntaxType.IfElseExpression,
-            location,
-            condition,
-            consequent,
-            alternate
-        })
+        parseExpression,
+        ([_1, _2, condition, _3, consequent, _4, alternate], location) => new IfElseExpression(location, condition, consequent, alternate)
     );
 
-    return { IfElseExpression };
+    return { parseIfElseExpression };
 }
