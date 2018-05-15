@@ -43,3 +43,19 @@ interface String {
 String.prototype.last = function last(count = 1) {
     return this.slice(this.length - count, this.length);
 }
+
+interface Map<K, V> {
+    /** Set the value at a specified key immutably, returning a new map object without modifying the original */
+    iset(key: K, value: V): Map<K, V>;
+}
+
+interface ReadonlyMap<K, V> {
+    /** Set the value at a specified key immutably, returning a new map object without modifying the original */
+    iset(key: K, value: V): ReadonlyMap<K, V>;
+}
+
+Map.prototype.iset = function iset<K, V>(this: Map<K, V>, key: K, value: V): Map<K, V> {
+    const clone = new Map<K, V>(this);
+    clone.set(key, value);
+    return clone;
+}

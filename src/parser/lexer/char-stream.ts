@@ -1,4 +1,4 @@
-import { openSync as open, readSync as read } from 'fs';
+import { openSync as open, readSync as read, closeSync as close } from 'fs';
 import { StringDecoder } from 'string_decoder';
 import { LazyList, NonEmptyLazyList, fromIterable, infList } from '~/utils/lazy-list';
 import { FilePosition, CoreObject } from '~/core';
@@ -78,7 +78,13 @@ function createByteStream(path: string): LazyList<Buffer> {
     const fd = open(path, 'r');
     return infList()
         .map(i => readByte(fd, i))
-        .takeWhile(b => b.length > 0);
+        .takeWhile(b => {
+            // if there was a byte read, return it
+            if (b.length > 0) return true;
+            // otherwise, close the fd so we don't leave it dangling, and stop iteration
+            close(fd);
+            return false;
+        });
 }
 
 /**

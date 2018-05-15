@@ -53,6 +53,11 @@ abstract class AbstractLazyList<T> implements Iterable<T> {
     abstract prepend(item: T): LazyList<T>;
 
     /**
+     * Shortcut concat that appends just a single item instead of a list.
+     */
+    abstract append(item: T): LazyList<T>;
+
+    /**
      * Copies each item of this list to a new one, stopping for the first item
      * that returns false for the specified predicate
      */
@@ -130,6 +135,10 @@ export class NonEmptyLazyList<T> extends AbstractLazyList<T> {
         return new NonEmptyLazyList(item, () => this);
     }
 
+    public append(item: T): LazyList<T> {
+        return new NonEmptyLazyList(this.head, () => this.tail.append(item));
+    }
+
     public takeWhile(predicate?: (item: T) => boolean): LazyList<T> {
         if (!predicate) return this.takeWhile(i => !!i);
         if (predicate(this.head)) return new NonEmptyLazyList(this.head, () => this.tail.takeWhile(predicate));
@@ -164,6 +173,8 @@ export class EmptyLazyList<T> extends AbstractLazyList<T> {
     }
     concat(list: LazyList<T>): LazyList<T> { return list; }
     prepend(item: T): LazyList<T> { return new NonEmptyLazyList(item, () => this); }
+    /** Interestingly enough, for an empty list, an append and prepend are the same */
+    append(item: T): LazyList<T> { return this.prepend(item); }
     takeWhile(_predicate?: (item: T) => boolean): LazyList<T> { return new EmptyLazyList(); }
     shift(_count: number): { values: T[], tail: LazyList<T> } {
         return { values: [], tail: this };

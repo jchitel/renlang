@@ -5,7 +5,7 @@ export type Dependency = ImportedName | ImportedNamespace | ForwardedName | Forw
 
 export class ImportedName extends CoreObject {
     constructor(
-        readonly importModule: string,
+        readonly importNamespace: number,
         readonly importName: string,
         readonly exportModule: string,
         readonly exportName: string
@@ -14,7 +14,7 @@ export class ImportedName extends CoreObject {
 
 export class ImportedNamespace extends CoreObject {
     constructor(
-        readonly importModule: string,
+        readonly importNamespace: number,
         readonly importName: string,
         readonly exportModule: string
     ) { super() }
@@ -22,7 +22,7 @@ export class ImportedNamespace extends CoreObject {
 
 export class ForwardedName extends CoreObject {
     constructor(
-        readonly forwardModule: string,
+        readonly forwardNamespace: number,
         readonly forwardName: string,
         readonly exportModule: string,
         readonly exportName: string
@@ -31,7 +31,7 @@ export class ForwardedName extends CoreObject {
 
 export class ForwardedNamespace extends CoreObject {
     constructor(
-        readonly forwardModule: string,
+        readonly forwardNamespace: number,
         readonly forwardName: string,
         readonly exportModule: string
     ) { super() }
@@ -39,14 +39,14 @@ export class ForwardedNamespace extends CoreObject {
 
 export class PureForward extends CoreObject {
     constructor(
-        readonly forwardModule: string,
+        readonly forwardNamespace: number,
         readonly exportModule: string
     ) { super() }
 }
 
 export class ExportedName extends CoreObject {
     constructor(
-        readonly module: string,
+        readonly namespace: number,
         readonly localName: string,
         readonly exportName: string
     ) { super() }
@@ -54,7 +54,7 @@ export class ExportedName extends CoreObject {
 
 export class ExportedDeclaration extends CoreObject {
     constructor(
-        readonly module: string,
+        readonly namespace: number,
         readonly declarationId: number,
         readonly exportName: string
     ) { super() }
