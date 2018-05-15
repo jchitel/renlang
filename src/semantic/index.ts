@@ -1,5 +1,6 @@
 import { Program } from './program';
 import enumerateNamespaces from './passes/enumeration';
+import resolveDependencies from './passes/resolution';
 
 
 /**

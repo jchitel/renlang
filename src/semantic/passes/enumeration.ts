@@ -1,4 +1,4 @@
-import { Dependency, ImportedNamespace, ImportedName, PureForward, ForwardedNamespace, ForwardedName, ExportedName, ExportedDeclaration } from '~/semantic/passes/resolution';
+import { Dependency, ImportedNamespace, ImportedName, PureForward, ForwardedNamespace, ForwardedName, ExportedName, ExportedDeclaration } from './dependencies';
 import { parseModule } from '~/parser';
 import { Diagnostic, FilePosition, CoreObject } from '~/core';
 import { ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration, Declaration as SyntaxDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration, AnonymousTypeDeclaration, AnonymousFunctionDeclaration, AnonymousConstantDeclaration, AnonymousNamespaceDeclaration } from '~/syntax';
@@ -18,7 +18,7 @@ export interface NamespaceEnumerationOutput {
 }
 
 export interface EnumeratedModule {
-    readonly module: Optional<Module>;
+    readonly namespaceId: Optional<number>;
     readonly status: ModuleEnumerationStatus;
 }
 
@@ -50,7 +50,7 @@ class EnumerationProcess extends CoreObject {
     constructor(readonly mainModulePath: string) {
         super();
         this.moduleQueue = single(mainModulePath);
-        this.modules = new Map<string, EnumeratedModule>().iset(mainModulePath, { module: null, status: ModuleEnumerationStatus.REFERENCED });
+        this.modules = new Map<string, EnumeratedModule>().iset(mainModulePath, { namespaceId: null, status: ModuleEnumerationStatus.REFERENCED });
     }
 
     run() {
@@ -87,7 +87,7 @@ class EnumerationProcess extends CoreObject {
         next = next.addDiagnostics(parseDiagnostics);
         // add the module to the module and namespace registries
         next = next.setSuccessfulModule(modulePath);
-        const namespaceId = next.modules.get(modulePath)!.module!.namespaceId;
+        const namespaceId = next.modules.get(modulePath)!.namespaceId!;
         // module parsed successfully, time to enumerate its contents
         for (const declaration of [...moduleSyntax.imports, ...moduleSyntax.declarations]) {
             next = next.handleDeclaration(declaration, namespaceId, modulePath);
@@ -97,22 +97,21 @@ class EnumerationProcess extends CoreObject {
     }
 
     setFailedModule(path: string, status: ModuleEnumerationStatus): EnumerationProcess {
-        return this.clone({ modules: this.modules.iset(path, { module: null, status }) });
+        return this.clone({ modules: this.modules.iset(path, { namespaceId: null, status }) });
     }
 
     setSuccessfulModule(path: string): EnumerationProcess {
         const namespaceId = this.namespaces.length;
-        const module = new Module(namespaceId, path);
         return this.clone({
-            modules: this.modules.iset(path, { module, status: ModuleEnumerationStatus.SUCCESS }),
-            namespaces: [...this.namespaces, module]
+            modules: this.modules.iset(path, { namespaceId, status: ModuleEnumerationStatus.SUCCESS }),
+            namespaces: [...this.namespaces, new Module(namespaceId, path)]
         });
     }
 
     addReferencedModule(path: string): EnumerationProcess {
         if (this.modules.has(path)) return this;
         return this.clone({
-            modules: this.modules.iset(path, { module: null, status: ModuleEnumerationStatus.REFERENCED }),
+            modules: this.modules.iset(path, { namespaceId: null, status: ModuleEnumerationStatus.REFERENCED }),
             moduleQueue: this.moduleQueue.append(path)
         });
     }

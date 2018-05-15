@@ -72,7 +72,7 @@ export class Module extends Namespace {
  * - a locally-scoped name
  * - a declaration inline with the name (only in the case of exported declarations)
  */
-export type NameTarget = RemoteName | RemoteNamespace | LocalName | LocalDeclaration;
+export type NameTarget = RemoteName | RemoteNamespace | LocalName | LocalDeclaration | DanglingReference | CircularReference;
 
 /**
  * A remote name is reference to an export name from another module.
@@ -90,7 +90,8 @@ export class RemoteName extends CoreObject {
  */
 export class RemoteNamespace extends CoreObject {
     constructor(
-        readonly modulePath: string
+        readonly modulePath: string,
+        readonly resolvedDeclarationId: number
     ) { super() }
 }
 
@@ -113,6 +114,12 @@ export class LocalDeclaration extends CoreObject {
         readonly resolvedDeclarationId: number
     ) { super() }
 }
+
+/** Indicates that the name cannot be resolved because its target does not exist */
+export class DanglingReference extends CoreObject {}
+
+/** Indicates that the name cannot be resolved because it depends on itself */
+export class CircularReference extends CoreObject {}
 
 /**
  * A semantic declaration is a node that is ultimately associated with a name
