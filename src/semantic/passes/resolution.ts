@@ -1,5 +1,5 @@
 import { EnumeratedModule, ModuleEnumerationStatus } from './enumeration';
-import { DeclaredEntity, Namespace } from '../namespace';
+import { Declaration, Namespace } from '../namespace';
 import { Dependency, ImportedName, ImportedNamespace, ForwardedName, ForwardedNamespace, PureForward, ExportedName } from './dependencies';
 import { CoreObject, Diagnostic } from '~/core';
 import { LazyList, fromIterable } from '~/utils/lazy-list';
@@ -10,7 +10,7 @@ export interface DependencyResolutionOutput {
     readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
-export default function resolveDependencies(modules: ReadonlyMap<string, EnumeratedModule>, declarations: ReadonlyArray<DeclaredEntity>, namespaces: ReadonlyArray<Namespace>, dependencyQueue: ReadonlyArray<Dependency>) {
+export default function resolveDependencies(modules: ReadonlyMap<string, EnumeratedModule>, declarations: ReadonlyArray<Declaration>, namespaces: ReadonlyArray<Namespace>, dependencyQueue: ReadonlyArray<Dependency>) {
 	return new ResolutionProcess(modules, declarations, namespaces, dependencyQueue).run();
 }
 
@@ -36,7 +36,7 @@ class ResolutionProcess extends CoreObject {
 
 	constructor(
 		readonly modules: ReadonlyMap<string, EnumeratedModule>,
-		readonly declarations: ReadonlyArray<DeclaredEntity>,
+		readonly declarations: ReadonlyArray<Declaration>,
 		readonly namespaces: ReadonlyArray<Namespace>,
 		dependencyQueue: ReadonlyArray<Dependency>
 	) {

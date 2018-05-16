@@ -261,7 +261,9 @@ class EnumerationProcess extends CoreObject {
     handleType(node: syntax.TypeDeclaration | syntax.AnonymousTypeDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
         const declaredType = new ns.TypeDeclaration(declarationId, node);
-        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredType]);
+        let next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredType]);
+        if (node instanceof syntax.TypeDeclaration)
+            next = next.addLocalName(namespaceId, node.name.image, declarationId);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
@@ -276,7 +278,9 @@ class EnumerationProcess extends CoreObject {
     handleFunction(node: syntax.FunctionDeclaration | syntax.AnonymousFunctionDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
         const declaredFunction = new ns.FunctionDeclaration(declarationId, node);
-        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredFunction]);
+        let next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredFunction]);
+        if (node instanceof syntax.FunctionDeclaration)
+            next = next.addLocalName(namespaceId, node.name.image, declarationId);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
@@ -291,7 +295,9 @@ class EnumerationProcess extends CoreObject {
     handleConstant(node: syntax.ConstantDeclaration | syntax.AnonymousConstantDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
         const declaredConstant = new ns.ConstantDeclaration(declarationId, node);
-        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredConstant]);
+        let next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredConstant]);
+        if (node instanceof syntax.ConstantDeclaration)
+            next = next.addLocalName(namespaceId, node.name.image, declarationId);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
