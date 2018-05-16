@@ -7,14 +7,27 @@
  */
 export class CoreObject {
     /**
-     * Creates a clone of 'this', applying an optional set of properties to the new object.
-     * Note that the type parameter is to allow private properties to be added.
-     * There will be an error if invalid types are provided for public properties.
+     * Creates a shallow copy of 'this'.
+     * TODO: this will be a problem for methods specified as arrow function properties
      */
-    clone<T, C extends Partial<T>>(props: C = {} as C): T {
-        // TS does not know how to properly handle spreads
-        const _props = { ...(this as any), ...(props as any) };
-        return Object.assign(Object.create(Object.getPrototypeOf(this)), _props);
+    clone(): this {
+        return Object.assign(Object.create(Object.getPrototypeOf(this)), this);
+    }
+
+    /**
+     * Sets a property of 'this' to a value, returning a new object with the value
+     */
+    set<K extends keyof this>(key: K, value: this[K]): this {
+        const obj = this.clone();
+        return Object.assign(obj, { [key]: value });
+    }
+
+    /**
+     * Mutates a property of 'this' using the specified function, returning a new object with the result value
+     */
+    mutate<K extends keyof this>(key: K, fn: (val: this[K]) => this[K]): this {
+        const obj = this.clone();
+        return Object.assign(obj, { [key]: fn(this[key]) });
     }
 }
 
@@ -39,11 +52,11 @@ export class FilePosition extends CoreObject {
     }
 
     nextLine(): FilePosition {
-        return this.clone({ position: [this.position[0] + 1, 0] });
+        return this.mutate('position', ([l]) => [l + 1, 0] as this['position']);
     }
 
     nextColumn(): FilePosition {
-        return this.clone({ position: [this.position[0], this.position[1] + 1] });
+        return this.mutate('position', ([l, c]) => [l, c + 1] as this['position']);
     }
 }
 

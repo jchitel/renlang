@@ -1,18 +1,17 @@
 import { Dependency, ImportedNamespace, ImportedName, PureForward, ForwardedNamespace, ForwardedName, ExportedName, ExportedDeclaration } from './dependencies';
 import { parseModule } from '~/parser';
 import { Diagnostic, FilePosition, CoreObject } from '~/core';
-import { ModuleRoot, ImportDeclaration, ExportDeclaration, ExportForwardDeclaration, Declaration as SyntaxDeclaration, TypeDeclaration, FunctionDeclaration, ConstantDeclaration, NamespaceDeclaration, AnonymousTypeDeclaration, AnonymousFunctionDeclaration, AnonymousConstantDeclaration, AnonymousNamespaceDeclaration } from '~/syntax';
+import * as syntax from '~/syntax';
 import { LazyList, single } from '~/utils/lazy-list';
-import { SyntaxType, AnonymousDeclaration } from '~/syntax/environment';
 import resolveModule from '~/semantic/resolver';
 import { resolve } from 'path';
-import { Namespace, DeclaredEntity, Module, DeclaredType, DeclaredFunction, DeclaredConstant, DeclaredNamespace } from '~/semantic/namespace';
+import * as ns from '~/semantic/namespace';
 
 
 export interface NamespaceEnumerationOutput {
     readonly modules: ReadonlyMap<string, EnumeratedModule>;
-    readonly namespaces: ReadonlyArray<Namespace>;
-    readonly declarations: ReadonlyArray<DeclaredEntity>;
+    readonly namespaces: ReadonlyArray<ns.Namespace>;
+    readonly declarations: ReadonlyArray<ns.Declaration>;
     readonly dependencyQueue: ReadonlyArray<Dependency>;
     readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
@@ -37,13 +36,18 @@ export default function enumerateNamespaces(mainModulePath: string): NamespaceEn
     return new EnumerationProcess(mainModulePath).run();
 }
 
-type AnyDeclaration = ImportDeclaration | ExportDeclaration | ExportForwardDeclaration | SyntaxDeclaration | AnonymousDeclaration;
+type AnyDeclaration
+    = syntax.ImportDeclaration
+    | syntax.ExportDeclaration 
+    | syntax.ExportForwardDeclaration
+    | syntax.Declaration
+    | syntax.AnonymousDeclaration;
 
 class EnumerationProcess extends CoreObject {
     readonly moduleQueue: LazyList<string>;
     readonly modules: ReadonlyMap<string, EnumeratedModule>;
-    readonly namespaces: ReadonlyArray<Namespace> = [];
-    readonly declarations: ReadonlyArray<DeclaredEntity> = [];
+    readonly namespaces: ReadonlyArray<ns.Namespace> = [];
+    readonly declarations: ReadonlyArray<ns.Declaration> = [];
     readonly dependencyQueue: ReadonlyArray<Dependency> = [];
     readonly diagnostics: ReadonlyArray<Diagnostic> = [];
 
@@ -61,9 +65,9 @@ class EnumerationProcess extends CoreObject {
     consumeModuleQueue(): EnumerationProcess {
         if (this.moduleQueue.empty) return this;
         const { head: modulePath, tail: moduleQueue } = this.moduleQueue;
-        let next: EnumerationProcess = this.clone({ moduleQueue });
+        let next: EnumerationProcess = this.set('moduleQueue', moduleQueue);
         // parse the module
-        let moduleSyntax: Optional<ModuleRoot>, parseDiagnostics: ReadonlyArray<Diagnostic>;
+        let moduleSyntax: Optional<syntax.ModuleRoot>, parseDiagnostics: ReadonlyArray<Diagnostic>;
         try {
             ({ module: moduleSyntax, diagnostics: parseDiagnostics } = parseModule(modulePath));
         } catch (err) {
@@ -97,23 +101,21 @@ class EnumerationProcess extends CoreObject {
     }
 
     setFailedModule(path: string, status: ModuleEnumerationStatus): EnumerationProcess {
-        return this.clone({ modules: this.modules.iset(path, { namespaceId: null, status }) });
+        return this.mutate('modules', _ => _.iset(path, { namespaceId: null, status }));
     }
 
     setSuccessfulModule(path: string): EnumerationProcess {
         const namespaceId = this.namespaces.length;
-        return this.clone({
-            modules: this.modules.iset(path, { namespaceId, status: ModuleEnumerationStatus.SUCCESS }),
-            namespaces: [...this.namespaces, new Module(namespaceId, path)]
-        });
+        return this
+            .mutate('modules', _ => _.iset(path, { namespaceId, status: ModuleEnumerationStatus.SUCCESS }))
+            .mutate('namespaces', _ => [..._, new ns.ModuleNamespace(namespaceId, path)]);
     }
 
     addReferencedModule(path: string): EnumerationProcess {
         if (this.modules.has(path)) return this;
-        return this.clone({
-            modules: this.modules.iset(path, { namespaceId: null, status: ModuleEnumerationStatus.REFERENCED }),
-            moduleQueue: this.moduleQueue.append(path)
-        });
+        return this
+            .mutate('modules', _ => _.iset(path, { namespaceId: null, status: ModuleEnumerationStatus.REFERENCED }))
+            .mutate('moduleQueue', _ => _.append(path));
     }
 
     addImport(namespaceId: number, targetModule: string, localName: string, exportName: string): EnumerationProcess {
@@ -123,9 +125,7 @@ class EnumerationProcess extends CoreObject {
         } else {
             dep = new ImportedName(namespaceId, localName, targetModule, exportName);
         }
-        return this.clone({
-            dependencyQueue: [...this.dependencyQueue, dep]
-        });
+        return this.mutate('dependencyQueue', _ => [..._, dep]);
     }
 
     addForward(namespaceId: number, targetModule: string, forwardName: string, exportName: string): EnumerationProcess {
@@ -139,49 +139,43 @@ class EnumerationProcess extends CoreObject {
         } else {
             dep = new ForwardedName(namespaceId, forwardName, targetModule, exportName);
         }
-        return this.clone({
-            dependencyQueue: [...this.dependencyQueue, dep]
-        });
+        return this.mutate('dependencyQueue', _ => [..._, dep]);
     }
 
     addExportedName(namespaceId: number, exportName: string, localName: string): EnumerationProcess {
         const dep = new ExportedName(namespaceId, localName, exportName);
-        return this.clone({
-            dependencyQueue: [...this.dependencyQueue, dep]
-        });
+        return this.mutate('dependencyQueue', _ => [..._, dep]);
     }
 
     addExportedDeclaration(namespaceId: number, exportName: string, declarationId: number): EnumerationProcess {
         const dep = new ExportedDeclaration(namespaceId, declarationId, exportName);
-        return this.clone({
-            dependencyQueue: [...this.dependencyQueue, dep]
-        });
+        return this.mutate('dependencyQueue', _ => [..._, dep]);
+    }
+
+    addLocalName(namespaceId: number, name: string, declarationId: number): EnumerationProcess {
+        return this.mutate('namespaces', _ => _.mutate(namespaceId, _ => _.addLocalDeclaration(name, declarationId)));
     }
 
     addDiagnostics(diagnostics: ReadonlyArray<Diagnostic>): EnumerationProcess {
-        return this.clone({ diagnostics: [...this.diagnostics, ...diagnostics] });
+        return this.mutate('diagnostics', _ => [..._, ...diagnostics]);
     }
 
     withEntryError(error: string): EnumerationProcess {
-        return this.clone({
-            diagnostics: [new Diagnostic(error, new FilePosition('<entry>', [0, 0]))]
-        });
+        return this.addDiagnostics([new Diagnostic(error, new FilePosition('<entry>', [0, 0]))]);
     }
 
     handleDeclaration(node: AnyDeclaration, namespaceId: number, modulePath: string, containingExport: Optional<string> = null): EnumerationProcess {
-        switch (node.syntaxType) {
-            case SyntaxType.ImportDeclaration: return this.handleImport(node, namespaceId, modulePath);
-            case SyntaxType.ExportDeclaration: return this.handleExport(node, namespaceId, modulePath);
-            case SyntaxType.ExportForwardDeclaration: return this.handleForward(node, namespaceId, modulePath);
-            case SyntaxType.TypeDeclaration: return this.handleType(node, namespaceId, containingExport);
-            case SyntaxType.AnonymousTypeDeclaration: return this.handleType(node, namespaceId, containingExport);
-            case SyntaxType.FunctionDeclaration: return this.handleFunction(node, namespaceId, containingExport);
-            case SyntaxType.AnonymousFunctionDeclaration: return this.handleFunction(node, namespaceId, containingExport);
-            case SyntaxType.ConstantDeclaration: return this.handleConstant(node, namespaceId, containingExport);
-            case SyntaxType.AnonymousConstantDeclaration: return this.handleConstant(node, namespaceId, containingExport);
-            case SyntaxType.NamespaceDeclaration: return this.handleNamespace(node, namespaceId, modulePath, containingExport);
-            case SyntaxType.AnonymousNamespaceDeclaration: return this.handleNamespace(node, namespaceId, modulePath, containingExport);
-        }
+        if (node instanceof syntax.ImportDeclaration) return this.handleImport(node, namespaceId, modulePath);
+        if (node instanceof syntax.ExportDeclaration) return this.handleExport(node, namespaceId, modulePath);
+        if (node instanceof syntax.ExportForwardDeclaration) return this.handleForward(node, namespaceId, modulePath);
+        if (node instanceof syntax.TypeDeclaration) return this.handleType(node, namespaceId, containingExport);
+        if (node instanceof syntax.AnonymousTypeDeclaration) return this.handleType(node, namespaceId, containingExport);
+        if (node instanceof syntax.FunctionDeclaration) return this.handleFunction(node, namespaceId, containingExport);
+        if (node instanceof syntax.AnonymousFunctionDeclaration) return this.handleFunction(node, namespaceId, containingExport);
+        if (node instanceof syntax.ConstantDeclaration) return this.handleConstant(node, namespaceId, containingExport);
+        if (node instanceof syntax.AnonymousConstantDeclaration) return this.handleConstant(node, namespaceId, containingExport);
+        if (node instanceof syntax.NamespaceDeclaration) return this.handleNamespace(node, namespaceId, modulePath, containingExport);
+        return this.handleNamespace(node, namespaceId, modulePath, containingExport);
     }
 
     /**
@@ -191,7 +185,7 @@ class EnumerationProcess extends CoreObject {
      * Additionally, the target module path should be resolved and added to the
      * module queue and registry, only if it does not already exist in the registry.
      */
-    handleImport(node: ImportDeclaration, namespaceId: number, modulePath: string) {
+    handleImport(node: syntax.ImportDeclaration, namespaceId: number, modulePath: string) {
         let next = this as EnumerationProcess;
         // handle the module name
         let targetModule = resolveModule(modulePath, node.moduleName.value);
@@ -216,7 +210,7 @@ class EnumerationProcess extends CoreObject {
      * and an entry to the dependency queue.
      * If the export is an exported declaration, the declaration must also be processed.
      */
-    handleExport(node: ExportDeclaration, namespaceId: number, modulePath: string) {
+    handleExport(node: syntax.ExportDeclaration, namespaceId: number, modulePath: string) {
         let next = this as EnumerationProcess;
         // add export names
         for (const exp of node.exports) {
@@ -238,7 +232,7 @@ class EnumerationProcess extends CoreObject {
      * Additionally, the target module path should be resolved and added to the
      * module queue and registry, only if it does not already exist in the registry.
      */
-    handleForward(node: ExportForwardDeclaration, namespaceId: number, modulePath: string) {
+    handleForward(node: syntax.ExportForwardDeclaration, namespaceId: number, modulePath: string) {
         let next = this as EnumerationProcess;
         // handle the module name
         let targetModule = resolveModule(modulePath, node.moduleName.value);
@@ -262,11 +256,12 @@ class EnumerationProcess extends CoreObject {
      * - Create a DeclaredType
      * - Register the DeclaredType to the process's declaration registry
      * - If there is a parent export, register the corresponding dependency
+     * TODO add local-declaration local-names for each declaration
      */
-    handleType(node: TypeDeclaration | AnonymousTypeDeclaration, namespaceId: number, containingExport: Optional<string>) {
+    handleType(node: syntax.TypeDeclaration | syntax.AnonymousTypeDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
-        const declaredType = new DeclaredType(declarationId, node);
-        const next: EnumerationProcess = this.clone({ declarations: [...this.declarations, declaredType] });
+        const declaredType = new ns.TypeDeclaration(declarationId, node);
+        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredType]);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
@@ -278,10 +273,10 @@ class EnumerationProcess extends CoreObject {
      * - Register the DeclaredFunction to the process's declaration registry
      * - If there is a parent export, register the corresponding dependency
      */
-    handleFunction(node: FunctionDeclaration | AnonymousFunctionDeclaration, namespaceId: number, containingExport: Optional<string>) {
+    handleFunction(node: syntax.FunctionDeclaration | syntax.AnonymousFunctionDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
-        const declaredFunction = new DeclaredFunction(declarationId, node);
-        const next: EnumerationProcess = this.clone({ declarations: [...this.declarations, declaredFunction] });
+        const declaredFunction = new ns.FunctionDeclaration(declarationId, node);
+        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredFunction]);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
@@ -293,10 +288,10 @@ class EnumerationProcess extends CoreObject {
      * - Register the DeclaredConstant to the process's declaration registry
      * - If there is a parent export, register the corresponding dependency
      */
-    handleConstant(node: ConstantDeclaration | AnonymousConstantDeclaration, namespaceId: number, containingExport: Optional<string>) {
+    handleConstant(node: syntax.ConstantDeclaration | syntax.AnonymousConstantDeclaration, namespaceId: number, containingExport: Optional<string>) {
         const declarationId = this.declarations.length;
-        const declaredConstant = new DeclaredConstant(declarationId, node);
-        const next: EnumerationProcess = this.clone({ declarations: [...this.declarations, declaredConstant] });
+        const declaredConstant = new ns.ConstantDeclaration(declarationId, node);
+        const next: EnumerationProcess = this.mutate('declarations', _ => [..._, declaredConstant]);
         if (containingExport)
             return next.addExportedDeclaration(namespaceId, containingExport, declarationId);
         return next;
@@ -309,18 +304,20 @@ class EnumerationProcess extends CoreObject {
      * - If there is a parent export, register the corresponding dependency
      * - Process all of the namespace's declarations
      */
-    handleNamespace(node: NamespaceDeclaration | AnonymousNamespaceDeclaration, parentNamespaceId: number, modulePath: string, containingExport: Optional<string>) {
+    handleNamespace(node: syntax.NamespaceDeclaration | syntax.AnonymousNamespaceDeclaration, parentNamespaceId: number, modulePath: string, containingExport: Optional<string>) {
         const namespaceId = this.namespaces.length;
         const declarationId = this.declarations.length;
-        const declaredNamespace = new DeclaredNamespace(namespaceId, parentNamespaceId, declarationId, node);
-        let next: EnumerationProcess = this.clone({
-            declarations: [...this.declarations, declaredNamespace],
-            namespaces: [...this.namespaces, declaredNamespace]
-        });
+        const nestedNamespace = new ns.NestedNamespace(namespaceId, parentNamespaceId, declarationId, node);
+        const declaredNamespace = new ns.NamespaceDeclaration(declarationId, namespaceId);
+        let next: EnumerationProcess = this
+            .mutate('declarations', _ => [..._, declaredNamespace])
+            .mutate('namespaces', _ => [..._, nestedNamespace]);
+        if (node instanceof syntax.NamespaceDeclaration)
+            next = next.addLocalName(parentNamespaceId, node.name.image, declarationId);
         if (containingExport)
             next = next.addExportedDeclaration(parentNamespaceId, containingExport, declarationId);
         // process all declarations in the namespace
-        for (const declaration of [...declaredNamespace.namespaceDeclaration.imports, ...declaredNamespace.namespaceDeclaration.declarations]) {
+        for (const declaration of [...node.imports, ...node.declarations]) {
             next = next.handleDeclaration(declaration, namespaceId, modulePath);
         }
         return next;

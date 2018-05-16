@@ -1,41 +1,16 @@
 import { CoreObject } from '~/core';
-import { FunctionDeclaration, TypeDeclaration, ConstantDeclaration, AnonymousFunctionDeclaration, AnonymousTypeDeclaration, AnonymousConstantDeclaration, NamespaceDeclaration, AnonymousNamespaceDeclaration } from '~/syntax';
+import * as syntax from '~/syntax';
 
-/**
- * An abstract object representing a "namespace".
- * Serves as a parent class for modules and declared namespaces,
- * both of which are semantically "namespaces".
- */
-export abstract class Namespace extends CoreObject {
+
+class NamespaceBase extends CoreObject {
     readonly localNames: ReadonlyMap<string, ReadonlyArray<NameTarget>> = new Map();
     readonly exports: ReadonlyMap<string, ReadonlyArray<NameTarget>> = new Map();
 
-    constructor(
-        readonly namespaceId: number
-    ) { super(); }
+    constructor(readonly namespaceId: number) { super() }
 
-    addImport(targetModule: string, localName: string, exportName: string): Namespace {
-        let target: NameTarget;
-        if (exportName === '*') {
-            target = { modulePath: targetModule } as RemoteNamespace;
-        } else {
-            target = { modulePath: targetModule, exportName } as RemoteName;
-        }
-        const array = [...(this.localNames.get(localName) || []), target];
-        return this.clone({ localNames: this.localNames.iset(localName, array) });
-    }
-
-    addForward(targetModule: string, forwardName: string, exportName: string): Namespace {
-        let target: NameTarget;
-        if (exportName === '*') {
-            // if it's a pure forward, we can't resolve anything right now
-            if (forwardName === '*') return this;
-            target = { modulePath: targetModule } as RemoteNamespace;
-        } else {
-            target = { modulePath: targetModule, exportName } as RemoteName;
-        }
-        const array = [...(this.exports.get(forwardName) || []), target];
-        return this.clone({ exports: this.exports.iset(forwardName, array) });
+    addLocalDeclaration(name: string, declarationId: number) {
+        const existing = this.localNames.get(name) || [];
+        return this.mutate('localNames', _ => _.iset(name, [...existing, new LocalDeclaration(declarationId)]));
     }
 }
 
@@ -43,12 +18,12 @@ export abstract class Namespace extends CoreObject {
  * A declared namespace within another namespace.
  * It has a name, a parent namespace id, and a declaration id (because it is a declaration).
  */
-export class DeclaredNamespace extends Namespace {
+export class NestedNamespace extends NamespaceBase {
     constructor(
         namespaceId: number,
         readonly parentNamespaceId: number,
         readonly declarationId: number,
-        readonly namespaceDeclaration: NamespaceDeclaration | AnonymousNamespaceDeclaration
+        readonly node: syntax.NamespaceDeclaration | syntax.AnonymousNamespaceDeclaration
     ) { super(namespaceId); }
 }
 
@@ -57,12 +32,14 @@ export class DeclaredNamespace extends Namespace {
  * A module is a type of namespace, and can contain local names, exports, and declarations.
  * Where it differs from a generic namespace is that it has no parent namespace, and is associated with a file path.
  */
-export class Module extends Namespace {
+export class ModuleNamespace extends NamespaceBase {
     constructor(
         namespaceId: number,
         readonly absolutePath: string
     ) { super(namespaceId); }
 }
+
+export type Namespace = ModuleNamespace | NestedNamespace;
 
 /**
  * For any given name in a program, there are target(s) to which that name resolves.
@@ -124,35 +101,41 @@ export class CircularReference extends CoreObject {}
 /**
  * A semantic declaration is a node that is ultimately associated with a name
  */
-export type DeclaredEntity = DeclaredFunction | DeclaredType | DeclaredConstant | DeclaredNamespace;
+export type Declaration = FunctionDeclaration | TypeDeclaration | ConstantDeclaration | NamespaceDeclaration;
 
 /**
  * A semantic function entity, identified by a name.
  */
-export class DeclaredFunction extends CoreObject {
+export class FunctionDeclaration extends CoreObject {
     constructor(
         readonly declarationId: number,
-        readonly functionDeclaration: FunctionDeclaration | AnonymousFunctionDeclaration
+        readonly node: syntax.FunctionDeclaration | syntax.AnonymousFunctionDeclaration
     ) { super() }
 }
 
 /**
  * A semantic type entity, identified by a name.
- * NOTE: this is different from the concept of a "type" in type checking TODO then what is?
  */
-export class DeclaredType extends CoreObject {
+export class TypeDeclaration extends CoreObject {
     constructor(
         readonly declarationId: number,
-        readonly typeDeclaration: TypeDeclaration | AnonymousTypeDeclaration
+        readonly node: syntax.TypeDeclaration | syntax.AnonymousTypeDeclaration
     ) { super() }
 }
 
 /**
  * A semantic constant entity, identified by a name.
  */
-export class DeclaredConstant extends CoreObject {
+export class ConstantDeclaration extends CoreObject {
     constructor(
         readonly declarationId: number,
-        readonly constantDeclaration: ConstantDeclaration | AnonymousConstantDeclaration
+        readonly node: syntax.ConstantDeclaration | syntax.AnonymousConstantDeclaration
+    ) { super() }
+}
+
+export class NamespaceDeclaration extends CoreObject {
+    constructor(
+        readonly declarationId: number,
+        readonly namespaceId: number
     ) { super() }
 }

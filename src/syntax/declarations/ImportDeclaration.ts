@@ -96,4 +96,4 @@ export const parseImportDeclaration: ParseFunc<ImportDeclaration> = seq(
     ([_1, _2, moduleName, _3, imports], location) => new ImportDeclaration(location, moduleName, imports)
 );
 
-const defaultImport = (token: Token): Import => ({ importName: token.clone({ image: 'default' }), aliasName: token });
+const defaultImport = (token: Token): Import => ({ importName: token.set('image', 'default'), aliasName: token });

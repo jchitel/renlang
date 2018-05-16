@@ -27,11 +27,11 @@ abstract class ParserBase extends CoreObject {
     readonly successLocation: Optional<FileRange> = null;
 
     fail(token: Optional<Token>): Parser {
-        return this.clone({ failToken: token, successLocation: null }) as Parser;
+        return this.set('failToken', token).set('successLocation', null) as Parser;
     }
 
     succeed(location: Optional<FileRange>): Parser {
-        return this.clone({ successLocation: location, failToken: null }) as Parser;
+        return this.set('successLocation', location).set('failToken', null) as Parser;
     }
 
     parse<T>(fn: ParseFunc<T>): { result: Optional<T>, diagnostics: ReadonlyArray<Diagnostic> } {

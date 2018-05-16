@@ -60,7 +60,7 @@ class ResolutionProcess extends CoreObject {
 	consumeDependencyQueue(): ResolutionProcess {
 		if (this.dependencyQueue.empty) return this;
 		const { head, tail } = this.dependencyQueue;
-		const next: ResolutionProcess = this.processDependency(head).clone({ dependencyQueue: tail });
+		const next: ResolutionProcess = this.processDependency(head).set('dependencyQueue', tail);
 		return next.consumeDependencyQueue();
 	}
 
@@ -100,9 +100,7 @@ class ResolutionProcess extends CoreObject {
 
 	setLocalNameStatus(namespaceId: number, name: string, status: DependencyStatus): ResolutionProcess {
 		const ns = this.localNameStatuses.get(namespaceId) || new Map<string, DependencyStatus>();
-		return this.clone({
-			localNameStatuses: this.localNameStatuses.iset(namespaceId, ns.iset(name, status))
-		});
+		return this.mutate('localNameStatuses', _ => _.iset(namespaceId, ns.iset(name, status)));
 	}
 
 	output = (): DependencyResolutionOutput => ({

@@ -73,17 +73,17 @@ abstract class LexerStateBase extends CoreObject {
 
     /** Returns a new LexerState with the provided type */
     setType(type: TokenType): LexerState {
-        return this.clone({ type }) as LexerState;
+        return this.set('type', type) as LexerState;
     }
 
     /** Returns a new LexerState with a value based on the current image  */
     setValue(fn: (image: string) => any): LexerState {
-        return this.clone({ value: fn(this.image) }) as LexerState;
+        return this.set('value', fn(this.image)) as LexerState;
     }
 
     /** Returns a new LexerState with a value based on the current value */
     mapValue(fn: (value: any) => any): LexerState {
-        return this.clone({ value: fn(this.value) }) as LexerState;
+        return this.mutate('value', fn) as LexerState;
     }
 
     /**
@@ -159,6 +159,6 @@ class NonEmptyLexerState extends LexerStateBase {
         const image = this.image + chars;
         return stream.empty
             ? new EmptyLexerState(this.position, image, stream)
-            : this.clone({ empty: false, image, stream }) as LexerState;
+            : this.set('empty', false).set('image', image).set('stream', stream) as LexerState;
     }
 }

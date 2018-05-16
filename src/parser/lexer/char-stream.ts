@@ -23,7 +23,7 @@ export class NonEmptyCharStream extends CoreObject {
     constructor(
         /** The file position of the next character in the stream */
         readonly position: FilePosition,
-        private readonly list: NonEmptyLazyList<string>
+        readonly list: NonEmptyLazyList<string>
     ) {
         super();
     }
@@ -36,12 +36,11 @@ export class NonEmptyCharStream extends CoreObject {
     /** Reads one character from the stream, and returns it with the remaining stream */
     read(): { char: string, stream: CharStream } {
         const char = this.list.head;
-        const empty = this.list.tail.empty;
         const position = char === '\n' ? this.position.nextLine() : this.position.nextColumn();
-        if (empty) return { char, stream: new EmptyCharStream(position) };
+        if (this.list.tail.empty) return { char, stream: new EmptyCharStream(position) };
         return {
             char,
-            stream: this.clone({ list: this.list.tail, position }),
+            stream: this.set('list', this.list.tail).set('position', position),
         }
     }
 
