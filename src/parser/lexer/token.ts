@@ -35,7 +35,7 @@ export class Token extends CoreObject {
         readonly type: TokenType,
         position: FilePosition,
         readonly image: string,
-        readonly value?: any
+        readonly value?: string | number
     ) {
         super();
         this.location = position.computeRange(image);

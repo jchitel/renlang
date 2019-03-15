@@ -1,5 +1,5 @@
 import { Diagnostic, CoreObject } from '~/core';
-import { DeclaredEntity, Namespace } from './namespace';
+import { Declaration, Namespace } from './namespace';
 
 
 /**
@@ -9,6 +9,6 @@ import { DeclaredEntity, Namespace } from './namespace';
 export class Program extends CoreObject {
     readonly modules: ReadonlyMap<string, number> = new Map();
     readonly namespaces: ReadonlyArray<Namespace> = [];
-    readonly declarations: ReadonlyArray<DeclaredEntity> = [];
+    readonly declarations: ReadonlyArray<Declaration> = [];
     readonly diagnostics: ReadonlyArray<Diagnostic> = [];
 }

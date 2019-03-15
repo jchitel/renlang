@@ -60,7 +60,7 @@ export default function analyze(path: string) {
     // Pass 1: Enumeration
     const enumeration = enumerateNamespaces(path);
     // Pass 2: Resolution
-    const resolution = resolveDependencies(enumeration.modules, enumeration.declarations, enumeration.namespaces, enumeration.dependencyQueue);
+    const resolution = resolveDependencies(enumeration.modules, enumeration.declarations, enumeration.namespaces, enumeration.pureForwards);
     // Pass 3: Typechecking
     const typechecked = typecheck(enumeration.declarations, resolution.namespaces);
     // Pass 4: Name clashes
