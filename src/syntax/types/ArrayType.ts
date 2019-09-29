@@ -1,25 +1,31 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Type } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Type, leftRecursive: 'setBaseType' })
-export class ArrayType extends Type {
-    setBaseType(baseType: Type) {
-        this.baseType = baseType;
-    }
+export class ArrayType extends NodeBase<SyntaxType.ArrayType> {
+    constructor(
+        location: FileRange,
+        readonly baseType: Type
+    ) { super(location, SyntaxType.ArrayType) }
 
-    @parser(TokenType.LBRACK, { definite: true }) setOpenBracket() {}
-
-    @parser(TokenType.RBRACK)
-    setCloseBracket(token: Token) {
-        this.createAndRegisterLocation('self', this.baseType.locations.self, token.getLocation());
-    }
-
-    baseType: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitArrayType(this);
+    accept<P, R = P>(visitor: ArrayTypeVisitor<P, R>, param: P) {
+        return visitor.visitArrayType(this, param);
     }
 }
+
+export interface ArrayTypeVisitor<P, R = P> {
+    visitArrayType(node: ArrayType, param: P): R;
+}
+
+export class ArrayTypeSuffix extends NodeBase<SyntaxType.ArrayType> {
+    constructor(location: FileRange) { super(location, SyntaxType.ArrayType) }
+
+    setBase = (baseType: Type) => new ArrayType(this.location.merge(baseType.location), baseType);
+}
+
+export const parseArrayTypeSuffix: ParseFunc<ArrayTypeSuffix> = seq(
+    tok('['),
+    tok(']'),
+    ([_1, _2], location) => new ArrayTypeSuffix(location)
+);

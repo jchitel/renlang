@@ -1,20 +1,25 @@
-import { Type } from './Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { parser, nonTerminal } from '~/parser/Parser';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { seq, tok, ParseFunc } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Type })
-export class IdentifierType extends Type {
-    @parser(TokenType.IDENT, { definite: true })
-    setIdentifier(token: Token) {
-        this.name = token.image;
-        this.registerLocation('self', token.getLocation());
-    }
+export class IdentifierType extends NodeBase<SyntaxType.IdentifierType> {
+    constructor(
+        location: FileRange,
+        readonly name: Token
+    ) { super(location, SyntaxType.IdentifierType) }
 
-    name: string;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitIdentifierType(this);
+    accept<P, R = P>(visitor: IdentifierTypeVisitor<P, R>, param: P) {
+        return visitor.visitIdentifierType(this, param);
     }
 }
+
+export interface IdentifierTypeVisitor<P, R = P> {
+    visitIdentifierType(node: IdentifierType, param: P): R;
+}
+
+export const parseIdentifierType: ParseFunc<IdentifierType> = seq(
+    tok(TokenType.IDENT),
+    (name, location) => new IdentifierType(location, name)
+);

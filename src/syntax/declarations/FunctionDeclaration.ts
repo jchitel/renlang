@@ -1,109 +1,146 @@
-import { Token, TokenType } from '~/parser/Tokenizer';
-import ASTNode from '~/syntax/ASTNode';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { parser, nonTerminal, exp, ParseResult } from '~/parser/Parser';
-import { Declaration } from './Program';
 import { TypeParamList, TypeParam } from './TypeDeclaration';
-import { Statement } from '~/syntax/statements/Statement';
-import { Block } from '~/syntax/statements/Block';
-import { Expression } from '~/syntax/expressions/Expression';
-import { Type } from '~/syntax/types/Type';
+import { ParseFunc, seq, tok, repeat, select, optional } from '~/parser/parser';
+import { Type, Expression, NodeBase, SyntaxType, Statement } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { Block } from '~/syntax';
+import { FileRange } from '~/core';
 
 
-/**
- * Param ::= Type IDENT
- */
-export class Param extends ASTNode {
-    @parser(Type, { definite: true })
-    setType(type: Type) {
-        this.typeNode = type;
-    }
+export class Param extends NodeBase<SyntaxType.Param> {
+    constructor(
+        location: FileRange,
+        readonly name: Token,
+        readonly typeNode: Optional<Type> // optional to support lambda params
+    ) { super(location, SyntaxType.Param) }
 
-    @parser(TokenType.IDENT, { err: 'INVALID_PARAMETER_NAME' })
-    setName(name: Token) {
-        this.name = name.image;
-        this.registerLocation('name', name.getLocation());
-    }
-
-    name: string;
-    typeNode: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitParam(this);
-    }
-
-    prettyName() {
-        return `${this.type} ${this.name}`;
+    accept<T, R = T>(visitor: ParamVisitor<T, R>, param: T): R {
+        return visitor.visitParam(this, param);
     }
 }
 
-/**
- * ParameterList ::= LPAREN Param(* sep COMMA) RPAREN
- */
-const ParameterList = {
-    '(': exp(TokenType.LPAREN, { definite: true }),
-    params: exp(Param, { repeat: '*', sep: TokenType.COMMA }),
-    ')': exp(TokenType.RPAREN, { err: 'MISSING_CLOSE_PAREN' }),
-};
+export interface ParamVisitor<T, R = T> {
+    visitParam(node: Param, param: T): R;
+}
 
-/**
- * FunctionBody ::= Block | Expression | Statement
- * 
- * Put block before expression because there is a conflict
- * between empty blocks and empty structs.
- */
-export const FunctionBody = [Block, Expression, Statement];
+export class FunctionDeclaration extends NodeBase<SyntaxType.FunctionDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly returnType: Type,
+        readonly name: Token,
+        readonly typeParams: ReadonlyArray<TypeParam>,
+        readonly params: ReadonlyArray<Param>,
+        readonly body: Expression | Statement
+    ) { super(location, SyntaxType.FunctionDeclaration) }
 
-/**
- * FunctionDeclaration ::= 'func' Type IDENT TypeParamList? ParameterList FAT_ARROW FunctionBody
- */
-@nonTerminal({ implements: Declaration })
-export class FunctionDeclaration extends Declaration {
-    @parser('func', { definite: true })
-    setFuncToken(token: Token) {
-        this.registerLocation('self', token.getLocation());
+    accept<T, R = T>(visitor: FunctionDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitFunctionDeclaration(this, param);
     }
+}
 
-    @parser(Type, { err: 'INVALID_RETURN_TYPE' })
-    setReturnType(type: Type) {
-        this.returnType = type;
+export interface FunctionDeclarationVisitor<T, R = T> {
+    visitFunctionDeclaration(node: FunctionDeclaration, param: T): R;
+}
+
+export class AnonymousFunctionDeclaration extends NodeBase<SyntaxType.AnonymousFunctionDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly returnType: Type,
+        readonly typeParams: ReadonlyArray<TypeParam>,
+        readonly params: ReadonlyArray<Param>,
+        readonly body: Expression | Statement
+    ) { super(location, SyntaxType.AnonymousFunctionDeclaration) }
+
+    accept<T, R = T>(visitor: AnonymousFunctionDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitAnonymousFunctionDeclaration(this, param);
     }
+}
 
-    @parser(TokenType.IDENT, { optional: true })
-    setFunctionName(token: Token) {
-        this.name = token.image;
-        this.registerLocation('name', token.getLocation());
-    }
+export interface AnonymousFunctionDeclarationVisitor<T, R = T> {
+    visitAnonymousFunctionDeclaration(node: AnonymousFunctionDeclaration, param: T): R;
+}
 
-    @parser(TypeParamList, { optional: true })
-    setTypeParams(result: ParseResult) {
-        this.typeParams = result.params as TypeParam[];
-    }
+export function register(
+    parseType: ParseFunc<Type>,
+    parseExpression: ParseFunc<Expression>,
+    parseStatement: ParseFunc<Statement>,
+    parseBlock: ParseFunc<Block>,
+    parseTypeParamList: ParseFunc<TypeParamList>
+) {
+    /**
+     * Param ::= Type IDENT
+     */
+    const parseParam: ParseFunc<Param> = seq(
+        parseType,
+        tok(TokenType.IDENT),
+        ([typeNode, name], location) => new Param(location, name, typeNode)
+    );
 
-    @parser(ParameterList, { err: 'INVALID_PARAMETER_LIST' })
-    setParams(result: ParseResult) {
-        this.params = result.params as Param[];
-    }
+    /**
+     * ParameterList ::= LPAREN Param(* sep COMMA) RPAREN
+     */
+    const parseParamList: ParseFunc<Param[]> = seq(
+        tok('('),
+        repeat(parseParam, '*', tok(',')),
+        tok(')'),
+        ([_1, params, _2]) => params
+    );
 
-    @parser(TokenType.FAT_ARROW, { err: 'INVALID_FAT_ARROW' }) setFatArrow() {}
+    /**
+     * FunctionBody ::= Block | Expression | Statement
+     * 
+     * Put block before expression because there is a conflict
+     * between empty blocks and empty structs.
+     */
+    const parseFunctionBody: ParseFunc<Expression | Statement> = select<Expression | Statement>(
+        parseBlock,
+        parseExpression,
+        parseStatement
+    );
 
-    @parser(FunctionBody)
-    setFunctionBody(body: Expression | Statement) {
-        this.body = body;
-        this.createAndRegisterLocation('self', this.locations.self, body.locations.self);
-    }
+    /**
+     * FunctionDeclaration ::= 'func' Type IDENT TypeParamList? ParamList FAT_ARROW FunctionBody
+     */
+    const parseFunctionDeclaration: ParseFunc<FunctionDeclaration> = seq(
+        tok('func'),
+        parseType,
+        tok(TokenType.IDENT),
+        optional(parseTypeParamList),
+        parseParamList,
+        tok('=>'),
+        parseFunctionBody,
+        ([_1, returnType, name, typeParams, params, _2, body], location) => new FunctionDeclaration(
+            location,
+            returnType,
+            name,
+            typeParams ? typeParams.params : [],
+            params,
+            body
+        )
+    );
 
-    returnType: Type;
-    name: string = '';
-    typeParams: TypeParam[] = [];
-    params: Param[];
-    body: Expression | Statement;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitFunctionDeclaration(this);
-    }
+    /**
+     * AnonymousFunctionDeclaration ::= 'func' Type TypeParamList? ParamList FAT_ARROW FunctionBody
+     */
+    const parseAnonymousFunctionDeclaration: ParseFunc<AnonymousFunctionDeclaration> = seq(
+        tok('func'),
+        parseType,
+        optional(parseTypeParamList),
+        parseParamList,
+        tok('=>'),
+        parseFunctionBody,
+        ([_1, returnType, typeParams, params, _2, body], location) => new AnonymousFunctionDeclaration(
+            location,
+            returnType,
+            typeParams ? typeParams.params : [],
+            params,
+            body
+        )
+    );
 
-    prettyName() {
-        return `${this.name}(${this.params.map(p => p.prettyName()).join(', ')})`;
-    }
+    return {
+        parseFunctionDeclaration,
+        parseAnonymousFunctionDeclaration,
+        parseParam,
+        parseFunctionBody
+    };
 }

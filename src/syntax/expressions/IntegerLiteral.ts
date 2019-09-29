@@ -1,20 +1,25 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class IntegerLiteral extends Expression {
-    @parser(TokenType.INTEGER_LITERAL, { definite: true })
-    setValue(token: Token) {
-        this.value = token.value;
-        this.registerLocation('self', token.getLocation());
-    }
+export class IntegerLiteral extends NodeBase<SyntaxType.IntegerLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.IntegerLiteral) }
 
-    value: number;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitIntegerLiteral(this);
+    accept<P, R = P>(visitor: IntegerLiteralVisitor<P, R>, param: P) {
+        return visitor.visitIntegerLiteral(this, param);
     }
 }
+
+export interface IntegerLiteralVisitor<P, R = P> {
+    visitIntegerLiteral(node: IntegerLiteral, param: P): R;
+}
+
+export const parseIntegerLiteral: ParseFunc<IntegerLiteral> = seq(
+    tok(TokenType.INTEGER_LITERAL),
+    (value, location) => new IntegerLiteral(location, value)
+);

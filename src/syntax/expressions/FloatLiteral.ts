@@ -1,20 +1,25 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class FloatLiteral extends Expression {
-    @parser(TokenType.FLOAT_LITERAL, { definite: true })
-    setValue(token: Token) {
-        this.value = token.value;
-        this.registerLocation('self', token.getLocation());
-    }
+export class FloatLiteral extends NodeBase<SyntaxType.FloatLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.FloatLiteral) }
 
-    value: number;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitFloatLiteral(this);
+    accept<P, R = P>(visitor: FloatLiteralVisitor<P, R>, param: P) {
+        return visitor.visitFloatLiteral(this, param);
     }
 }
+
+export interface FloatLiteralVisitor<P, R = P> {
+    visitFloatLiteral(node: FloatLiteral, param: P): R;
+}
+
+export const parseFloatLiteral: ParseFunc<FloatLiteral> = seq(
+    tok(TokenType.FLOAT_LITERAL),
+    (value, location) => new FloatLiteral(location, value)
+);

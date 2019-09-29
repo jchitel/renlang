@@ -1,39 +1,41 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, exp, parser, ParseResult } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export const StructEntry = {
-    key: exp(TokenType.IDENT, { definite: true }),
-    ':': exp(TokenType.COLON, { err: 'STRUCT_LITERAL_MISSING_COLON' }),
-    value: exp(Expression, { err: 'INVALID_EXPRESSION' }),
-};
+interface StructEntry {
+    key: Token;
+    value: Expression;
+}
 
-@nonTerminal({ implements: Expression })
-export class StructLiteral extends Expression {
-    @parser(TokenType.LBRACE, { definite: true })
-    setOpenBrace(token: Token) {
-        this.registerLocation('openBrace', token.getLocation());
+export class StructLiteral extends NodeBase<SyntaxType.StructLiteral> {
+    constructor(
+        location: FileRange,
+        readonly entries: ReadonlyArray<StructEntry>
+    ) { super(location, SyntaxType.StructLiteral) }
+
+    accept<P, R = P>(visitor: StructLiteralVisitor<P, R>, param: P) {
+        return visitor.visitStructLiteral(this, param);
     }
+}
 
-    @parser(StructEntry, { repeat: '*', sep: TokenType.COMMA })
-    setEntries(result: ParseResult[]) {
-        this.entries = result.map(e => {
-            const key = e.key as Token;
-            this.registerLocation(`key_${key.image}`, key.getLocation());
-            return { key: key.image, value: e.value as Expression };
-        });
-    }
+export interface StructLiteralVisitor<P, R = P> {
+    visitStructLiteral(node: StructLiteral, param: P): R;
+}
 
-    @parser(TokenType.RBRACE)
-    setCloseBrace(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBrace, token.getLocation());
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseStructLiteral: ParseFunc<StructLiteral> = seq(
+        tok('{'),
+        repeat(seq(
+            tok(TokenType.IDENT),
+            tok(':'),
+            parseExpression,
+            ([key, _, value]) => ({ key, value })
+        ), '*', tok(',')),
+        tok('}'),
+        ([_1, entries, _2], location) => new StructLiteral(location, entries)
+    );
 
-    entries: { key: string, value: Expression }[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitStructLiteral(this);
-    }
+    return { parseStructLiteral };
 }

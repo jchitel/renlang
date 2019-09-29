@@ -1,28 +1,36 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression, leftRecursive: 'setTarget' })
-export class FieldAccess extends Expression {
-    setTarget(exp: Expression) {
-        this.target = exp;
-    }
+export class FieldAccess extends NodeBase<SyntaxType.FieldAccess> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly field: Token
+    ) { super(location, SyntaxType.FieldAccess) }
 
-    @parser(TokenType.DOT, { definite: true }) setDot() {}
-
-    @parser(TokenType.IDENT, { err: 'FIELD_ACCESS_INVALID_FIELD_NAME' })
-    setField(token: Token) {
-        this.field = token.image;
-        this.registerLocation('field', token.getLocation());
-        this.createAndRegisterLocation('self', this.target.locations.self, token.getLocation());
-    }
-
-    target: Expression;
-    field: string;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitFieldAccess(this);
+    accept<P, R = P>(visitor: FieldAccessVisitor<P, R>, param: P) {
+        return visitor.visitFieldAccess(this, param);
     }
 }
+
+export interface FieldAccessVisitor<P, R = P> {
+    visitFieldAccess(node: FieldAccess, param: P): R;
+}
+
+export class FieldAccessSuffix extends NodeBase<SyntaxType.FieldAccess> {
+    constructor(
+        location: FileRange,
+        readonly field: Token
+    ) { super(location, SyntaxType.FieldAccess) }
+
+    setBase = (target: Expression) => new FieldAccess(this.location.merge(target.location), target, this.field);
+}
+
+export const parseFieldAccessSuffix: ParseFunc<FieldAccessSuffix> = seq(
+    tok('.'),
+    tok(TokenType.IDENT),
+    ([_, field], location) => new FieldAccessSuffix(location, field)
+);

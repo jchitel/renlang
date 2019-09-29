@@ -1,31 +1,40 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression, leftRecursive: 'setTarget' })
-export class ArrayAccess extends Expression {
-    setTarget(exp: Expression) {
-        this.target = exp;
+export class ArrayAccess extends NodeBase<SyntaxType.ArrayAccess> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly index: Expression
+    ) { super(location, SyntaxType.ArrayAccess) }
+
+    accept<P, R = P>(visitor: ArrayAccessVisitor<P, R>, param: P) {
+        return visitor.visitArrayAccess(this, param);
     }
+}
 
-    @parser(TokenType.LBRACK, { definite: true }) setOpenBracket() {}
+export interface ArrayAccessVisitor<P, R = P> {
+    visitArrayAccess(node: ArrayAccess, param: P): R;
+}
 
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setIndexExp(exp: Expression) {
-        this.indexExp = exp;
-    }
+export class ArrayAccessSuffix extends NodeBase<SyntaxType.ArrayAccess> {
+    constructor(
+        location: FileRange,
+        readonly index: Expression
+    ) { super(location, SyntaxType.ArrayAccess) }
 
-    @parser(TokenType.RBRACK, { err: 'ARRAY_ACCESS_MISSING_CLOSE_BRACKET' })
-    setCloseBracket(token: Token) {
-        this.createAndRegisterLocation('self', this.target.locations.self, token.getLocation());
-    }
+    setBase = (target: Expression) => new ArrayAccess(this.location, target, this.index);
+}
 
-    target: Expression;
-    indexExp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitArrayAccess(this);
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseArrayAccessSuffix: ParseFunc<ArrayAccessSuffix> = seq(
+        tok('['),
+        parseExpression,
+        tok(']'),
+        ([_1, index, _2], location) => new ArrayAccessSuffix(location, index)
+    );
+
+    return { parseArrayAccessSuffix };
 }

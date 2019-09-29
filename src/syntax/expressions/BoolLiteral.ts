@@ -1,21 +1,25 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token } from '~/parser/Tokenizer';
-import { IdentifierExpression } from '~/syntax/expressions/IdentifierExpression';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token } from '~/parser/lexer';
+import { ParseFunc, seq, select, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression, before: [IdentifierExpression] })
-export class BoolLiteral extends Expression {
-    @parser(['true', 'false'], { definite: true })
-    setValue(token: Token) {
-        this.value = token.image === 'true';
-        this.registerLocation('self', token.getLocation());
-    }
+export class BoolLiteral extends NodeBase<SyntaxType.BoolLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.BoolLiteral) }
 
-    value: boolean;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitBoolLiteral(this);
+    accept<P, R = P>(visitor: BoolLiteralVisitor<P, R>, param: P) {
+        return visitor.visitBoolLiteral(this, param);
     }
 }
+
+export interface BoolLiteralVisitor<P, R = P> {
+    visitBoolLiteral(node: BoolLiteral, param: P): R;
+}
+
+export const parseBoolLiteral: ParseFunc<BoolLiteral> = seq(
+    select(tok('true'), tok('false')),
+    (value, location) =>  new BoolLiteral(location, value)
+);

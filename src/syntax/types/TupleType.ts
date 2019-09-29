@@ -1,29 +1,30 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Type } from '~/syntax/environment';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Type })
-export class TupleType extends Type {
-    @parser(TokenType.LPAREN, { definite: true })
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
+export class TupleType extends NodeBase<SyntaxType.TupleType> {
+    constructor(
+        location: FileRange,
+        readonly types: ReadonlyArray<Type>
+    ) { super(location, SyntaxType.TupleType) }
+
+    accept<P, R = P>(visitor: TupleTypeVisitor<P, R>, param: P) {
+        return visitor.visitTupleType(this, param);
     }
+}
 
-    @parser(Type, { repeat: '*', sep: TokenType.COMMA })
-    setTypes(types: Type[]) {
-        this.types = types;
-    }
+export interface TupleTypeVisitor<P, R = P> {
+    visitTupleType(node: TupleType, param: P): R;
+}
 
-    @parser(TokenType.RPAREN)
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
+export function register(parseType: ParseFunc<Type>) {
+    const parseTupleType: ParseFunc<TupleType> = seq(
+        tok('('),
+        repeat(parseType, '*', tok(',')),
+        tok(')'),
+        ([_1, types, _2], location) => new TupleType(location, types)
+    );
 
-    types: Type[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitTupleType(this);
-    }
+    return { parseTupleType };
 }

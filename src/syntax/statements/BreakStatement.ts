@@ -1,25 +1,26 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, optional } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement })
-export class BreakStatement extends Statement {
-    @parser('break', { definite: true })
-    setBreakToken(token: Token) {
-        this.registerLocation('self', token.getLocation());
-    }
+export class BreakStatement extends NodeBase<SyntaxType.BreakStatement> {
+    constructor(
+        location: FileRange,
+        readonly loopNumber: Optional<Token>
+    ) { super(location, SyntaxType.BreakStatement) }
 
-    @parser(TokenType.INTEGER_LITERAL, { optional: true })
-    setLoopNumber(token: Token) {
-        this.loopNumber = token.value;
-        this.createAndRegisterLocation('self', this.locations.self, token.getLocation());
-    }
-
-    loopNumber: number = 0;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitBreakStatement(this);
+    accept<P, R = P>(visitor: BreakStatementVisitor<P, R>, param: P) {
+        return visitor.visitBreakStatement(this, param);
     }
 }
+
+export interface BreakStatementVisitor<P, R = P> {
+    visitBreakStatement(node: BreakStatement, param: P): R;
+}
+
+export const parseBreakStatement: ParseFunc<BreakStatement> = seq(
+    tok('break'),
+    optional(tok(TokenType.INTEGER_LITERAL)),
+    ([_, loopNumber], location) => new BreakStatement(location, loopNumber)
+);

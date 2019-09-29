@@ -1,29 +1,30 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { SyntaxType, Expression, NodeBase } from '~/syntax/environment';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class ArrayLiteral extends Expression {
-    @parser(TokenType.LBRACK, { definite: true })
-    setOpenBracket(token: Token) {
-        this.registerLocation('openBracket', token.getLocation());
+export class ArrayLiteral extends NodeBase<SyntaxType.ArrayLiteral> {
+    constructor(
+        location: FileRange,
+        readonly items: ReadonlyArray<Expression>
+    ) { super(location, SyntaxType.ArrayLiteral) }
+
+    accept<P, R = P>(visitor: ArrayLiteralVisitor<P, R>, param: P) {
+        return visitor.visitArrayLiteral(this, param);
     }
+}
 
-    @parser(Expression, { repeat: '*', err: 'INVALID_EXPRESSION', sep: TokenType.COMMA })
-    setItems(items: Expression[]) {
-        this.items = items;
-    }
+export interface ArrayLiteralVisitor<P, R = P> {
+    visitArrayLiteral(node: ArrayLiteral, param: P): R;
+}
 
-    @parser(TokenType.RBRACK)
-    setCloseBracket(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBracket, token.getLocation());
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseArrayLiteral: ParseFunc<ArrayLiteral> = seq(
+        tok('['),
+        repeat(parseExpression, '*', tok(',')),
+        tok(']'),
+        ([_1, items, _2], location) => new ArrayLiteral(location, items)
+    );
 
-    items: Expression[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitArrayLiteral(this);
-    }
+    return { parseArrayLiteral };
 }

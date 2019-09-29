@@ -1,45 +1,37 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression, Statement } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement })
-export class ForStatement extends Statement {
-    @parser('for', { definite: true })
-    setForToken(token: Token) {
-        this.registerLocation('for', token.getLocation());
+export class ForStatement extends NodeBase<SyntaxType.ForStatement> {
+    constructor(
+        location: FileRange,
+        readonly variable: Token,
+        readonly iterable: Expression,
+        readonly body: Statement
+    ) { super(location, SyntaxType.ForStatement) }
+
+    accept<P, R = P>(visitor: ForStatementVisitor<P, R>, param: P) {
+        return visitor.visitForStatement(this, param);
     }
+}
 
-    @parser(TokenType.LPAREN, { err: 'FOR_MISSING_OPEN_PAREN' }) setOpenParen() {}
+export interface ForStatementVisitor<P, R = P> {
+    visitForStatement(node: ForStatement, param: P): R;
+}
 
-    @parser(TokenType.IDENT, { err: 'FOR_INVALID_ITER_IDENT' })
-    setIterVar(token: Token) {
-        this.iterVar = token.image;
-        this.registerLocation('iterVar', token.getLocation());
-    }
+export function register(parseExpression: ParseFunc<Expression>, parseStatement: ParseFunc<Statement>) {
+    const parseForStatement: ParseFunc<ForStatement> = seq(
+        tok('for'),
+        tok('('),
+        tok(TokenType.IDENT),
+        tok('in'),
+        parseExpression,
+        tok(')'),
+        parseStatement,
+        ([_1, _2, variable, _3, iterable, _4, body], location) => new ForStatement(location, variable, iterable, body)
+    );
 
-    @parser('in', { err: 'FOR_MISSING_IN' }) setIn() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setIterable(exp: Expression) {
-        this.iterableExp = exp;
-    }
-
-    @parser(TokenType.RPAREN, { err: 'FOR_MISSING_CLOSE_PAREN' }) setCloseParen() {}
-
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setBody(stmt: Statement) {
-        this.body = stmt;
-        this.createAndRegisterLocation('self', this.locations.for, stmt.locations.self);
-    }
-
-    iterVar: string;
-    iterableExp: Expression;
-    body: Statement;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitForStatement(this);
-    }
+    return { parseForStatement };
 }

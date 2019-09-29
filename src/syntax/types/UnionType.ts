@@ -1,26 +1,39 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
+import { NodeBase, SyntaxType, Type } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Type, leftRecursive: 'setLeft' })
-export class UnionType extends Type {
-    setLeft(left: Type) {
-        this.types = [left];
+export class UnionType extends NodeBase<SyntaxType.UnionType> {
+    constructor(
+        location: FileRange,
+        readonly left: Type,
+        readonly right: Type
+    ) { super(location, SyntaxType.UnionType) }
+
+    accept<P, R = P>(visitor: UnionTypeVisitor<P, R>, param: P) {
+        return visitor.visitUnionType(this, param);
     }
+}
 
-    @parser('|', { definite: true }) setVbarToken() {}
+export interface UnionTypeVisitor<P, R = P> {
+    visitUnionType(node: UnionType, param: P): R;
+}
 
-    @parser(Type, { err: 'INVALID_UNION_TYPE' })
-    setRight(right: Type) {
-        if (right instanceof UnionType) this.types.push(...right.types);
-        else this.types.push(right);
-        this.createAndRegisterLocation('self', this.types[0].locations.self, this.types[this.types.length - 1].locations.self);
-    }
+export class UnionTypeSuffix extends NodeBase<SyntaxType.UnionType> {
+    constructor(
+        location: FileRange,
+        readonly right: Type
+    ) { super(location, SyntaxType.UnionType) }
 
-    types: Type[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitUnionType(this);
-    }
+    setBase = (left: Type) => new UnionType(this.location.merge(left.location), left, this.right)
+}
+
+export function register(parseType: ParseFunc<Type>) {
+    const parseUnionTypeSuffix: ParseFunc<UnionTypeSuffix> = seq(
+        tok('|'),
+        parseType,
+        ([_1, right], location) => new UnionTypeSuffix(location, right)
+    );
+
+    return { parseUnionTypeSuffix };
 }

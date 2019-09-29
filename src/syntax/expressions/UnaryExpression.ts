@@ -1,54 +1,49 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { UnaryOperator, verifyMultiOperator } from '~/runtime/operators';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { verifyMultiOperator } from '~/runtime/operators';
+import { FileRange } from '~/core';
 
 
-export abstract class UnaryExpression extends Expression {
-    target: Expression;
-    symbol: string;
-    prefix: boolean;
-    operator: UnaryOperator;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitUnaryExpression(this);
-    }
+export class UnaryExpression extends NodeBase<SyntaxType.UnaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly symbol: Token,
+        readonly prefix: boolean
+    ) { super(location, SyntaxType.UnaryExpression) }
 
-    protected setOperator(tokens: Token[]) {
-        const oper = verifyMultiOperator(tokens);
-        this.symbol = oper.image;
-        this.registerLocation('oper', oper.getLocation());
+    accept<P, R = P>(visitor: UnaryExpressionVisitor<P, R>, param: P) {
+        return visitor.visitUnaryExpression(this, param);
     }
 }
 
-@nonTerminal({ implements: Expression })
-export class PrefixExpression extends UnaryExpression {
-    // operators have to be parsed as + because < and > screw everything up
-    @parser(TokenType.OPER, { repeat: '+', definite: true })
-    setOperatorToken(tokens: Token[]) {
-        super.setOperator(tokens);
-        this.prefix = true;
-    }
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setTarget(exp: Expression) {
-        this.target = exp;
-        this.createAndRegisterLocation('self', this.locations.oper, exp.locations.self);
-    }
+export interface UnaryExpressionVisitor<P, R = P> {
+    visitUnaryExpression(node: UnaryExpression, param: P): R;
 }
 
-@nonTerminal({ implements: Expression, leftRecursive: 'setTarget' })
-export class PostfixExpression extends UnaryExpression {
-    setTarget(exp: Expression) {
-        this.target = exp;
-    }
+export class PostfixExpressionSuffix extends NodeBase<SyntaxType.UnaryExpression> {
+    constructor(
+        location: FileRange,
+        readonly symbol: Token
+    ) { super(location, SyntaxType.UnaryExpression) }
 
-    // operators have to be parsed as + because < and > screw everything up
-    @parser(TokenType.OPER, { repeat: '+', definite: true })
-    setOperatorToken(tokens: Token[]) {
-        super.setOperator(tokens);
-        this.prefix = false;
-        this.createAndRegisterLocation('self', this.target.locations.self, this.locations.oper);
-    }
+    setBase = (target: Expression) => new UnaryExpression(this.location.merge(target.location), target, this.symbol, false)
+}
+
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parsePrefixExpression: ParseFunc<UnaryExpression> = seq(
+        repeat(tok(TokenType.OPER), '+'),
+        parseExpression,
+        // TODO: make sure this works
+        ([symbol, target], location) => new UnaryExpression(location, target, verifyMultiOperator(symbol), true)
+    );
+
+    const parsePostfixExpressionSuffix: ParseFunc<PostfixExpressionSuffix> = seq(
+        repeat(tok(TokenType.OPER), '+'),
+        // TODO: make sure this works
+        (symbol, location) => new PostfixExpressionSuffix(location, verifyMultiOperator(symbol))
+    );
+
+    return { parsePrefixExpression, parsePostfixExpressionSuffix };
 }

@@ -1,97 +1,115 @@
-import { Token, TokenType } from '~/parser/Tokenizer';
-import ASTNode from '~/syntax/ASTNode';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { parser, nonTerminal, exp, ParseResult } from '~/parser/Parser';
-import { Declaration } from './Program';
-import { Type } from '~/syntax/types/Type';
+import { Type, SyntaxType, NodeBase } from '~/syntax/environment';
+import { ParseFunc, seq, optional, select, tok, repeat } from '~/parser/parser';
+import { TokenType, Token } from '~/parser/lexer';
+import { FileRange } from '~/core';
 
 
-/**
- * TypeConstraint ::= COLON Type
- */
-const TypeConstraint = {
-    ':': exp(TokenType.COLON, { definite: true }),
-    type: exp(Type, { err: 'INVALID_TYPE_PARAM' }),
-};
+export class TypeParam extends NodeBase<SyntaxType.TypeParam> {
+    constructor(
+        location: FileRange,
+        readonly name: Token,
+        readonly varianceOp: Optional<Token>,
+        readonly typeConstraint: Optional<Type>
+    ) { super(location, SyntaxType.TypeParam) }
 
-/**
- * TypeParam = ('+' | '-')? IDENT TypeConstraint?
- */
-export class TypeParam extends ASTNode {
-    @parser(['+', '-'], { optional: true, definite: true })
-    setVarianceOp(op: Token) {
-        this.varianceOp = op.image;
-        this.registerLocation('variance', op.getLocation());
-    }
-
-    @parser(TokenType.IDENT, { definite: true, err: 'INVALID_TYPE_PARAM' })
-    setName(name: Token) {
-        this.name = name.image;
-        this.registerLocation('name', name.getLocation());
-        const start = this.varianceOp ? this.locations.variance : this.locations.name;
-        this.createAndRegisterLocation('self', start, this.locations.name);
-    }
-
-    @parser(TypeConstraint, { optional: true })
-    setConstraint(constraint: ParseResult) {
-        this.typeConstraint = constraint.type as Type;
-        const colon = constraint[':'] as Token;
-        this.createAndRegisterLocation('constraint', colon.getLocation(), this.typeConstraint.locations.self);
-        this.createAndRegisterLocation('self', this.locations.self, this.typeConstraint.locations.self);
-    }
-
-    name: string;
-    varianceOp?: string;
-    typeConstraint?: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitTypeParam(this);
+    accept<T, R = T>(visitor: TypeParamVisitor<T, R>, param: T): R {
+        return visitor.visitTypeParam(this, param);
     }
 }
 
-/**
- * TypeParamList ::= '<' TypeParam(+ sep COMMA) '>'
- */
-export const TypeParamList = {
-    '<': '<',
-    params: exp(TypeParam, { repeat: '+', sep: TokenType.COMMA }),
-    '>': exp('>', { definite: true }),
+export interface TypeParamVisitor<T, R = T> {
+    visitTypeParam(node: TypeParam, param: T): R;
+}
+
+export interface TypeParamList {
+    readonly params: ReadonlyArray<TypeParam>;
+}
+
+export class TypeDeclaration extends NodeBase<SyntaxType.TypeDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly name: Token,
+        readonly typeParams: ReadonlyArray<TypeParam>,
+        readonly typeNode: Type
+    ) { super(location, SyntaxType.TypeDeclaration) }
+
+    accept<T, R = T>(visitor: TypeDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitTypeDeclaration(this, param);
+    }
+}
+
+export interface TypeDeclarationVisitor<T, R = T> {
+    visitTypeDeclaration(node: TypeDeclaration, param: T): R;
+}
+
+export class AnonymousTypeDeclaration extends NodeBase<SyntaxType.AnonymousTypeDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly typeParams: ReadonlyArray<TypeParam>,
+        readonly typeNode: Type
+    ) { super(location, SyntaxType.AnonymousTypeDeclaration) }
+
+    accept<T, R = T>(visitor: AnonymousTypeDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitAnonymousTypeDeclaration(this, param);
+    }
+}
+
+export interface AnonymousTypeDeclarationVisitor<T, R = T> {
+    visitAnonymousTypeDeclaration(node: AnonymousTypeDeclaration, param: T): R;
 }
 
 /**
- * TypeDeclaration ::= 'type' IDENT? TypeParamList? EQUALS Type
+ * Registration function to handle circular dependency.
  */
-@nonTerminal({ implements: Declaration })
-export class TypeDeclaration extends Declaration {
-    @parser('type', { definite: true })
-    setTypeToken(token: Token) {
-        this.registerLocation('self', token.getLocation());
-    }
+export function register(parseType: ParseFunc<Type>) {
+    /**
+     * TypeParam = ('+' | '-')? IDENT (':' TypeNode)?
+     */
+    const parseTypeParam: ParseFunc<TypeParam> = seq(
+        optional(select(tok('+'), tok('-'))),
+        tok(TokenType.IDENT),
+        optional(seq(
+            tok(':'),
+            parseType,
+            (([_, type]) => type)
+        )),
+        ([varianceOp, name, typeConstraint], location) => new TypeParam(location, name, varianceOp, typeConstraint)
+    );
 
-    @parser(TokenType.IDENT, { optional: true })
-    setName(token: Token) {
-        this.name = token.image;
-        this.registerLocation('name', token.getLocation());
-    }
+    const parseTypeParamList: ParseFunc<TypeParamList> = seq(
+        tok('<'),
+        repeat(parseTypeParam, '+', tok(',')),
+        tok('>'),
+        ([_1, params, _2]) => ({ params })
+    );
 
-    @parser(TypeParamList, { optional: true })
-    setTypeParams(result: ParseResult) {
-        this.typeParams = result.params as TypeParam[];
-    }
+    /**
+     * TypeDeclaration ::= 'type' IDENT TypeParamList? EQUALS Type
+     */
+    const parseTypeDeclaration: ParseFunc<TypeDeclaration> = seq(
+        tok('type'),
+        tok(TokenType.IDENT),
+        optional(parseTypeParamList),
+        tok('='),
+        parseType,
+        ([_1, name, params, _2, typeNode], location) => new TypeDeclaration(location, name, params ? params.params : [], typeNode)
+    );
 
-    @parser(TokenType.EQUALS, { err: 'TYPE_DECL_MISSING_EQUALS' }) setEquals() {}
+    /**
+     * AnonymousTypeDeclaration ::= 'type' TypeParamList? EQUALS Type
+     */
+    const parseAnonymousTypeDeclaration: ParseFunc<AnonymousTypeDeclaration> = seq(
+        tok('type'),
+        optional(parseTypeParamList),
+        tok('='),
+        parseType,
+        ([_1, params, _2, typeNode], location) => new AnonymousTypeDeclaration(location, params ? params.params : [], typeNode)
+    );
 
-    @parser(Type, { err: 'INVALID_TYPE' })
-    setType(type: Type) {
-        this.typeNode = type;
-        this.createAndRegisterLocation('self', this.locations.self, type.locations.self);
-    }
-
-    name: string = '';
-    typeParams: TypeParam[] = [];
-    typeNode: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitTypeDeclaration(this);
+    return {
+        parseTypeParam,
+        parseTypeParamList,
+        parseTypeDeclaration,
+        parseAnonymousTypeDeclaration
     }
 }

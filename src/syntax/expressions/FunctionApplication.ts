@@ -1,41 +1,43 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser, ParseResult } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { TypeArgList } from '~/syntax/types/SpecificType';
-import { Type } from '~/syntax/types/Type';
-import { BinaryExpression } from './BinaryExpression';
-import { PostfixExpression } from './UnaryExpression';
+import { NodeBase, SyntaxType, Expression, Type } from '~/syntax/environment';
+import { ParseFunc, seq, tok, optional, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression, leftRecursive: 'setTarget', before: [BinaryExpression, PostfixExpression] })
-export class FunctionApplication extends Expression {
-    setTarget(exp: Expression) {
-        this.target = exp;
+export class FunctionApplication extends NodeBase<SyntaxType.FunctionApplication> {
+    constructor(
+        location: FileRange,
+        readonly target: Expression,
+        readonly typeArgs: Optional<Type[]>,
+        readonly args: Expression[]
+    ) { super(location, SyntaxType.FunctionApplication) }
+
+    accept<P, R = P>(visitor: FunctionApplicationVisitor<P, R>, param: P) {
+        return visitor.visitFunctionApplication(this, param);
     }
+}
 
-    @parser(TypeArgList, { optional: true })
-    setTypeArgs(result: ParseResult) {
-        this.typeArgs = result.types as Type[];
-    }
+export interface FunctionApplicationVisitor<P, R = P> {
+    visitFunctionApplication(node: FunctionApplication, param: P): R;
+}
 
-    @parser(TokenType.LPAREN, { definite: true }) setOpenParen() {}
+export class FunctionApplicationSuffix extends NodeBase<SyntaxType.FunctionApplication> {
+    constructor(
+        location: FileRange,
+        readonly typeArgs: Optional<Type[]>,
+        readonly args: Expression[]
+    ) { super(location, SyntaxType.FunctionApplication) }
 
-    @parser(Expression, { repeat: '*', err: 'INVALID_EXPRESSION', sep: TokenType.COMMA })
-    setArgs(args: Expression[]) {
-        this.args = args;
-    }
+    setBase = (target: Expression) => new FunctionApplication(this.location.merge(target.location), target, this.typeArgs, this.args);
+}
 
-    @parser(TokenType.RPAREN)
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.target.locations.self, token.getLocation());
-    }
-
-    target: Expression;
-    typeArgs?: Type[];
-    args: Expression[];
+export function register(parseExpression: ParseFunc<Expression>, parseTypeArgList: ParseFunc<Type[]>) {
+    const parseFunctionApplicationSuffix: ParseFunc<FunctionApplicationSuffix> = seq(
+        optional(parseTypeArgList),
+        tok('('),
+        repeat(parseExpression, '*', tok(',')),
+        tok(')'),
+        ([typeArgs, _1, args, _2], location) => new FunctionApplicationSuffix(location, typeArgs, args)
+    );
     
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitFunctionApplication(this);
-    }
+    return { parseFunctionApplicationSuffix };
 }

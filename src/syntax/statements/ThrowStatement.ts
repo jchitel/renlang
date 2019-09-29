@@ -1,26 +1,29 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement })
-export class ThrowStatement extends Statement {
-    @parser('throw', { definite: true })
-    setThrowToken(token: Token) {
-        this.registerLocation('throw', token.getLocation());
+export class ThrowStatement extends NodeBase<SyntaxType.ThrowStatement> {
+    constructor(
+        location: FileRange,
+        readonly exp: Expression
+    ) { super(location, SyntaxType.ThrowStatement) }
+
+    accept<P, R = P>(visitor: ThrowStatementVisitor<P, R>, param: P) {
+        return visitor.visitThrowStatement(this, param);
     }
+}
 
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setExpression(exp: Expression) {
-        this.exp = exp;
-        this.createAndRegisterLocation('self', this.locations.throw, exp.locations.self);
-    }
+export interface ThrowStatementVisitor<P, R = P> {
+    visitThrowStatement(node: ThrowStatement, param: P): R;
+}
 
-    exp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitThrowStatement(this);
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseThrowStatement: ParseFunc<ThrowStatement> = seq(
+        tok('throw'),
+        parseExpression,
+        ([_, exp], location) => new ThrowStatement(location, exp)
+    );
+
+    return { parseThrowStatement };
 }

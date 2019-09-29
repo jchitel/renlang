@@ -1,120 +1,85 @@
-import { Location, Token, TokenType } from '~/parser/Tokenizer';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { parser, nonTerminal, exp, ParseResult } from '~/parser/Parser';
-import { NonImportDeclaration } from './Program';
-import { ImportList } from './ImportDeclaration';
+import { parseImportList } from './ImportDeclaration';
+import { ParseFunc, seq, select, tok, optional } from '~/parser/parser';
+import { Token, TokenType } from '~/parser/lexer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { FileRange } from '~/core';
 
 
-/**
- * ExportForwardDeclaration ::= DefaultExportForwardDeclaration | NamedExportForwardDeclaration
- * 
- * We implemented this using the inheritance model because it ended up being simpler that way.
- */
-@nonTerminal({ abstract: true, implements: NonImportDeclaration })
-export abstract class ExportForwardDeclaration extends NonImportDeclaration {
-    moduleName: string;
-    forwards: {
-        importName: string,
-        importLocation: Location,
-        exportName: string,
-        exportLocation: Location,
-    }[] = [];
+export interface Forward {
+    readonly importName: Token;
+    readonly exportName: Token;
+}
 
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitExportForwardDeclaration(this);
+export class ExportForwardDeclaration extends NodeBase<SyntaxType.ExportForwardDeclaration> {
+    constructor(
+        location: FileRange,
+        readonly moduleName: Token,
+        readonly forwards: ReadonlyArray<Forward>
+    ) { super(location, SyntaxType.ExportForwardDeclaration) }
+
+    accept<T, R = T>(visitor: ExportForwardDeclarationVisitor<T, R>, param: T): R {
+        return visitor.visitExportForwardDeclaration(this, param);
     }
+}
 
-    protected addForward(importName: string, importLocation: Location, exportName: string, exportLocation: Location) {
-        this.forwards.push({ importName, importLocation, exportName, exportLocation });
-    }
+export interface ExportForwardDeclarationVisitor<T, R = T> {
+    visitExportForwardDeclaration(node: ExportForwardDeclaration, param: T): R;
 }
 
 /**
  * DefaultExportForwards ::= COLON (LBRACE IDENT RBRACE | '*')
  */
-const DefaultExportForwards = {
-    ':': exp(TokenType.COLON, { definite: true }),
-    value: [{
-        '{': exp(TokenType.LBRACE, { definite: true }),
-        name: TokenType.IDENT,
-        '}': TokenType.RBRACE,
-    }, '*']
-};
+const parseDefaultExportForwards: ParseFunc<Token> = seq(
+    tok(':'),
+    select<Token>(
+        tok('*'),
+        seq(
+            tok('{'),
+            tok(TokenType.IDENT),
+            tok('}'),
+            ([_1, name, _2]) => name
+        )
+    ),
+    ([_, exp]) => exp
+);
 
 /**
  * DefaultExportForwardDeclaration ::= EXPORT DEFAULT FROM STRING_LITERAL DefaultExportForwards?
  */
-@nonTerminal({ implements: ExportForwardDeclaration })
-// @ts-ignore: Decorator registers this class, so it is used
-class DefaultExportForwardDeclaration extends ExportForwardDeclaration {
-    @parser('export') setExportToken() {}
-
-    @parser('default')
-    setDefaultToken(token: Token) {
-        this.registerLocation('default', token.getLocation());
-    }
-
-    @parser('from', { definite: true }) setFromToken() {}
-
-    @parser(TokenType.STRING_LITERAL, { err: 'INVALID_IMPORT_MODULE' })
-    setModuleName(token: Token) {
-        this.moduleName = token.value;
-        this.registerLocation('moduleName', token.getLocation());
-        super.addForward('default', this.locations.default, 'default', this.locations.default);
-    }
-
-    @parser(DefaultExportForwards, { optional: true })
-    setForwards(result: ParseResult) {
-        this.forwards = [];
-        const value = result.value as (ParseResult | Token);
-        if (value instanceof Token) super.addForward('*', value.getLocation(), 'default', this.locations.default);
-        else {
-            const name = value.name as Token;
-            super.addForward(name.image, name.getLocation(), 'default', this.locations.default);
-        }
-    }
-}
+const parseDefaultExportForwardDeclaration: ParseFunc<ExportForwardDeclaration> = seq(
+    tok('export'),
+    tok('default'),
+    tok('from'),
+    tok(TokenType.STRING_LITERAL),
+    optional(parseDefaultExportForwards),
+    ([_1, def, _2, moduleName, fwd], location) => new ExportForwardDeclaration(
+        location,
+        moduleName,
+        [{ importName: fwd || def, exportName: def }]
+    )
+);
 
 /**
- * DefaultExportForwardDeclaration ::= EXPORT DEFAULT FROM STRING_LITERAL DefaultExportForwards?
+ * DefaultExportForwardDeclaration ::= EXPORT FROM STRING_LITERAL ':' (ImportList | '*')
  */
-@nonTerminal({ implements: ExportForwardDeclaration })
-// @ts-ignore: Decorator registers this class, so it is used
-class NamedExportForwardDeclaration extends ExportForwardDeclaration {
-    @parser('export') setExportToken() {}
-    
-    @parser('from', { definite: true }) setFromToken() {}
+const parseNamedExportForwardDeclaration: ParseFunc<ExportForwardDeclaration> = seq(
+    tok('export'),
+    tok('from'),
+    tok(TokenType.STRING_LITERAL),
+    tok(':'),
+    select<Forward[]>(
+        seq(parseImportList, imps => imps.map(({ importName, aliasName }) => ({ importName, exportName: aliasName }))),
+        seq(tok('*'), _ => [{ importName: _, exportName: _ }])
+    ),
+    ([_1, _2, moduleName, _3, forwards], location) => new ExportForwardDeclaration(
+        location, moduleName, forwards
+    )
+);
 
-    @parser(TokenType.STRING_LITERAL, { err: 'INVALID_IMPORT_MODULE' })
-    setModuleName(token: Token) {
-        this.moduleName = token.value;
-        this.registerLocation('moduleName', token.getLocation());
-    }
-
-    @parser(TokenType.COLON, { err: 'INVALID_IMPORT' }) setColon() {}
-
-    @parser([...ImportList, '*'])
-    setValue(result: ParseResult | Token) {
-        if (result instanceof Token) {
-            // wildcard to wildcard
-            super.addForward('*', result.getLocation(), '*', result.getLocation());
-        } else {
-            if (result.defaultImport instanceof Token) {
-                const defaultImport = result.defaultImport as Token;
-                this.addForward('default', defaultImport.getLocation(), defaultImport.image, defaultImport.getLocation());
-            }
-            if (result['*'] instanceof Token) {
-                const w = result['*'] as Token, a = result.alias as Token;
-                this.addForward('*', w.getLocation(), a.image, a.getLocation());
-            }
-            if (Array.isArray(result.names)) {
-                for (const i of result.names as (ParseResult | Token)[]) {
-                    const [importName, exportName] = (i instanceof Token) ? [i, i]
-                        : (i.name) ? [i.name as Token, i.alias as Token]
-                        : [i['*'] as Token, i.alias as Token];
-                    this.addForward(importName.image, importName.getLocation(), exportName.image, exportName.getLocation());
-                }
-            }
-        }
-    }
-}
+/**
+ * ExportForwardDeclaration ::= DefaultExportForwardDeclaration | NamedExportForwardDeclaration
+ */
+export const parseExportForwardDeclaration: ParseFunc<ExportForwardDeclaration> = select(
+    parseDefaultExportForwardDeclaration,
+    parseNamedExportForwardDeclaration
+);

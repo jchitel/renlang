@@ -1,29 +1,30 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class TupleLiteral extends Expression {
-    @parser(TokenType.LPAREN, { definite: true })
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
+export class TupleLiteral extends NodeBase<SyntaxType.TupleLiteral> {
+    constructor(
+        location: FileRange,
+        readonly items: ReadonlyArray<Expression>
+    ) { super(location, SyntaxType.TupleLiteral) }
+
+    accept<P, R = P>(visitor: TupleLiteralVisitor<P, R>, param: P) {
+        return visitor.visitTupleLiteral(this, param);
     }
+}
 
-    @parser(Expression, { repeat: '*', err: 'INVALID_EXPRESSION', sep: TokenType.COMMA })
-    setItems(items: Expression[]) {
-        this.items = items;
-    }
+export interface TupleLiteralVisitor<P, R = P> {
+    visitTupleLiteral(node: TupleLiteral, param: P): R;
+}
 
-    @parser(TokenType.RPAREN)
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseTupleLiteral: ParseFunc<TupleLiteral> = seq(
+        tok('('),
+        repeat(parseExpression, '*', tok(',')),
+        tok(')'),
+        ([_1, items, _2], location) => new TupleLiteral(location, items)
+    );
 
-    items: Expression[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitTupleLiteral(this);
-    }
+    return { parseTupleLiteral };
 }

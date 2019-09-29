@@ -1,56 +1,54 @@
-import { Statement } from '~/syntax/statements/Statement';
-import { nonTerminal, parser, ParseResult, exp } from '~/parser/Parser';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { Token } from '~/parser/Tokenizer';
-import { Param } from '~/syntax/declarations/FunctionDeclaration';
+import { NodeBase, SyntaxType, Statement } from '~/syntax/environment';
+import { Param } from '~/syntax';
+import { ParseFunc, seq, tok, repeat, optional } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-export const CatchClause = {
-    catch: exp('catch', { definite: true }),
-    '(': exp('(', { err: 'TRY_CATCH_MISSING_OPEN_PAREN' }),
-    param: exp(Param, { err: 'CATCH_INVALID_PARAM' }),
-    ')': exp(')', { err: 'TRY_CATCH_MISSING_CLOSE_PAREN' }),
-    body: exp(Statement, { err: 'INVALID_STATEMENT' })
+interface Catch {
+    param: Param;
+    body: Statement;
 }
 
-export const FinallyClause = {
-    finally: exp('finally', { definite: true }),
-    body: exp(Statement, { err: 'INVALID_STATEMENT' })
-};
+export class TryCatchStatement extends NodeBase<SyntaxType.TryCatchStatement> {
+    constructor(
+        location: FileRange,
+        readonly _try: Statement,
+        readonly catches: ReadonlyArray<Catch>,
+        readonly _finally: Optional<Statement>
+    ) { super(location, SyntaxType.TryCatchStatement) }
 
-type Catch = { param: Param, body: Statement };
-
-@nonTerminal({ implements: Statement })
-export class TryCatchStatement extends Statement {
-    @parser('try', { definite: true })
-    setTryToken(token: Token) {
-        this.registerLocation('try', token.getLocation());
+    accept<P, R = P>(visitor: TryCatchStatementVisitor<P, R>, param: P) {
+        return visitor.visitTryCatchStatement(this, param);
     }
+}
 
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setTryBody(stmt: Statement) {
-        this.try = stmt;
-    }
+export interface TryCatchStatementVisitor<P, R = P> {
+    visitTryCatchStatement(node: TryCatchStatement, param: P): R;
+}
 
-    @parser(CatchClause, { repeat: '+', err: 'TRY_CATCH_MISSING_CATCH' })
-    setCatches(result: ParseResult[]) {
-        this.catches = result.map(c => ({
-            param: c.param as Param,
-            body: c.body as Statement,
-        }))
-    }
+export function register(parseStatement: ParseFunc<Statement>, parseParam: ParseFunc<Param>) {
+    const parseCatchClause: ParseFunc<Catch> = seq(
+        tok('catch'),
+        tok('('),
+        parseParam,
+        tok(')'),
+        parseStatement,
+        ([_1, _2, param, _3, body]) => ({ param, body })
+    );
 
-    @parser(FinallyClause, { optional: true })
-    setFinally(result: ParseResult) {
-        this.finally = result.body as Statement;
-        this.createAndRegisterLocation('self', this.locations.try, this.finally.locations.self);
-    }
+    const parseFinallyClause: ParseFunc<Statement> = seq(
+        tok('finally'),
+        parseStatement,
+        ([_, body]) => body
+    );
 
-    try: Statement;
-    catches: Catch[];
-    finally?: Statement;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitTryCatchStatement(this);
-    }
+    const parseTryCatchStatement: ParseFunc<TryCatchStatement> = seq(
+        tok('try'),
+        parseStatement,
+        repeat(parseCatchClause, '+'),
+        optional(parseFinallyClause),
+        ([_, _try, catches, _finally], location) => new TryCatchStatement(location, _try, catches, _finally)
+    );
+
+    return { parseTryCatchStatement };
 }

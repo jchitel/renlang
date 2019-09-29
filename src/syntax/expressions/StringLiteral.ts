@@ -1,20 +1,25 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class StringLiteral extends Expression {
-    @parser(TokenType.STRING_LITERAL, { definite: true })
-    setValue(token: Token) {
-        this.value = token.value;
-        this.registerLocation('self', token.getLocation());
-    }
+export class StringLiteral extends NodeBase<SyntaxType.StringLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.StringLiteral) }
 
-    value: string;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitStringLiteral(this);
+    accept<P, R = P>(visitor: StringLiteralVisitor<P, R>, param: P) {
+        return visitor.visitStringLiteral(this, param);
     }
 }
+
+export interface StringLiteralVisitor<P, R = P> {
+    visitStringLiteral(node: StringLiteral, param: P): R;
+}
+
+export const parseStringLiteral: ParseFunc<StringLiteral> = seq(
+    tok(TokenType.STRING_LITERAL),
+    (value, location) => new StringLiteral(location, value)
+);

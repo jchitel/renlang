@@ -1,39 +1,34 @@
-import { Statement } from '~/syntax/statements/Statement';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Statement, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement })
-export class DoWhileStatement extends Statement {
-    @parser('do', { definite: true })
-    setDoToken(token: Token) {
-        this.registerLocation('do', token.getLocation());
+export class DoWhileStatement extends NodeBase<SyntaxType.DoWhileStatement> {
+    constructor(
+        location: FileRange,
+        readonly body: Statement,
+        readonly condition: Expression
+    ) { super(location, SyntaxType.DoWhileStatement) }
+
+    accept<P, R = P>(visitor: DoWhileStatementVisitor<P, R>, param: P) {
+        return visitor.visitDoWhileStatement(this, param);
     }
+}
 
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setBody(stmt: Statement) {
-        this.body = stmt;
-    }
+export interface DoWhileStatementVisitor<P, R = P> {
+    visitDoWhileStatement(node: DoWhileStatement, param: P): R;
+}
 
-    @parser('while', { err: 'DO_WHILE_MISSING_WHILE' }) setWhileToken() {}
-    @parser(TokenType.LPAREN, { err: 'WHILE_MISSING_OPEN_PAREN' }) setOpenParen() {}
+export function register(parseExpression: ParseFunc<Expression>, parseStatement: ParseFunc<Statement>) {
+    const parseDoWhileStatement: ParseFunc<DoWhileStatement> = seq(
+        tok('do'),
+        parseStatement,
+        tok('while'),
+        tok('('),
+        parseExpression,
+        tok(')'),
+        ([_1, body, _2, _3, condition, _4], location) => new DoWhileStatement(location, body, condition)
+    );
 
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.conditionExp = exp;
-    }
-
-    @parser(TokenType.RPAREN, { err: 'WHILE_MISSING_CLOSE_PAREN' })
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.do, token.getLocation());
-    }
-
-    body: Statement;
-    conditionExp: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitDoWhileStatement(this);
-    }
+    return { parseDoWhileStatement };
 }

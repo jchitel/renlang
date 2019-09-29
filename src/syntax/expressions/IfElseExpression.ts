@@ -1,43 +1,36 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class IfElseExpression extends Expression {
-    @parser('if', { definite: true })
-    setIfToken(token: Token) {
-        this.registerLocation('if', token.getLocation());
+export class IfElseExpression extends NodeBase<SyntaxType.IfElseExpression> {
+    constructor(
+        location: FileRange,
+        readonly condition: Expression,
+        readonly consequent: Expression,
+        readonly alternate: Expression
+    ) { super(location, SyntaxType.IfElseExpression) }
+
+    accept<P, R = P>(visitor: IfElseExpressionVisitor<P, R>, param: P) {
+        return visitor.visitIfElseExpression(this, param);
     }
+}
 
-    @parser(TokenType.LPAREN, { err: 'IF_MISSING_OPEN_PAREN' }) setOpenParen() {}
+export interface IfElseExpressionVisitor<P, R = P> {
+    visitIfElseExpression(node: IfElseExpression, param: P): R;
+}
 
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.condition = exp;
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseIfElseExpression: ParseFunc<IfElseExpression> = seq(
+        tok('if'),
+        tok('('),
+        parseExpression,
+        tok(')'),
+        parseExpression,
+        tok('else'),
+        parseExpression,
+        ([_1, _2, condition, _3, consequent, _4, alternate], location) => new IfElseExpression(location, condition, consequent, alternate)
+    );
 
-    @parser(TokenType.RPAREN, { err: 'IF_MISSING_CLOSE_PAREN' }) setCloseParen() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setConsequent(exp: Expression) {
-        this.consequent = exp;
-    }
-
-    @parser('else', { err: 'IF_MISSING_ELSE' }) setElse() {}
-
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setAlternate(exp: Expression) {
-        this.alternate = exp;
-        this.createAndRegisterLocation('self', this.locations.if, exp.locations.self);
-    }
-
-    condition: Expression;
-    consequent: Expression;
-    alternate: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitIfElseExpression(this);
-    }
+    return { parseIfElseExpression };
 }

@@ -1,36 +1,33 @@
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { Statement } from '~/syntax/statements/Statement';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { Expression } from '~/syntax/expressions/Expression';
+import { NodeBase, SyntaxType, Expression, Statement } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement })
-export class WhileStatement extends Statement {
-    @parser('while', { definite: true })
-    setWhileToken(token: Token) {
-        this.registerLocation('while', token.getLocation());
+export class WhileStatement extends NodeBase<SyntaxType.WhileStatement> {
+    constructor(
+        location: FileRange,
+        readonly condition: Expression,
+        readonly body: Statement
+    ) { super(location, SyntaxType.WhileStatement) }
+
+    accept<P, R = P>(visitor: WhileStatementVisitor<P, R>, param: P) {
+        return visitor.visitWhileStatement(this, param);
     }
+}
 
-    @parser(TokenType.LPAREN, { err: 'WHILE_MISSING_OPEN_PAREN' }) setOpenParen() {}
+export interface WhileStatementVisitor<P, R = P> {
+    visitWhileStatement(node: WhileStatement, param: P): R;
+}
 
-    @parser(Expression, { err: 'INVALID_EXPRESSION' })
-    setCondition(exp: Expression) {
-        this.conditionExp = exp;
-    }
+export function register(parseExpression: ParseFunc<Expression>, parseStatement: ParseFunc<Statement>) {
+    const parseWhileStatement: ParseFunc<WhileStatement> = seq(
+        tok('while'),
+        tok('('),
+        parseExpression,
+        tok(')'),
+        parseStatement,
+        ([_1, _2, condition, _3, body], location) => new WhileStatement(location, condition, body)
+    );
 
-    @parser(TokenType.RPAREN, { err: 'WHILE_MISSING_CLOSE_PAREN' }) setCloseParen() {}
-
-    @parser(Statement, { err: 'INVALID_STATEMENT' })
-    setBody(stmt: Statement) {
-        this.body = stmt;
-        this.createAndRegisterLocation('self', this.locations.while, stmt.locations.self);
-    }
-
-    conditionExp: Expression;
-    body: Statement;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitWhileStatement(this);
-    }
+    return { parseWhileStatement };
 }

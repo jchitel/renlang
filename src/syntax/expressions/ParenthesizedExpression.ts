@@ -1,30 +1,30 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { Token, TokenType } from '~/parser/Tokenizer';
-import { TupleLiteral } from '~/syntax/expressions/TupleLiteral';
+import { NodeBase, SyntaxType, Expression } from '~/syntax/environment';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression, before: [TupleLiteral] })
-export class ParenthesizedExpression extends Expression {
-    @parser(TokenType.LPAREN)
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
+export class ParenthesizedExpression extends NodeBase<SyntaxType.ParenthesizedExpression> {
+    constructor(
+        location: FileRange,
+        readonly inner: Expression
+    ) { super(location, SyntaxType.ParenthesizedExpression) }
+
+    accept<P, R = P>(visitor: ParenthesizedExpressionVisitor<P, R>, param: P) {
+        return visitor.visitParenthesizedExpression(this, param);
     }
+}
 
-    @parser(Expression)
-    setInner(exp: Expression) {
-        this.inner = exp;
-    }
+export interface ParenthesizedExpressionVisitor<P, R = P> {
+    visitParenthesizedExpression(node: ParenthesizedExpression, param: P): R;
+}
 
-    @parser(TokenType.RPAREN, { definite: true })
-    setCloseParen(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openParen, token.getLocation());
-    }
+export function register(parseExpression: ParseFunc<Expression>) {
+    const parseParenthesizedExpression: ParseFunc<ParenthesizedExpression> = seq(
+        tok('('),
+        parseExpression,
+        tok(')'),
+        ([_1, inner, _2], location) => new ParenthesizedExpression(location, inner)
+    );
 
-    inner: Expression;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitParenthesizedExpression(this);
-    }
+    return { parseParenthesizedExpression };
 }

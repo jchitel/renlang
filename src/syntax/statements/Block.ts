@@ -1,30 +1,30 @@
-import { Statement } from '~/syntax/statements/Statement';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { ExpressionStatement } from '~/syntax/statements/ExpressionStatement';
+import { NodeBase, SyntaxType, Statement } from '~/syntax/environment';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Statement, before: [ExpressionStatement] })
-export class Block extends Statement {
-    @parser(TokenType.LBRACE, { definite: true })
-    setOpenBrace(token: Token) {
-        this.registerLocation('openBrace', token.getLocation());
+export class Block extends NodeBase<SyntaxType.Block> {
+    constructor(
+        location: FileRange,
+        readonly statements: ReadonlyArray<Statement>
+    ) { super(location, SyntaxType.Block) }
+
+    accept<P, R = P>(visitor: BlockVisitor<P, R>, param: P) {
+        return visitor.visitBlock(this, param);
     }
+}
 
-    @parser(Statement, { repeat: '*' })
-    setStatements(statements: Statement[]) {
-        this.statements = statements;
-    }
+export interface BlockVisitor<P, R = P> {
+    visitBlock(node: Block, param: P): R;
+}
 
-    @parser(TokenType.RBRACE, { err: 'MISSING_CLOSE_BRACE' })
-    setCloseBrace(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBrace, token.getLocation());
-    }
+export function register(parseStatement: ParseFunc<Statement>) {
+    const parseBlock: ParseFunc<Block> = seq(
+        tok('{'),
+        repeat(parseStatement, '*'),
+        tok('}'),
+        ([_1, statements, _2], location) => new Block(location, statements)
+    );
 
-    statements: Statement[];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitBlock(this);
-    }
+    return { parseBlock };
 }

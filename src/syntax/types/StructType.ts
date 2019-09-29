@@ -1,38 +1,40 @@
-import { Type } from '~/syntax/types/Type';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser, exp, ParseResult } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { Type, NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok, repeat } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-const Field = {
-    typeNode: exp(Type, { definite: true }),
-    name: exp(TokenType.IDENT, { err: 'INVALID_FIELD_NAME' }),
-};
+interface Field {
+    typeNode: Type;
+    name: Token;
+}
 
-@nonTerminal({ implements: Type })
-export class StructType extends Type {
-    @parser(TokenType.LBRACE, { definite: true })
-    setOpenBrace(token: Token) {
-        this.registerLocation('openBrace', token.getLocation());
+export class StructType extends NodeBase<SyntaxType.StructType> {
+    constructor(
+        location: FileRange,
+        readonly fields: ReadonlyArray<Field>
+    ) { super(location, SyntaxType.StructType) }
+
+    accept<P, R = P>(visitor: StructTypeVisitor<P, R>, param: P) {
+        return visitor.visitStructType(this, param);
     }
+}
 
-    @parser(Field, { repeat: '*' })
-    setFields(fields: ParseResult[]) {
-        for (const field of fields) {
-            const name = field.name as Token;
-            this.fields.push({ type: field.typeNode as Type, name: name.image });
-            this.registerLocation(`field_${name}`, name.getLocation());
-        }
-    }
+export interface StructTypeVisitor<P, R = P> {
+    visitStructType(node: StructType, param: P): R;
+}
 
-    @parser(TokenType.RBRACE, { err: 'INVALID_STRUCT_NO_CLOSE_BRACE' })
-    setCloseBrace(token: Token) {
-        this.createAndRegisterLocation('self', this.locations.openBrace, token.getLocation());
-    }
+export function register(parseType: ParseFunc<Type>) {
+    const parseStructType: ParseFunc<StructType> = seq(
+        tok('{'),
+        repeat(seq(
+            parseType,
+            tok(TokenType.IDENT),
+            ([typeNode, name]) => ({ typeNode, name })
+        ), '*'),
+        tok('}'),
+        ([_1, fields, _2], location) => new StructType(location, fields)
+    );
 
-    fields: { type: Type, name: string }[] = [];
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitStructType(this);
-    }
+    return { parseStructType };
 }

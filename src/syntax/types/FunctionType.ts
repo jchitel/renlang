@@ -1,37 +1,33 @@
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { Type } from '~/syntax/types/Type';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { IdentifierType } from '~/syntax/types/IdentifierType';
-import { TokenType, Token } from '~/parser/Tokenizer';
-import { ParenthesizedType } from '~/syntax/types/ParenthesizedType';
-import { TupleType } from '~/syntax/types/TupleType';
+import { seq, tok, ParseFunc, repeat } from '~/parser/parser';
+import { Type, NodeBase, SyntaxType } from '~/syntax/environment';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Type, before: [IdentifierType, ParenthesizedType, TupleType] })
-export class FunctionType extends Type {
-    @parser(TokenType.LPAREN)
-    setOpenParen(token: Token) {
-        this.registerLocation('openParen', token.getLocation());
+export class FunctionType extends NodeBase<SyntaxType.FunctionType> {
+    constructor(
+        location: FileRange,
+        readonly paramTypes: Type[],
+        readonly returnType: Type
+    ) { super(location, SyntaxType.FunctionType) }
+
+    accept<P, R = P>(visitor: FunctionTypeVisitor<P, R>, param: P) {
+        return visitor.visitFunctionType(this, param);
     }
+}
 
-    @parser(Type, { repeat: '*', err: 'INVALID_TYPE', sep: TokenType.COMMA })
-    setParamTypes(types: Type[]) {
-        this.paramTypes = types;
-    }
+export interface FunctionTypeVisitor<P, R = P> {
+    visitFunctionType(node: FunctionType, param: P): R;
+}
 
-    @parser(TokenType.RPAREN) setCloseParen() {}
-    @parser(TokenType.FAT_ARROW, { definite: true }) setFatArrow() {}
+export function register(parseType: ParseFunc<Type>) {
+    const parseFunctionType: ParseFunc<FunctionType> = seq(
+        tok('('),
+        repeat(parseType, '*', tok(',')),
+        tok(')'),
+        tok('=>'),
+        parseType,
+        ([_1, paramTypes, _2, _3, returnType], location) => new FunctionType(location, paramTypes, returnType)
+    );
 
-    @parser(Type, { err: 'FUNCTION_TYPE_INVALID_RETURN_TYPE' })
-    setReturnType(type: Type) {
-        this.returnType = type;
-        this.createAndRegisterLocation('self', this.locations.openParen, type.locations.self);
-    }
-
-    paramTypes: Type[];
-    returnType: Type;
-    
-    visit<T>(visitor: INodeVisitor<T>) {
-        return visitor.visitFunctionType(this);
-    }
+    return { parseFunctionType };
 }

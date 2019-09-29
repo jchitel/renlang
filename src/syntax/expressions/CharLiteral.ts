@@ -1,20 +1,25 @@
-import { Expression } from './Expression';
-import INodeVisitor from '~/syntax/INodeVisitor';
-import { nonTerminal, parser } from '~/parser/Parser';
-import { TokenType, Token } from '~/parser/Tokenizer';
+import { NodeBase, SyntaxType } from '~/syntax/environment';
+import { Token, TokenType } from '~/parser/lexer';
+import { ParseFunc, seq, tok } from '~/parser/parser';
+import { FileRange } from '~/core';
 
 
-@nonTerminal({ implements: Expression })
-export class CharLiteral extends Expression {
-    @parser(TokenType.CHARACTER_LITERAL, { definite: true })
-    setValue(token: Token) {
-        this.value = token.value;
-        this.registerLocation('self', token.getLocation());
-    }
+export class CharLiteral extends NodeBase<SyntaxType.CharLiteral> {
+    constructor(
+        location: FileRange,
+        readonly value: Token
+    ) { super(location, SyntaxType.CharLiteral) }
 
-    value: string;
-    
-    visit<T>(visitor: INodeVisitor<T>): T {
-        return visitor.visitCharLiteral(this);
+    accept<P, R = P>(visitor: CharLiteralVisitor<P, R>, param: P) {
+        return visitor.visitCharLiteral(this, param);
     }
 }
+
+export interface CharLiteralVisitor<P, R = P> {
+    visitCharLiteral(node: CharLiteral, param: P): R;
+}
+
+export const parseCharLiteral: ParseFunc<CharLiteral> = seq(
+    tok(TokenType.CHARACTER_LITERAL),
+    (value, location) => new CharLiteral(location, value)
+);
