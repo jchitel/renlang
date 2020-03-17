@@ -39,3 +39,11 @@ node_modules
 
 # Generated files
 dist/
+
+
+#Added by cargo
+#
+#already existing elements are commented out
+
+/target
+**/*.rs.bk
