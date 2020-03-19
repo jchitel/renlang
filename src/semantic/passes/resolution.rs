@@ -1,12 +1,3 @@
-use crate::semantic::namespace::{
-	Declaration, Namespace, ModuleRef, NameTargetStatus, NameTarget, Reference
-};
-use super::dependencies::{
-	Dependency, PureForward, PureForwardGraph
-};
-use crate::core::{ Diagnostic, DiagnosticLevel, FileRange };
-
-
 pub fn resolve_dependencies() {}
 
 /*export interface DependencyResolutionOutput {

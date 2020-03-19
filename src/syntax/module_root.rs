@@ -1,43 +1,81 @@
-use crate::parser::lexer::TokenType;
-use super::declarations::ImportDeclaration;
-use super::environment::{ NodeBase, SyntaxType, Declaration };
-use super::{ ExportDeclaration, ExportForwardDeclaration };
-use super::declarations::parsers::{ parseImportDeclaration, parseExportForwardDeclaration };
-use crate::parser::{ ParseFunc, seq, repeat, select, tok };
-use crate::core::FileRange;
-
-
-enum NonImportDeclaration {
-    Declaration(Declaration),
-    ExportDeclaration(ExportDeclaration),
-    ExportForwardDeclaration(ExportForwardDeclaration)
-}
+use crate::parser::primitives::eof;
+use crate::parser::primitives::parse;
+use crate::parser::primitives::repeat_zero;
+use crate::{parser::{primitives::transform, parser_new::{ParseResult, ParseOperation}}, core::{FilePosition, FileRange}, seq};
+use super::{ExportDeclaration, ImportDeclaration, ExportForwardDeclaration, Declaration, Syntax, SyntaxType, SyntaxNode};
+use NonImport::*;
 
 pub struct ModuleRoot {
     location: FileRange,
     imports: Vec<ImportDeclaration>,
-    declarations: Vec<NonImportDeclaration>
+    exports: Vec<ExportDeclaration>,
+    forwards: Vec<ExportForwardDeclaration>,
+    declarations: Vec<Declaration>,
 }
 
-impl NodeBase for ModuleRoot {
-    fn location(&self) { return self.location; }
-    fn syntax_type(&self) { return SyntaxType::ModuleRoot; }
+impl Syntax for ModuleRoot {
+    fn parse_func() -> Box<dyn ParseOperation<Self>> {
+        transform(
+            seq!(
+                repeat_zero(parse::<ImportDeclaration>()),
+                repeat_zero(parse::<NonImport>()),
+                eof()
+            ),
+            |(imports, decls, eof)| {
+                let start_pos = FilePosition::new(eof.path(), (0, 0));
+                let (exports, forwards, declarations) = sort_non_imports(decls);
+                ModuleRoot {
+                    location: start_pos.merge(&eof.range()),
+                    imports,
+                    exports,
+                    forwards,
+                    declarations,
+                }
+            }
+        )
+    }
 }
 
-pub fn register(
-    parse_declaration: ParseFunc<Declaration>,
-    parse_export_declaration: ParseFunc<ExportDeclaration>
-) -> ParseFunc<ModuleRoot> {
-    let parse_module_root: ParseFunc<ModuleRoot> = seq(
-        repeat(parseImportDeclaration, '*'),
-        repeat(select::<NonImportDeclaration>(
-            parseDeclaration,
-            parseExportDeclaration,
-            parseExportForwardDeclaration
-        ), '*'),
-        tok(TokenType.EOF),
-        |(imports, declarations), location| { ModuleRoot { location, imports, declarations } }
-    );
+impl SyntaxNode for ModuleRoot {
+    fn location(&self) -> FileRange { self.location }
+    fn syntax_type(&self) -> SyntaxType { SyntaxType::ModuleRoot }
+}
 
-    return parse_module_root;
+pub enum NonImport {
+    Decl(Declaration),
+    Export(ExportDeclaration),
+    Forward(ExportForwardDeclaration),
+}
+
+fn sort_non_imports(non_imports: Vec<NonImport>) -> (Vec<ExportDeclaration>, Vec<ExportForwardDeclaration>, Vec<Declaration>) {
+    let exports = vec![];
+    let forwards = vec![];
+    let decls = vec![];
+    for d in non_imports.into_iter() {
+        match d {
+            Decl(d) => { decls.push(d) },
+            Export(e) => { exports.push(e) },
+            Forward(f) => { forwards.push(f) },
+        }
+    }
+    (exports, forwards, decls)
+}
+
+impl Syntax for NonImport {
+    fn parse_func() -> Box<dyn ParseOperation<Self>> {
+        let parse_decl = parse::<Declaration>();
+        let parse_export = parse::<ExportDeclaration>();
+        let parse_forward = parse::<ExportForwardDeclaration>();
+        box move |state| {
+            if let ParseResult::Success { value, size } = parse_decl(state) {
+                ParseResult::Success { value: Decl(value), size }
+            } else if let ParseResult::Success { value, size } = parse_export(state) {
+                ParseResult::Success { value: Export(value), size }
+            } else if let ParseResult::Success { value, size } = parse_forward(state) {
+                ParseResult::Success { value: Forward(value), size }
+            } else {
+                ParseResult::Fail { expected: "a declaration".to_string(), actual: None }
+            }
+        }
+    }
 }

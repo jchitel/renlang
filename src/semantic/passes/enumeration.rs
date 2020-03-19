@@ -1,15 +1,9 @@
 use std::{path::{Path, PathBuf}, collections::{HashMap, VecDeque}};
-use super::dependencies::{
-    Dependency, PureForward
-};
+use super::dependencies::PureForward;
 use crate::parser::parse_module;
-use crate::core::{ Diagnostic, FilePosition, FileRange, DiagResult };
+use crate::core::{ Diagnostic, DiagResult };
 use crate::syntax;
-use crate::semantic::{
-    namespace as ns,
-    resolver::resolve_module
-};
-use crate::parser::lexer::Token;
+use crate::semantic::namespace as ns;
 
 pub struct NamespaceEnumerationOutput {
     modules: HashMap<&'static Path, ns::ModuleRef>,
@@ -66,8 +60,8 @@ impl EnumerationProcess {
         let module_path = self.module_queue.pop_front().unwrap();
         // parse the module
         let module_syntax = match parse_module(module_path) {
-            Ok(module_syntax) => module_syntax,
-            Err(err) => {
+            DiagResult(Some(module_syntax), diags) => module_syntax,
+            DiagResult(None, diags) => {
                 todo!()
             }
         };

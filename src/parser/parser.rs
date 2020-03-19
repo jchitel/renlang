@@ -1,6 +1,6 @@
 use crate::{
     core::{ FileRange, Diagnostic, DiagResult },
-    parser::lexer::{ Token, Tokens, TokenType },
+    parser::lexer::{ Token, Tokens },
     utils::backtrack_iter::BacktrackIterator, syntax::Syntax,
 };
 

@@ -152,7 +152,7 @@ impl Tokens<'_> {
             (Some('/'), Some('*')) =>
                 self.consume_multi_line_comment(),
             // seq(<ident_start>, repeat(select(<ident>), OnePlus))
-            (Some(c), _) if is_ident(c) =>
+            /*(Some(c), _) if is_ident(c) =>
                 self.consume_identifier_or_reserved(),
             // 
             (Some(c), _) if kind(c) == CharKind::Num =>
@@ -174,7 +174,7 @@ impl Tokens<'_> {
                 self.consume_newline(),
             //
             (Some(c), _) if c == ' ' || c == '\t' =>
-                self.consume_whitespace(),
+                self.consume_whitespace(),*/
             //
             (Some(c), _) => Some(Err(Diagnostic::new(
                 format!("Invalid character '{}'", c),

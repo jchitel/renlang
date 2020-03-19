@@ -1,12 +1,11 @@
-use crate::parser::parser_new::{ParseResult, ParseState, ParseFunc};
-use crate::parser::primitives::{choice, repeat, eof, RepeatBase};
-use crate::{core::{FilePosition, FileRange}, seq};
+use crate::parser::parser_new::ParseOperation;
+use crate::core::FileRange;
 use std::any::Any;
 
 //mod declarations;
 //pub mod environment;
 //mod expressions;
-//mod module_root;
+mod module_root;
 //mod parsing;
 //mod statements;
 //mod types;
@@ -24,7 +23,10 @@ use std::any::Any;
 //pub use visitor::*;
 
 pub trait Syntax: Any + Sized {
-    fn parse_func() -> ParseFunc<Self>;
+    fn parse_func() -> Box<dyn ParseOperation<Self>>;
+}
+
+pub trait SyntaxNode {
     fn location(&self) -> FileRange;
     fn syntax_type(&self) -> SyntaxType;
 }
@@ -96,41 +98,6 @@ pub enum SyntaxType {
     Param,
     // #endregion
 }
-
-pub struct ModuleRoot {
-    location: FileRange,
-    imports: Vec<ImportDeclaration>,
-    exports: Vec<ExportDeclaration>,
-    forwards: Vec<ExportForwardDeclaration>,
-    declarations: Vec<Declaration>,
-}
-
-impl Syntax for ModuleRoot {
-    fn parse_func() -> ParseFunc<Self> {
-        transform(
-            seq!(
-                repeat_zero(non_term::<ImportDeclaration>()),
-                repeat_zero(choice::<NonImport>()),
-                eof()
-            ),
-            |(imports, decls, eof)| {
-                let start_pos = FilePosition::new(eof.location.path, (0, 0));
-                let (exports, forwards, declarations) = decls.sort();
-                ModuleRoot {
-                    location: start_pos.merge(eof.location),
-                    imports,
-                    exports,
-                    forwards,
-                    declarations,
-                }
-            }
-        )
-    }
-
-    fn location(&self) -> FileRange { self.location }
-    fn syntax_type(&self) -> SyntaxType { SyntaxType::ModuleRoot }
-}
-
 
 pub mod environment {
     pub struct SyntaxEnvironment;

@@ -42,6 +42,10 @@ impl FilePosition {
         pos.position = (pos.position.0, pos.position.1 + 1);
         pos
     }
+
+    pub fn merge(&self, range: &FileRange) -> FileRange {
+        FileRange::new(self.path, self.position, self.position).merge(range)
+    }
 }
 
 /// Represents a range of text in a specific file on this system:

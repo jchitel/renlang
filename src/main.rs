@@ -1,5 +1,6 @@
 #![feature(box_syntax)]
 #![feature(option_expect_none)]
+#![feature(trait_alias)]
 #![feature(try_trait)]
 
 use std::env;

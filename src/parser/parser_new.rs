@@ -19,7 +19,7 @@ impl<T: Syntax> Parser<T> {
 
     pub fn parse(&self, module_path: &'static Path, text: String) -> DiagResult<T> {
         let state = ParseState::new(module_path, text);
-        match state.bk_memo(TypeId::of::<T>(), T::parse_func()) {
+        match state.bk_memo::<T>(TypeId::of::<T>(), T::parse_func()) {
             ParseResult::Success { value, .. } => DiagResult::ok(value),
             ParseResult::Fail { expected, actual } => todo!(),
         }
@@ -62,9 +62,9 @@ impl ParseState {
     /// Calls the provided function with bookkeeping wrapped around it.
     /// This ensures that a failed result properly backtracs the parser to
     /// the point it was at before the function was called.
-    pub fn bk<T: Any, F: ParseFunc<T>>(&mut self, fun: F) -> ParseResult<T> {
+    pub fn bk<T: Any>(&mut self, op: Box<dyn ParseOperation<T>>) -> ParseResult<T> {
         let current = self.position;
-        let result = fun(self);
+        let result = op(&mut self);
         if let ParseResult::Fail { .. } = result {
             self.position = current;
         }
@@ -77,7 +77,7 @@ impl ParseState {
     /// advancing the parser.
     /// If there is no existing value, the result of the function
     /// will be stored in the cache.
-    pub fn bk_memo<T: Syntax, F: ParseFunc<T>>(&mut self, id: TypeId, fun: F) -> ParseResult<T> {
+    pub fn bk_memo<T: Syntax>(&mut self, id: TypeId, fun: Box<dyn ParseOperation<T>>) -> ParseResult<T> {
         let key = ParseMemoKey(id, self.position);
         if let Some(result) = self.memo_cache.get(&key) {
             match result {
@@ -129,7 +129,11 @@ impl ParseState {
 /// 3. If the parse was successful, return a resulting value
 /// 4. If the parse failed, backtrack the character iterator
 ///    back to the original file position and return `None`
-pub trait ParseFunc<T: Any> : Fn(&mut ParseState) -> ParseResult<T> {}
+pub trait ParseOperation<T: Any> = Fn(&mut ParseState) -> ParseResult<T>;
+//pub trait ParseOperation<T: Any> : Fn(&mut ParseState) -> ParseResult<T> {}
+/*pub trait ParseOperation<T: Any> {
+    fn perform(&self, state: &mut ParseState) -> ParseResult<T>;
+}*/
 
 pub enum ParseResult<T: Any> {
     Success {
@@ -137,7 +141,7 @@ pub enum ParseResult<T: Any> {
         size: usize,
     },
     Fail {
-        expected: Option<String>,
+        expected: String,
         actual: Option<Token>,
     },
 }

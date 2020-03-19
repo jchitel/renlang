@@ -1,4 +1,4 @@
-use std::fmt::{self, Formatter, Display};
+use std::{path::Path, fmt::{self, Formatter, Display}};
 use crate::core::{FilePosition, FileRange};
 
 
@@ -77,6 +77,8 @@ impl Token {
     pub fn push_char(&self, ch: char) {
         self.image.push(ch);
     }
+
+    pub fn path(&self) -> &Path { self.start_position.path() }
 }
 
 impl Display for Token {

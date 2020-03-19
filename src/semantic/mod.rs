@@ -75,11 +75,11 @@ pub fn analyze(path: PathBuf) -> DiagResult<Program> {
     let nameClash = check_name_clashes(typechecked.declarations, resolution.namespaces);
     // Create program
     DiagResult(
-        Program::new(
+        Some(Program::new(
             enumeration.modules,
             resolution.namespaces,
             nameClash.declarations,
-        ),
+        )),
         vec![
             enumeration.diagnostics,
             resolution.diagnostics,
