@@ -1,7 +1,7 @@
 use crate::{
     core::{ FileRange, Diagnostic, DiagResult },
     parser::lexer::{ Token, Tokens, TokenType },
-    utils::backtrack_iter::BacktrackIterator,
+    utils::backtrack_iter::BacktrackIterator, syntax::Syntax,
 };
 
 pub enum RepeatKey {
@@ -43,8 +43,7 @@ impl Parser {
     pub fn parse<T>(&self, fun: ParseFunc<T>) -> DiagResult<T> where T : Syntax {
         let result = fun(self);
         let diagnostics: Vec<Diagnostic> = vec![];
-        // TODO
-        (result, diagnostics)
+        todo!()
     }
 }
 

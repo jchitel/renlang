@@ -1,14 +1,24 @@
+use std::{fs, path::Path, io::ErrorKind};
 use crate::{core::DiagResult, syntax::ModuleRoot};
-use lexer::Tokens;
-use parser::Parser;
-use std::path::PathBuf;
+use parser_new::Parser;
 
 pub mod lexer;
 mod parser;
+pub mod parser_new;
 pub mod primitives;
 
-pub fn parse_module(path: PathBuf) -> DiagResult<ModuleRoot> {
-    let tokens = Tokens::from_file_path(path)?;
-    let parser = Parser::new();
-    parser.parse::<ModuleRoot>(tokens)
+pub fn parse_module<P: AsRef<Path>>(path: P) -> DiagResult<ModuleRoot> {
+    let path = path.as_ref();
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) => {
+            let msg = match err.kind() {
+                ErrorKind::NotFound => format!("File {} not found", path.display()),
+                kind => format!("An error occurred reading file {}: {:?}", path.display(), kind),
+            };
+            return DiagResult::from_error_message(msg, path);
+        }
+    };
+    let parser = Parser::new::<ModuleRoot>();
+    parser.parse(path.as_ref(), text)
 }

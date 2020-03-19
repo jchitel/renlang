@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use crate::core::{Diagnostic, DiagnosticLevel};
+use crate::core::{Diagnostic, DiagnosticLevel, DiagResult};
 use crate::semantic::{analyze, program::Program};
 
 pub fn run_program(path: PathBuf, args: &[String]) -> i32 {
     // perform type checking on the specified path, which will enumerate all modules in the Program
-    let program = analyze(path);
+    let DiagResult(program, diags) = analyze(path);
     // we will eventually provide a verbosity option, but for now just set it to Message
-    let diags: Vec<&Diagnostic> = program.diagnostics.iter()
+    let diags: Vec<&Diagnostic> = diags.iter()
         .filter(|d| { d.level >= DiagnosticLevel::Message })
         .collect();
     let errCount = diags.iter().filter(|d| { d.level >= DiagnosticLevel::Error }).count();
@@ -26,7 +26,7 @@ pub fn run_program(path: PathBuf, args: &[String]) -> i32 {
         eprintln!("\nCompilation succeeded{}\n\n", suffix);
     }
     // semantically good, translate the program
-    let executable = translate(program);
+    let executable = translate(program.unwrap());
     // compiled successfully, run the program
     interpret(executable, args)
 }

@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs;
 use std::io::{self, Read};
 use std::{path::PathBuf, str::Chars};
 use crate::core::{Diagnostic, FilePosition};
@@ -123,7 +123,7 @@ impl Tokens<'_> {
 
     /// Same as `from_file_path`, but does not ignore whitespace and comments.
     pub fn from_file_path_no_ignore<'a>(path: PathBuf) -> io::Result<Tokens<'a>> {
-        let file = File::open(path)?;
+        let file = fs::File::open(path)?;
         let string = String::new();
         file.read_to_string(&mut string)?;
         Ok(Tokens {

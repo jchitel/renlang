@@ -1,0 +1,335 @@
+Grammar
+-------
+
+# enum NonImport
+ModuleRoot ::= ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* EOF
+
+ImportDeclaration ::= "import" "from" STRING_LITERAL ":" ImportList
+
+# enum ImportList
+ImportList ::= NamedImports
+             | IDENT "," NamedImports
+             | WildcardImport
+             | IDENT "," WildcardImport
+             | IDENT
+
+# enum NamedImport
+NamedImports ::= "{" (NameAlias | IDENT | WildcardImport)+(sep ",") "}"
+
+NameAlias ::= IDENT "as" IDENT
+
+WildcardImport ::= "*" "as" IDENT
+
+# enum ExportDeclaration
+ExportDeclaration ::= DefaultExportDeclaration | NamedExportDeclaration
+
+# enum DefaultExportTarget
+DefaultExportDeclaration ::= "export" "default" (Declaration | AnonymousDeclaration | IDENT)
+
+# enum NamedExportTarget
+NamedExportDeclaration ::= "export" (Declaration | NamedExports)
+
+# enum NamedExport
+NamedExports ::= "{" (NameAlias | IDENT)+(sep ",") "}"
+
+# enum ExportForwardDeclaration
+ExportForwardDeclaration ::= DefaultExportForwardDeclaration | NamedExportForwardDeclaration
+
+DefaultExportForwardDeclaration ::= "export" "default" "from" STRING_LITERAL DefaultExportForwards?
+
+# enum DefaultExportTarget
+DefaultExportForwards ::= ":" ("{" IDENT "}" | "*")
+
+# enum NamedExportForward
+NamedExportForwardDeclaration ::= "export" "from" STRING_LITERAL ":" (ImportList | "*")
+
+# enum Declaration
+Declaration ::= TypeDeclaration
+              | FunctionDeclaration
+              | ConstantDeclaration
+              | NamespaceDeclaration
+
+# enum AnonymousDeclaration
+AnonymousDeclaration ::= AnonymousTypeDeclaration
+                       | AnonymousFunctionDeclaration
+                       | AnonymousConstantDeclaration
+                       | AnonymousNamespaceDeclaration
+
+TypeDeclaration ::= "type" IDENT TypeParamList? "=" Type
+
+AnonymousTypeDeclaration ::= "type" TypeParamList? "=" Type
+
+TypeParamList ::= "<" TypeParam+(sep ",") ">"
+
+# enum VarianceOp
+TypeParam ::= ("+" | "-")? IDENT (":" Type)?
+
+FunctionDeclaration ::= "func" Type IDENT TypeParamList? ParamList "=>" FunctionBody
+
+AnonymousFunctionDeclaration ::= "func" Type TypeParamList? ParamList "=>" FunctionBody
+
+ParamList ::= "(" Param*(sep ",") ")"
+
+Param ::= Type IDENT
+
+# Block goes before expression because there is a conflict between empty blocks and empty structs
+# enum FunctionBody
+FunctionBody ::= Block | Expression | Statement
+
+ConstantDeclaration ::= "const" IDENT "=" Expression
+
+AnonymousConstantDeclaration ::= "const" "=" Expression
+
+# enum NonImport
+NamespaceDeclaration ::= "namespace" IDENT "{" ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* "}"
+
+# enum NonImport
+AnonymousNamespaceDeclaration ::= "namespace" "{" ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* "}"
+
+# enum Type_Base
+# enum Type_Suffix
+Type ::= (
+    BuiltInType # must be before IdentifierType
+    | FunctionType # must be before IdentifierType, ParenthesizedType, TupleType
+    | ParenthesizedType # must be before TupleType
+    | StructType
+    | TupleType
+    | IdentifierType
+) (
+    ArrayType_Suffix
+    | UnionType_Suffix
+    | SpecificType_Suffix
+    | NamespaceAccessType_Suffix
+)*
+
+# enum BuiltInType
+BuiltInType ::= "u8" | "i8" | "byte"
+              | "u16" | "i16" | "short"
+              | "u32" | "i32" | "integer"
+              | "u64" | "i64" | "long"
+              | "int"
+              | "f32" | "float"
+              | "f64" | "double"
+              | "string"
+              | "char"
+              | "bool"
+              | "void"
+              | "any"
+              | "never"
+
+FunctionType ::= "(" Type*(sep ",") ")" "=>" Type
+
+ParenthesizedType ::= "(" Type ")"
+
+StructType ::= "{" (Type IDENT)* "}"
+
+TupleType ::= "(" Type*(sep ",") ")"
+
+IdentifierType ::= IDENT
+
+ArrayType_Suffix ::= "[" "]"
+
+UnionType_Suffix ::= "|" Type
+
+SpecificType_Suffix ::= TypeArgList
+
+TypeArgList ::= "<" Type*(sep ",") ">"
+
+NamespaceAccessType_Suffix ::= "." IDENT
+
+# enum Expression_Base
+# enum Expression_Suffix
+Expression ::= (
+    IntegerLiteral
+    | FloatLiteral
+    | CharLiteral
+    | BoolLiteral # must be before IdentifierExpression
+    | StringLiteral
+    | StructLiteral
+    | LambdaExpression # must be before TupleLiteral, ParenthesizedExpression
+    | ParenthesizedExpression # must be before TupleLiteral
+    | TupleLiteral
+    | ArrayLiteral
+    | VarDeclaration # must be before ShorthandLambdaExpression, IdentifierExpression
+    | ShorthandLambdaExpression # must be before IdentifierExpression
+    | IdentifierExpression
+    | PrefixExpression
+    | IfElseExpression
+) (
+    FunctionApplication_Suffix # must be before BinaryExpression, PostfixExpression
+    | BinaryExpression_Suffix # mut be before PostfixExpression
+    | PostfixExpression_Suffix
+    | ArrayAccess_Suffix
+    | FieldAccess_Suffix
+)*
+
+IntegerLiteral ::= INTEGER_LITERAL
+
+FloatLiteral ::= FLOAT_LITERAL
+
+CharLiteral ::= CHARACTER_LITERAL
+
+# enum BoolLiteral
+BoolLiteral ::= "true" | "false"
+
+StringLiteral ::= STRING_LITERAL
+
+StructLiteral ::= "{" (IDENT ":" Expression)*(sep ",") "}"
+
+# enum LambdaParam
+LambdaExpression ::= "(" (Param | IDENT)*(sep ",") ")" "=>" FunctionBody
+
+ParenthesizedExpression ::= "(" Expression ")"
+
+TupleLiteral ::= "(" Expression*(sep ",") ")"
+
+ArrayLiteral ::= "[" Expression*(sep ",") "]"
+
+VarDeclaration ::= IDENT "=" Expression
+
+ShorthandLambdaExpression ::= IDENT "=>" FunctionBody
+
+IdentifierExpression ::= IDENT
+
+PrefixExpression ::= OPER+ Expression
+
+IfElseExpression ::= "if" "(" Expression ")" Expression "else" Expression
+
+FunctionApplication_Suffix ::= TypeArgList? "(" Expression*(sep ",") ")"
+
+BinaryExpression_Suffix ::= OPER+ Expression
+
+PostfixExpression_Suffix ::= OPER+
+
+ArrayAccess_Suffix ::= "[" Expression "]"
+
+FieldAccess_Suffix ::= "." IDENT
+
+# enum Statement
+Statement ::= Block
+            | ExpressionStatement
+            | ForStatement
+            | WhileStatement
+            | DoWhileStatement
+            | TryCatchStatement
+            | ReturnStatement
+            | ThrowStatement
+            | BreakStatement
+            | ContinueStatement
+
+Block ::= "{" Statement* "}"
+
+ExpressionStatement ::= Expression
+
+ForStatement ::= "for" "(" IDENT "in" Expression ")" Statement
+
+WhileStatement ::= "while" "(" Expression ")" Statement
+
+DoWhileStatement ::= "do" Statement "while "(" Expression ")"
+
+TryCatchStatement ::= "try" Statement CatchClause+ FinallyClause?
+
+CatchClause ::= "catch" "(" Param ")" Statement
+
+FinallyClause ::= "finally" Statement
+
+ReturnStatement ::= "return" Expression?
+
+ThrowStatement ::= "throw" Expression
+
+BreakStatement ::= "break" INTEGER_LITERAL?
+
+ContinueStatement ::= "continue" INTEGER_LITERAL?
+
+IDENT ::= !RESERVED [A-Za-z_] [A-Za-z0-9_]*
+
+# enum ReservedToken
+RESERVED ::= "as"
+           | "any"
+           | "bool"
+           | "break"
+           | "byte"
+           | "catch"
+           | "char"
+           | "const"
+           | "continue"
+           | "default"
+           | "do"
+           | "double"
+           | "else"
+           | "export"
+           | "f32"
+           | "f64"
+           | "false"
+           | "finally"
+           | "float"
+           | "for"
+           | "from"
+           | "func"
+           | "i16"
+           | "i32"
+           | "i64"
+           | "i8"
+           | "if"
+           | "import"
+           | "in"
+           | "int"
+           | "integer"
+           | "long"
+           | "return"
+           | "short"
+           | "string"
+           | "throw"
+           | "true"
+           | "try"
+           | "type"
+           | "u16"
+           | "u32"
+           | "u64"
+           | "u8"
+           | "void"
+           | "while"
+
+# enum IntegerLiteralToken
+INTEGER_LITERAL ::= HEXADECIMAL_LITERAL | BINARY_LITERAL | DECIMAL_LITERAL
+
+HEXADECIMAL_LITERAL ::= "0" [xX] [0-9a-fA-F]+
+
+BINARY_LITERAL ::= "0" [bB] [01]+
+
+DECIMAL_LITERAL ::= [0-9]+ ![.eE]
+
+# enum FloatLiteralSuffix
+FLOAT_LITERAL ::= [0-9]* ( ("." [0-9]* ([eE] [0-9]+)?) | ([eE] [0-9]+)? )
+
+STRING_LITERAL ::= "\"" VALID_CHARACTER* "\""
+
+# enum ValidCharacter
+VALID_CHARACTER ::= ("\\" [nrtfbv])
+                  | ("\\" [xX] [0-9a-fA-F]{2})
+                  | ("\\" [uU] [0-9a-fA-F]{4})
+                  | ("\\" [uU] "{" [0-9a-fA-F]{5,8} "}")
+                  | ("\\" .)
+                  | .
+
+CHARACTER_LITERAL ::= "'" !"'" VALID_CHARACTER "'"
+
+OPER ::= [~!$%^&*+-=|<>?/]+
+
+# Ignored terminal types
+
+# enum CommentToken
+COMMENT ::= SINGLE_LINE_COMMENT | MULTI_LINE_COMMENT
+
+SINGLE_LINE_COMMENT ::= "//" (!"\n" .)* "\n"
+
+MULTI_LINE_COMMENT ::= "/* (!"*" !"/" .)* "*/"
+
+WHITESPACE ::= [ \t\r\n\v\f\b]+
+
+# TODO:
+# There are several "Rust-isms" that we need to work int the language:
+# * statements require a semicolon
+# * a block with a semicolon-less expression at the end will use it as the return value
+# * we don't need parentheses in many places
+# Are new lines syntactically significant? (probably not if we're requiring semicolons)

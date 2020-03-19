@@ -158,11 +158,17 @@ impl Display for Diagnostic {
 /// 
 /// This type implements `Try` so it can be used with the `?` operator.
 /// This will yield a `Result<DiagResult, Vec<Diagnostic>>`.
-pub struct DiagResult<T>(Option<T>, Vec<Diagnostic>);
+pub struct DiagResult<T>(pub Option<T>, pub Vec<Diagnostic>);
 
 impl<T> DiagResult<T> {
     pub fn ok(result: T) -> DiagResult<T> {
         DiagResult(Some(result), vec![])
+    }
+
+    pub fn from_error_message<P: Into<PathBuf>>(msg: String, path: P) -> DiagResult<T> {
+        DiagResult(None, vec![
+            Diagnostic::new_from_position(msg, FilePosition::new(path, (0, 0)))
+        ])
     }
 }
 
