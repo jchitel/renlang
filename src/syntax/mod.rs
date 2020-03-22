@@ -16,7 +16,7 @@ mod module_root;
 //pub use expressions::*;
 //pub use statements::*;
 //pub use declarations::*;
-//pub use module_root::ModuleRoot;
+pub use module_root::ModuleRoot;
 
 //pub use environment::{ Declaration, AnonymousDeclaration, Type, Expression, Statement };
 

@@ -1,6 +1,6 @@
 use core::any::TypeId;
 use core::marker::PhantomData;
-use super::lexer::Token;
+use super::token::Token;
 use core::any::Any;
 use std::collections::HashMap;
 use std::path::Path;
@@ -60,7 +60,7 @@ impl ParseState {
     }
 
     /// Calls the provided function with bookkeeping wrapped around it.
-    /// This ensures that a failed result properly backtracs the parser to
+    /// This ensures that a failed result properly backtracks the parser to
     /// the point it was at before the function was called.
     pub fn bk<T: Any>(&mut self, op: Box<dyn ParseOperation<T>>) -> ParseResult<T> {
         let current = self.position;
@@ -113,6 +113,11 @@ impl ParseState {
         Some(c)
     }
 
+    /// Calls into the lexer logic to read the next token from the character stream
+    pub fn read_token(&mut self) -> Token {
+        //
+    }
+
     /// Advances the internal iterator by the specified amount of characters.
     /// This is meant to be called internally only.
     fn advance(&mut self, count: usize) {
@@ -130,10 +135,6 @@ impl ParseState {
 /// 4. If the parse failed, backtrack the character iterator
 ///    back to the original file position and return `None`
 pub trait ParseOperation<T: Any> = Fn(&mut ParseState) -> ParseResult<T>;
-//pub trait ParseOperation<T: Any> : Fn(&mut ParseState) -> ParseResult<T> {}
-/*pub trait ParseOperation<T: Any> {
-    fn perform(&self, state: &mut ParseState) -> ParseResult<T>;
-}*/
 
 pub enum ParseResult<T: Any> {
     Success {

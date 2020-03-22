@@ -6,6 +6,7 @@ pub mod lexer;
 mod parser;
 pub mod parser_new;
 pub mod primitives;
+pub mod token;
 
 pub fn parse_module<P: AsRef<Path>>(path: P) -> DiagResult<ModuleRoot> {
     let path = path.as_ref();
