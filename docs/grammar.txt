@@ -2,62 +2,30 @@ Grammar
 -------
 
 # enum NonImport
-ModuleRoot ::= ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* EOF
+SourceFile ::= (UseDeclaration | Declaration | ExportDeclaration | ExportForwardDeclaration)* EOF
 
-ImportDeclaration ::= "import" "from" STRING_LITERAL ":" ImportList
+UseDeclaration ::= "use" Path
 
-# enum ImportList
-ImportList ::= NamedImports
-             | IDENT "," NamedImports
-             | WildcardImport
-             | IDENT "," WildcardImport
-             | IDENT
+Path ::= IDENT ( ( "." ( Path | "*" ) ) | PathList )?
 
 # enum NamedImport
-NamedImports ::= "{" (NameAlias | IDENT | WildcardImport)+(sep ",") "}"
-
-NameAlias ::= IDENT "as" IDENT
-
-WildcardImport ::= "*" "as" IDENT
-
-# enum ExportDeclaration
-ExportDeclaration ::= DefaultExportDeclaration | NamedExportDeclaration
-
-# enum DefaultExportTarget
-DefaultExportDeclaration ::= "export" "default" (Declaration | AnonymousDeclaration | IDENT)
+PathList ::= "{" ( IDENT "as" IDENT | Path )+(sep ",") "}"
 
 # enum NamedExportTarget
-NamedExportDeclaration ::= "export" (Declaration | NamedExports)
+ExportDeclaration ::= "export" (Declaration | NameList)
 
-# enum NamedExport
-NamedExports ::= "{" (NameAlias | IDENT)+(sep ",") "}"
+NameList ::= "{" ( IDENT "as" IDENT | IDENT )+(sep ",") "}"
 
 # enum ExportForwardDeclaration
-ExportForwardDeclaration ::= DefaultExportForwardDeclaration | NamedExportForwardDeclaration
-
-DefaultExportForwardDeclaration ::= "export" "default" "from" STRING_LITERAL DefaultExportForwards?
-
-# enum DefaultExportTarget
-DefaultExportForwards ::= ":" ("{" IDENT "}" | "*")
-
-# enum NamedExportForward
-NamedExportForwardDeclaration ::= "export" "from" STRING_LITERAL ":" (ImportList | "*")
+ExportForwardDeclaration ::= "export" "from" Path
 
 # enum Declaration
 Declaration ::= TypeDeclaration
               | FunctionDeclaration
               | ConstantDeclaration
-              | NamespaceDeclaration
-
-# enum AnonymousDeclaration
-AnonymousDeclaration ::= AnonymousTypeDeclaration
-                       | AnonymousFunctionDeclaration
-                       | AnonymousConstantDeclaration
-                       | AnonymousNamespaceDeclaration
+              | ModuleDeclaration
 
 TypeDeclaration ::= "type" IDENT TypeParamList? "=" Type
-
-AnonymousTypeDeclaration ::= "type" TypeParamList? "=" Type
 
 TypeParamList ::= "<" TypeParam+(sep ",") ">"
 
@@ -65,8 +33,6 @@ TypeParamList ::= "<" TypeParam+(sep ",") ">"
 TypeParam ::= ("+" | "-")? IDENT (":" Type)?
 
 FunctionDeclaration ::= "func" Type IDENT TypeParamList? ParamList "=>" FunctionBody
-
-AnonymousFunctionDeclaration ::= "func" Type TypeParamList? ParamList "=>" FunctionBody
 
 ParamList ::= "(" Param*(sep ",") ")"
 
@@ -78,13 +44,8 @@ FunctionBody ::= Block | Expression | Statement
 
 ConstantDeclaration ::= "const" IDENT "=" Expression
 
-AnonymousConstantDeclaration ::= "const" "=" Expression
-
 # enum NonImport
-NamespaceDeclaration ::= "namespace" IDENT "{" ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* "}"
-
-# enum NonImport
-AnonymousNamespaceDeclaration ::= "namespace" "{" ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* "}"
+ModuleDeclaration ::= "mod" IDENT "{" ImportDeclaration* (Declaration | ExportDeclaration | ExportForwardDeclaration)* "}"
 
 # enum Type_Base
 # enum Type_Suffix
